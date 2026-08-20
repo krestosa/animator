@@ -1,18 +1,115 @@
-import { useSyncExternalStore } from 'react';
 import type { DetectedAnimation, ProjectDescriptor, RuntimeElement, StaticAnalysis, TimelineEvent } from '../types/domain';
 
-type State = { project?:ProjectDescriptor; analysis?:StaticAnalysis; elements:RuntimeElement[]; animations:DetectedAnimation[]; events:TimelineEvent[]; selectedElementId?:string; selectedAnimationId?:string; picker:boolean; recording:boolean; playhead:number; zoom:number; diagnostics:string[]; history:Array<{id:string; duration?:number; easing?:string}>; future:Array<{id:string; duration?:number; easing?:string}>; };
-let state:State = {elements:[],animations:[],events:[],picker:false,recording:true,playhead:0,zoom:1,diagnostics:[],history:[],future:[]};
-const listeners = new Set<()=>void>();
-const emit=()=>listeners.forEach(l=>l());
-export const store = {
-  get:()=>state,
-  set:(patch:Partial<State>)=>{state={...state,...patch};emit();},
-  updateAnimation:(id:string, patch:Partial<DetectedAnimation>, record=true)=>{const current=state.animations.find(a=>a.id===id);if(!current)return;if(record){state={...state,history:[...state.history,{id,duration:current.duration,easing:current.easing}],future:[]};}state={...state,animations:state.animations.map(a=>a.id===id?{...a,...patch}:a)};emit();},
-  addAnimation:(animation:DetectedAnimation)=>{const staticMatch=animation.source?undefined:state.animations.find(a=>a.source&&a.name&&a.name===animation.name);const enriched=staticMatch?{...animation,source:staticMatch.source,confidence:'source-correlated' as const}:animation;let next=state.animations;const i=next.findIndex(a=>a.id===enriched.id);next=i>=0?next.map(a=>a.id===enriched.id?{...a,...enriched}:a):[...next,enriched];if(enriched.source&&enriched.name)next=next.map(a=>!a.source&&a.name===enriched.name?{...a,source:enriched.source,confidence:'source-correlated' as const}:a);state={...state,animations:next};emit();},
-  addEvent:(event:TimelineEvent)=>{state={...state,events:[...state.events,event].slice(-1000)};emit();},
-  upsertElements:(elements:RuntimeElement[])=>{const map=new Map(state.elements.map(e=>[e.id,e]));for(const e of elements)map.set(e.id,e);state={...state,elements:[...map.values()]};emit();},
-  undo:()=>{const cmd=state.history.at(-1);if(!cmd)return;const current=state.animations.find(a=>a.id===cmd.id);if(!current)return;state={...state,history:state.history.slice(0,-1),future:[...state.future,{id:cmd.id,duration:current.duration,easing:current.easing}],animations:state.animations.map(a=>a.id===cmd.id?{...a,duration:cmd.duration,easing:cmd.easing}:a)};emit();},
-  redo:()=>{const cmd=state.future.at(-1);if(!cmd)return;const current=state.animations.find(a=>a.id===cmd.id);if(!current)return;state={...state,future:state.future.slice(0,-1),history:[...state.history,{id:cmd.id,duration:current.duration,easing:current.easing}],animations:state.animations.map(a=>a.id===cmd.id?{...a,duration:cmd.duration,easing:cmd.easing}:a)};emit();}
+type HistoryEntry = { id: string; duration?: number; easing?: string };
+export type AnimatorState = {
+  project?: ProjectDescriptor;
+  analysis?: StaticAnalysis;
+  elements: RuntimeElement[];
+  animations: DetectedAnimation[];
+  events: TimelineEvent[];
+  selectedElementId?: string;
+  selectedAnimationId?: string;
+  picker: boolean;
+  recording: boolean;
+  playhead: number;
+  zoom: number;
+  diagnostics: string[];
+  history: HistoryEntry[];
+  future: HistoryEntry[];
 };
-export function useStore<T>(selector:(s:State)=>T):T { return useSyncExternalStore(cb=>{listeners.add(cb);return()=>listeners.delete(cb);},()=>selector(state)); }
+
+let state: AnimatorState = {
+  elements: [],
+  animations: [],
+  events: [],
+  picker: false,
+  recording: true,
+  playhead: 0,
+  zoom: 1,
+  diagnostics: [],
+  history: [],
+  future: []
+};
+
+const listeners = new Set<() => void>();
+const emit = (): void => { for (const listener of listeners) listener(); };
+
+export const store = {
+  get: (): AnimatorState => state,
+  subscribe(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  },
+  touch(): void { emit(); },
+  set(patch: Partial<AnimatorState>): void {
+    state = { ...state, ...patch };
+    emit();
+  },
+  updateAnimation(id: string, patch: Partial<DetectedAnimation>, record = true): void {
+    const current = state.animations.find(animation => animation.id === id);
+    if (!current) return;
+    const history = record ? [...state.history, { id, duration: current.duration, easing: current.easing }] : state.history;
+    state = {
+      ...state,
+      history,
+      future: record ? [] : state.future,
+      animations: state.animations.map(animation => animation.id === id ? { ...animation, ...patch } : animation)
+    };
+    emit();
+  },
+  addAnimation(animation: DetectedAnimation): void {
+    const index = state.animations.findIndex(item => item.id === animation.id);
+    state = {
+      ...state,
+      animations: index >= 0
+        ? state.animations.map(item => item.id === animation.id ? correlateSource({ ...item, ...animation }, state.analysis) : item)
+        : [...state.animations, correlateSource(animation, state.analysis)]
+    };
+    emit();
+  },
+  addEvent(event: TimelineEvent): void {
+    state = { ...state, events: [...state.events, event].slice(-1000) };
+    emit();
+  },
+  upsertElements(elements: RuntimeElement[]): void {
+    const map = new Map(state.elements.map(element => [element.id, element]));
+    for (const element of elements) map.set(element.id, element);
+    state = { ...state, elements: [...map.values()] };
+    emit();
+  },
+  undo(): void {
+    const command = state.history.at(-1);
+    if (!command) return;
+    const current = state.animations.find(animation => animation.id === command.id);
+    if (!current) return;
+    state = {
+      ...state,
+      history: state.history.slice(0, -1),
+      future: [...state.future, { id: command.id, duration: current.duration, easing: current.easing }],
+      animations: state.animations.map(animation => animation.id === command.id ? { ...animation, duration: command.duration, easing: command.easing } : animation)
+    };
+    emit();
+  },
+  redo(): void {
+    const command = state.future.at(-1);
+    if (!command) return;
+    const current = state.animations.find(animation => animation.id === command.id);
+    if (!current) return;
+    state = {
+      ...state,
+      future: state.future.slice(0, -1),
+      history: [...state.history, { id: command.id, duration: current.duration, easing: current.easing }],
+      animations: state.animations.map(animation => animation.id === command.id ? { ...animation, duration: command.duration, easing: command.easing } : animation)
+    };
+    emit();
+  }
+};
+
+function correlateSource(animation: DetectedAnimation, analysis?: StaticAnalysis): DetectedAnimation {
+  if (animation.source || !analysis) return animation;
+  const match = analysis.animations.find(candidate => {
+    if (animation.name && candidate.name === animation.name) return true;
+    return candidate.type === animation.type && candidate.properties.some(property => animation.properties.some(runtimeProperty => runtimeProperty.name === property.name));
+  });
+  return match?.source ? { ...animation, source: match.source, confidence: animation.confidence === 'runtime-observed' ? 'source-correlated' : animation.confidence } : animation;
+}
