@@ -14,6 +14,11 @@ export function generateCss(animation:DetectedAnimation): string {
 export function generateTs(animation:DetectedAnimation): string {
   return `element.animate(${JSON.stringify(animation.keyframes ?? [{opacity:0},{opacity:1}], null, 2)}, {\n  duration: ${animation.duration ?? 400},\n  delay: ${animation.delay ?? 0},\n  easing: ${JSON.stringify(animation.easing ?? 'ease')},\n  fill: ${JSON.stringify(animation.fill ?? 'both')}\n});`;
 }
+export function generateUnifiedDiff(animation:DetectedAnimation): string {
+  const css = generateCss(animation).split('\n').map(line=>`+${line}`).join('\n');
+  const target = animation.source?.file ?? '.animator/animator-overrides.css';
+  return `--- ${target}\n+++ .animator/animator-overrides.css\n@@ proposed non-destructive override @@\n${css}`;
+}
 export function generateOverrideFiles(animations:DetectedAnimation[]) {
   return { css: animations.map(generateCss).join('\n\n'), ts: animations.map(generateTs).join('\n\n') };
 }
