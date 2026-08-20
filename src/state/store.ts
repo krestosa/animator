@@ -1,14 +1,14 @@
 import type { DetectedAnimation, ProjectDescriptor, RuntimeElement, StaticAnalysis, TimelineEvent } from '../types/domain';
 
-type HistoryEntry = { id: string; duration?: number; easing?: string };
+type HistoryEntry = { id: string; duration: number | undefined; easing: string | undefined };
 export type AnimatorState = {
-  project?: ProjectDescriptor;
-  analysis?: StaticAnalysis;
+  project: ProjectDescriptor | undefined;
+  analysis: StaticAnalysis | undefined;
   elements: RuntimeElement[];
   animations: DetectedAnimation[];
   events: TimelineEvent[];
-  selectedElementId?: string;
-  selectedAnimationId?: string;
+  selectedElementId: string | undefined;
+  selectedAnimationId: string | undefined;
   picker: boolean;
   recording: boolean;
   playhead: number;
@@ -19,9 +19,13 @@ export type AnimatorState = {
 };
 
 let state: AnimatorState = {
+  project: undefined,
+  analysis: undefined,
   elements: [],
   animations: [],
   events: [],
+  selectedElementId: undefined,
+  selectedAnimationId: undefined,
   picker: false,
   recording: true,
   playhead: 0,
@@ -58,12 +62,13 @@ export const store = {
     emit();
   },
   addAnimation(animation: DetectedAnimation): void {
-    const index = state.animations.findIndex(item => item.id === animation.id);
+    const normalized = correlateSource(animation, state.analysis);
+    const index = state.animations.findIndex(item => item.id === normalized.id);
     state = {
       ...state,
       animations: index >= 0
-        ? state.animations.map(item => item.id === animation.id ? correlateSource({ ...item, ...animation }, state.analysis) : item)
-        : [...state.animations, correlateSource(animation, state.analysis)]
+        ? state.animations.map(item => item.id === normalized.id ? correlateSource({ ...item, ...normalized }, state.analysis) : item)
+        : [...state.animations, normalized]
     };
     emit();
   },
@@ -105,11 +110,12 @@ export const store = {
   }
 };
 
-function correlateSource(animation: DetectedAnimation, analysis?: StaticAnalysis): DetectedAnimation {
+function correlateSource(animation: DetectedAnimation, analysis: StaticAnalysis | undefined): DetectedAnimation {
   if (animation.source || !analysis) return animation;
   const match = analysis.animations.find(candidate => {
     if (animation.name && candidate.name === animation.name) return true;
     return candidate.type === animation.type && candidate.properties.some(property => animation.properties.some(runtimeProperty => runtimeProperty.name === property.name));
   });
-  return match?.source ? { ...animation, source: match.source, confidence: animation.confidence === 'runtime-observed' ? 'source-correlated' : animation.confidence } : animation;
+  if (!match?.source) return animation;
+  return { ...animation, source: match.source, confidence: animation.confidence === 'runtime-observed' ? 'source-correlated' : animation.confidence };
 }
