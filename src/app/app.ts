@@ -9,10 +9,10 @@ const fixtureDefault = '__fixture__';
 type Tab = 'motion' | 'source' | 'export';
 type Viewport = { width: number; height: number };
 type SourceState = { path: string; text: string };
-type UiState = { pathInput: string; viewport: Viewport; source?: SourceState; tab: Tab };
+type UiState = { pathInput: string; viewport: Viewport; source?: SourceState; tab: Tab; playbackRate: number };
 
 export function mountApp(root: HTMLElement): () => void {
-  const ui: UiState = { pathInput: fixtureDefault, viewport: { width: 1100, height: 700 }, tab: 'motion' };
+  const ui: UiState = { pathInput: fixtureDefault, viewport: { width: 1100, height: 700 }, tab: 'motion', playbackRate: 1 };
   let iframe: HTMLIFrameElement | null = null;
   let bridgeCleanup: (() => void) | undefined;
   let previewKey = '';
@@ -28,7 +28,6 @@ export function mountApp(root: HTMLElement): () => void {
     preserved?.remove();
     root.innerHTML = buildShell(state, ui, nextKey);
     const placeholder = root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
-
     if (preserved && placeholder) {
       placeholder.replaceWith(preserved);
       iframe = preserved;
@@ -48,7 +47,6 @@ export function mountApp(root: HTMLElement): () => void {
 
   const unsubscribe = store.subscribe(requestRender);
   renderNow();
-
   return () => {
     disposed = true;
     if (frameRequest) cancelAnimationFrame(frameRequest);
@@ -78,7 +76,8 @@ function buildShell(state: AnimatorState, ui: UiState, previewKey: string): stri
 }
 
 function renderToolbar(state: AnimatorState, ui: UiState): string {
-  return `<header class="toolbar"><b>Animator</b><input class="path" data-path-input value="${attr(ui.pathInput)}" placeholder="Local project path"><button data-action="open-project">Open project</button><span class="sep"></span><button data-action="picker" class="${state.picker ? 'active' : ''}">Pick element</button><button data-action="record">${state.recording ? 'Recording' : 'Record'}</button><span class="sep"></span><button data-action="restart">↺</button><button data-action="play">▶</button><button data-action="pause">Ⅱ</button><button data-action="undo">Undo</button><button data-action="redo">Redo</button><span class="grow"></span><select data-viewport><option value="390"${ui.viewport.width === 390 ? ' selected' : ''}>Mobile</option><option value="768"${ui.viewport.width === 768 ? ' selected' : ''}>Tablet</option><option value="1100"${ui.viewport.width === 1100 ? ' selected' : ''}>Desktop</option></select><span>${ui.viewport.width}×${ui.viewport.height}</span></header>`;
+  const rates = [0.1, 0.25, 0.5, 1, 2, 4];
+  return `<header class="toolbar"><b>Animator</b><input class="path" data-path-input value="${attr(ui.pathInput)}" placeholder="Local project path"><button data-action="open-project">Open project</button><span class="sep"></span><button data-action="picker" class="${state.picker ? 'active' : ''}">Pick element</button><button data-action="record">${state.recording ? 'Recording' : 'Record'}</button><span class="sep"></span><button data-action="previous-event" title="Previous event">◀|</button><button data-action="restart" title="Restart animation">↺</button><button data-action="play" title="Play">▶</button><button data-action="pause" title="Pause">Ⅱ</button><button data-action="next-event" title="Next event">|▶</button><select data-playback-rate title="Playback speed">${rates.map(rate => `<option value="${rate}"${rate === ui.playbackRate ? ' selected' : ''}>${rate}x</option>`).join('')}</select><button data-action="clear-overrides">Clear overrides</button><button data-action="undo">Undo</button><button data-action="redo">Redo</button><span class="grow"></span><select data-viewport><option value="390"${ui.viewport.width === 390 ? ' selected' : ''}>Mobile</option><option value="768"${ui.viewport.width === 768 ? ' selected' : ''}>Tablet</option><option value="1100"${ui.viewport.width === 1100 ? ' selected' : ''}>Desktop</option></select><span>${ui.viewport.width}×${ui.viewport.height}</span></header>`;
 }
 
 function renderPreview(project: ProjectDescriptor | undefined, analysis: StaticAnalysis | undefined, viewport: Viewport, key: string): string {
@@ -123,11 +122,15 @@ function bindEvents(root: HTMLElement, snapshot: AnimatorState, ui: UiState, get
   root.querySelector('[data-action="record"]')?.addEventListener('click', () => { const enabled = !store.get().recording; store.set({ recording: enabled }); sendCommand(getIframe(), { type: 'SET_RECORDING', enabled }); });
   root.querySelector('[data-action="undo"]')?.addEventListener('click', store.undo);
   root.querySelector('[data-action="redo"]')?.addEventListener('click', store.redo);
+  root.querySelector('[data-action="clear-overrides"]')?.addEventListener('click', () => sendCommand(getIframe(), { type: 'CLEAR_OVERRIDES' }));
 
   const selected = selectAnimation(snapshot);
   root.querySelector('[data-action="restart"]')?.addEventListener('click', () => selected && sendCommand(getIframe(), { type: 'RESTART_ANIMATION', id: selected.id }));
   root.querySelector('[data-action="play"]')?.addEventListener('click', () => selected && sendCommand(getIframe(), { type: 'PLAY_ANIMATION', id: selected.id }));
   root.querySelector('[data-action="pause"]')?.addEventListener('click', () => selected && sendCommand(getIframe(), { type: 'PAUSE_ANIMATION', id: selected.id }));
+  root.querySelector('[data-action="previous-event"]')?.addEventListener('click', () => jumpEvent(-1, getIframe()));
+  root.querySelector('[data-action="next-event"]')?.addEventListener('click', () => jumpEvent(1, getIframe()));
+  root.querySelector<HTMLSelectElement>('[data-playback-rate]')?.addEventListener('change', event => { ui.playbackRate = Number((event.currentTarget as HTMLSelectElement).value); const current = selectAnimation(store.get()); if (current) sendCommand(getIframe(), { type: 'SET_PLAYBACK_RATE', id: current.id, rate: ui.playbackRate }); });
 
   root.querySelector<HTMLSelectElement>('[data-viewport]')?.addEventListener('change', event => { const width = Number((event.currentTarget as HTMLSelectElement).value); ui.viewport = width === 390 ? { width: 390, height: 844 } : width === 768 ? { width: 768, height: 1024 } : { width: 1100, height: 700 }; render(); });
   root.querySelector<HTMLSelectElement>('[data-entry]')?.addEventListener('change', event => { const project = store.get().project; if (project) store.set({ project: { ...project, selectedEntry: (event.currentTarget as HTMLSelectElement).value } }); });
@@ -151,10 +154,23 @@ function bindEvents(root: HTMLElement, snapshot: AnimatorState, ui: UiState, get
 
   const timeline = root.querySelector<HTMLElement>('[data-timeline]');
   if (timeline) {
-    const scrub = (event: PointerEvent): void => { const rect = timeline.getBoundingClientRect(); const duration = Number(timeline.dataset.duration ?? 0); const time = Math.max(0, Math.min(duration, (event.clientX - rect.left) / rect.width * duration)); store.set({ playhead: time }); const current = selectAnimation(store.get()); if (current) sendCommand(getIframe(), { type: 'SET_ANIMATION_TIME', id: current.id, time: Math.max(0, time - current.startTime) }); };
+    const scrub = (event: PointerEvent): void => { const rect = timeline.getBoundingClientRect(); const duration = Number(timeline.dataset.duration ?? 0); const time = Math.max(0, Math.min(duration, (event.clientX - rect.left) / rect.width * duration)); setPlayhead(time, getIframe()); };
     timeline.addEventListener('pointerdown', event => { timeline.setPointerCapture(event.pointerId); scrub(event); });
     timeline.addEventListener('pointermove', event => { if (timeline.hasPointerCapture(event.pointerId)) scrub(event); });
   }
+}
+
+function setPlayhead(time: number, frame: HTMLIFrameElement | null): void {
+  store.set({ playhead: time });
+  const current = selectAnimation(store.get());
+  if (current) sendCommand(frame, { type: 'SET_ANIMATION_TIME', id: current.id, time: Math.max(0, time - current.startTime) });
+}
+
+function jumpEvent(direction: -1 | 1, frame: HTMLIFrameElement | null): void {
+  const state = store.get();
+  const events = [...state.events].sort((a, b) => a.at - b.at);
+  const event = direction > 0 ? events.find(item => item.at > state.playhead + 0.5) : [...events].reverse().find(item => item.at < state.playhead - 0.5);
+  if (event) setPlayhead(event.at, frame);
 }
 
 function previewEdit(frame: HTMLIFrameElement | null, patch: Partial<DetectedAnimation>): void {
