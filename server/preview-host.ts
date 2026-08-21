@@ -11,6 +11,7 @@ import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
 import { mutationRuntimeSource } from './mutation-runtime.js';
 import { clockWorkerSource } from './clock-worker.js';
+import { previewColorSchemeBootstrap, rewriteColorSchemeCss, stripPreviewColorScheme, type PreviewColorScheme } from './color-scheme.js';
 
 interface PreviewSession {
   origin:string;
@@ -26,7 +27,7 @@ const runtimePaths=new Map<string,string>([
   ['/__animator/aux-runtime.js',auxiliaryRuntimeSource],
   ['/__animator/clock-worker.js',clockWorkerSource]
 ]);
-const injection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
+const runtimeInjection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
 
 export async function ensurePreviewOrigin(project:LoadedProject):Promise<string>{
   const existing=sessions.get(project.id);if(existing)return existing.origin;
@@ -47,9 +48,11 @@ export function closePreviewOrigin(projectId:string):void{
 }
 
 function createStaticServer(project:LoadedProject):http.Server{
+  let colorScheme:PreviewColorScheme='system';
   return http.createServer((req,res)=>{
     if(serveRuntime(req,res))return;
-    const requestUrl=new URL(req.url??'/', 'http://preview.local');
+    const stripped=stripPreviewColorScheme(req.url??'/');if(stripped.mode)colorScheme=stripped.mode;
+    const requestUrl=new URL(stripped.path,'http://preview.local');
     let requested=decodeURIComponent(requestUrl.pathname).replace(/^\/+/, '');
     if(!requested)requested=project.selectedEntry;
     let target:string;
@@ -61,7 +64,8 @@ function createStaticServer(project:LoadedProject):http.Server{
         if(!acceptsHtml)return sendText(res,404,'Preview resource not found');
         target=resolveInside(project.root,project.selectedEntry);
       }
-      if(/\.html?$/i.test(target))return sendHtml(res,injectHtml(fs.readFileSync(target,'utf8')));
+      if(/\.html?$/i.test(target))return sendHtml(res,injectHtml(fs.readFileSync(target,'utf8'),colorScheme));
+      if(/\.css$/i.test(target))return send(res,200,'text/css; charset=utf-8',Buffer.from(rewriteColorSchemeCss(fs.readFileSync(target,'utf8'),colorScheme)));
       if(/\.[cm]?tsx?$/i.test(target)){
         const source=fs.readFileSync(target,'utf8');
         const output=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX,sourceMap:true},fileName:target});
@@ -73,25 +77,31 @@ function createStaticServer(project:LoadedProject):http.Server{
 }
 
 function createProxyServer(upstreamPort:number):http.Server{
+  let colorScheme:PreviewColorScheme='system';
   const server=http.createServer((req,res)=>{
     if(serveRuntime(req,res))return;
+    const stripped=stripPreviewColorScheme(req.url??'/');if(stripped.mode)colorScheme=stripped.mode;
     const headers={...req.headers,host:`127.0.0.1:${upstreamPort}`,'accept-encoding':'identity'};
-    const proxy=http.request({hostname:'127.0.0.1',port:upstreamPort,path:req.url,method:req.method,headers},upstream=>{
+    const proxy=http.request({hostname:'127.0.0.1',port:upstreamPort,path:stripped.path,method:req.method,headers},upstream=>{
       const responseHeaders={...upstream.headers};
       delete responseHeaders['content-security-policy'];delete responseHeaders['content-security-policy-report-only'];delete responseHeaders['x-frame-options'];delete responseHeaders['content-length'];
       const contentType=String(upstream.headers['content-type']??'');
-      if(!contentType.includes('text/html')){
-        res.writeHead(upstream.statusCode??200,responseHeaders);upstream.pipe(res);return;
-      }
+      const shouldTransform=contentType.includes('text/html')||contentType.includes('text/css');
+      if(!shouldTransform){res.writeHead(upstream.statusCode??200,responseHeaders);upstream.pipe(res);return;}
       const chunks:Buffer[]=[];upstream.on('data',(chunk:Buffer|string)=>chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk)));
-      upstream.on('end',()=>{const html=Buffer.concat(chunks).toString('utf8');const body=Buffer.from(injectHtml(html));res.writeHead(upstream.statusCode??200,{...responseHeaders,'content-type':'text/html; charset=utf-8','content-length':String(body.length)});res.end(body);});
+      upstream.on('end',()=>{
+        const source=Buffer.concat(chunks).toString('utf8');
+        const text=contentType.includes('text/html')?injectHtml(source,colorScheme):rewriteColorSchemeCss(source,colorScheme);
+        const body=Buffer.from(text);res.writeHead(upstream.statusCode??200,{...responseHeaders,'content-type':contentType.includes('text/html')?'text/html; charset=utf-8':'text/css; charset=utf-8','content-length':String(body.length)});res.end(body);
+      });
     });
     proxy.on('error',error=>sendText(res,502,`Project dev server unavailable: ${error.message}`));req.pipe(proxy);
   });
   server.on('upgrade',(req,socket,head)=>{
+    const stripped=stripPreviewColorScheme(req.url??'/');if(stripped.mode)colorScheme=stripped.mode;
     const upstream=net.connect(upstreamPort,'127.0.0.1',()=>{
       const headers=Object.entries({...req.headers,host:`127.0.0.1:${upstreamPort}`}).map(([key,value])=>`${key}: ${Array.isArray(value)?value.join(', '):value??''}`).join('\r\n');
-      upstream.write(`${req.method??'GET'} ${req.url??'/'} HTTP/${req.httpVersion}\r\n${headers}\r\n\r\n`);if(head.length)upstream.write(head);socket.pipe(upstream).pipe(socket);
+      upstream.write(`${req.method??'GET'} ${stripped.path} HTTP/${req.httpVersion}\r\n${headers}\r\n\r\n`);if(head.length)upstream.write(head);socket.pipe(upstream).pipe(socket);
     });
     upstream.on('error',()=>socket.destroy());
   });
@@ -103,8 +113,9 @@ function serveRuntime(req:IncomingMessage,res:ServerResponse):boolean{
   send(res,200,'application/javascript; charset=utf-8',Buffer.from(source));return true;
 }
 
-function injectHtml(html:string):string{
+function injectHtml(html:string,mode:PreviewColorScheme):string{
   if(html.includes('/__animator/seek-runtime.js'))return html;
+  const injection=previewColorSchemeBootstrap(mode)+runtimeInjection;
   const head=/<head(?:\s[^>]*)?>/i.exec(html);if(head&&head.index!==undefined){const at=head.index+head[0].length;return html.slice(0,at)+injection+html.slice(at);}
   return injection+html;
 }
