@@ -7,6 +7,7 @@ import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
 import { mountTimelineV2 } from './app/timeline-v2';
 import { mountPreviewOrigin } from './app/preview-origin';
+import { mountPreviewEditor } from './app/preview-editor';
 
 const root = document.querySelector<HTMLElement>('#root');
 if (!root) throw new Error('Animator root element not found');
@@ -16,6 +17,7 @@ const cleanupExtras = mountEditorExtras(root);
 const cleanupPolish = mountUiPolish(root);
 const cleanupTimeline = mountTimelineV2(root);
 const cleanupPreviewOrigin = mountPreviewOrigin(root);
-const cleanup = (): void => { cleanupPreviewOrigin(); cleanupTimeline(); cleanupPolish(); cleanupExtras(); cleanupApp(); };
+const cleanupPreviewEditor = mountPreviewEditor(root);
+const cleanup = (): void => { cleanupPreviewEditor(); cleanupPreviewOrigin(); cleanupTimeline(); cleanupPolish(); cleanupExtras(); cleanupApp(); };
 
 if (import.meta.hot) import.meta.hot.dispose(cleanup);
