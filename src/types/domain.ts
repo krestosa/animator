@@ -26,6 +26,10 @@ export type EditorCommand =
  | {source:'animator-editor'; type:'SET_PICKER'; enabled:boolean}
  | {source:'animator-editor'; type:'SET_RECORDING'; enabled:boolean}
  | {source:'animator-editor'; type:'SET_ANIMATION_TIME'; id:string; time:number}
+ | {source:'animator-editor'; type:'SCRUB_TIMELINE'; time:number}
+ | {source:'animator-editor'; type:'PLAY_ALL'}
+ | {source:'animator-editor'; type:'PAUSE_ALL'}
+ | {source:'animator-editor'; type:'RESTART_ALL'}
  | {source:'animator-editor'; type:'SET_PLAYBACK_RATE'; id:string; rate:number}
  | {source:'animator-editor'; type:'PLAY_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'PAUSE_ANIMATION'; id:string}
