@@ -38,6 +38,13 @@ const timelineCommands=new Set<string>([
 ]);
 export function sendCommand(iframe:HTMLIFrameElement|null, command:EditorCommandInput):void {
   const target=iframe?.contentWindow;if(!target)return;
+  if(command.type==='SET_RECORDING'){
+    if(command.enabled)target.postMessage({source:'animator-timeline',type:'RELEASE_TIMELINE'},'*');
+    const send=()=>target.postMessage({source:'animator-editor',...command},'*');
+    send();
+    for(const delay of [60,180])window.setTimeout(()=>{if(iframe?.isConnected&&iframe.contentWindow===target&&store.get().recording===command.enabled)send();},delay);
+    return;
+  }
   if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){
     target.postMessage({source:'animator-timeline',...command},'*');
     target.postMessage({source:'animator-editor',...command},'*');
