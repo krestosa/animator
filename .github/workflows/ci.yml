@@ -15,6 +15,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: .animator-browsers
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -31,8 +33,6 @@ jobs:
       - name: Build
         run: npm run build
       - name: Install Chromium
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: .animator-browsers
         run: npx playwright install --with-deps chromium
       - name: Timeline E2E
         run: node e2e/timeline.mjs
