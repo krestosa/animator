@@ -38,8 +38,8 @@ export function mountRemoteOpen(root:HTMLElement):()=>void{
       if(engine.value==='browser'){
         const selectedEngine=browserEngine.value as BrowserEngine,selectedProfile=profile.value as BrowserProfile,width=selectedProfile==='mobile'?390:1100,height=selectedProfile==='mobile'?844:700;
         const response=await fetch('/api/browser-sessions/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url,width,height,engine:selectedEngine,profile:selectedProfile})});
-        const session=await response.json() as{id?:string;url?:string;engine?:BrowserEngine;profile?:BrowserProfile;error?:string};if(!response.ok||!session.id)throw new Error(session.error??'Could not start browser preview');
-        body={id:session.id,root:session.url??url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:session.url??url,kind:'remote',browserSessionId:session.id,browserEngine:session.engine??selectedEngine,browserProfile:session.profile??selectedProfile};void refreshRuntimes();
+        const session=await response.json() as{id?:string;url?:string;engine?:BrowserEngine;profile?:BrowserProfile;width?:number;height?:number;external?:boolean;error?:string};if(!response.ok||!session.id)throw new Error(session.error??'Could not start browser preview');
+        body={id:session.id,root:session.url??url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:session.url??url,kind:'remote',browserSessionId:session.id,browserEngine:session.engine??selectedEngine,browserProfile:session.profile??selectedProfile,browserWidth:session.width??width,browserHeight:session.height??height,browserExternal:session.external??false};void refreshRuntimes();
       }else{
         const response=await fetch('/api/projects/open-url',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url})});body=await response.json() as ProjectDescriptor&{error?:string};if(!response.ok)throw new Error(body.error??'Could not load web page');
       }
