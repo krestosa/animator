@@ -1,8 +1,9 @@
+import { connectPreview } from '../preview/bridge';
 import { store } from '../state/store';
 
 export function mountBrowserPreview(root:HTMLElement):()=>void{
   const device=root.querySelector<HTMLElement>('[data-device]');if(!device)return()=>{};
-  let sessionId='',surface:HTMLDivElement|null=null,image:HTMLImageElement|null=null,disposed=false,frameTimer=0,stateTimer=0,objectUrl='',lastMoveAt=0,lastWidth=0,lastHeight=0;
+  let sessionId='',surface:HTMLDivElement|null=null,image:HTMLImageElement|null=null,disposed=false,frameTimer=0,stateTimer=0,objectUrl='',lastMoveAt=0,lastWidth=0,lastHeight=0,bridgeCleanup:(()=>void)|undefined;
   const endpoint=(path:string)=>`/api/browser-sessions/${encodeURIComponent(sessionId)}${path}`;
   const postInput=(payload:Record<string,unknown>):void=>{if(!sessionId)return;void fetch(endpoint('/input'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});};
   const coords=(event:PointerEvent|MouseEvent)=>{if(!surface)return{x:0,y:0};const box=surface.getBoundingClientRect(),scaleX=lastWidth/Math.max(1,box.width),scaleY=lastHeight/Math.max(1,box.height);return{x:(event.clientX-box.left)*scaleX,y:(event.clientY-box.top)*scaleY};};
@@ -21,13 +22,13 @@ export function mountBrowserPreview(root:HTMLElement):()=>void{
     const next=store.get().project?.browserSessionId??'';
     if(next)removeIframes();
     if(next===sessionId&&surface?.isConnected){resize();return;}
-    const previous=sessionId;removeSurface();sessionId=next;if(previous&&previous!==next)void fetch(`/api/browser-sessions/${encodeURIComponent(previous)}`,{method:'DELETE'}).catch(()=>{});if(!sessionId)return;
-    removeIframes();
+    const previous=sessionId;bridgeCleanup?.();bridgeCleanup=undefined;removeSurface();sessionId=next;if(previous&&previous!==next)void fetch(`/api/browser-sessions/${encodeURIComponent(previous)}`,{method:'DELETE'}).catch(()=>{});if(!sessionId)return;
+    removeIframes();bridgeCleanup=connectPreview(null);
     surface=document.createElement('div');surface.className='browserPreviewSurface';surface.dataset.browserPreview='';surface.tabIndex=0;surface.setAttribute('role','application');surface.setAttribute('aria-label','Interactive browser preview');
     image=document.createElement('img');image.draggable=false;image.alt='';surface.append(image);device.append(surface);
     surface.addEventListener('pointermove',pointerMove);surface.addEventListener('pointerdown',pointerDown);surface.addEventListener('pointerup',pointerUp);surface.addEventListener('wheel',wheel,{passive:false});surface.addEventListener('keydown',keyDown);surface.addEventListener('keyup',keyUp);
     lastWidth=Math.max(320,Math.round(device.clientWidth));lastHeight=Math.max(240,Math.round(device.clientHeight));postInput({type:'resize',width:lastWidth,height:lastHeight});void pollFrame();void pollState();
   };
   const observer=new MutationObserver(mount);observer.observe(device,{childList:true});const resizeObserver=new ResizeObserver(resize);resizeObserver.observe(device);const unsubscribe=store.subscribe(mount);mount();
-  return()=>{disposed=true;const current=sessionId;unsubscribe();observer.disconnect();resizeObserver.disconnect();removeSurface();sessionId='';if(current)void fetch(`/api/browser-sessions/${encodeURIComponent(current)}`,{method:'DELETE'}).catch(()=>{});};
+  return()=>{disposed=true;const current=sessionId;unsubscribe();observer.disconnect();resizeObserver.disconnect();bridgeCleanup?.();bridgeCleanup=undefined;removeSurface();sessionId='';if(current)void fetch(`/api/browser-sessions/${encodeURIComponent(current)}`,{method:'DELETE'}).catch(()=>{});};
 }
