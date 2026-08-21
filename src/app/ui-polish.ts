@@ -75,8 +75,8 @@ function buildToolbar(toolbar:HTMLElement):HTMLDetailsElement {
   setIcon(toolbar,'[data-action="undo"]','undo','Undo');
   setIcon(toolbar,'[data-action="redo"]','redo','Redo');
   const extras=toolbar.querySelector<HTMLElement>('.extraControls');
-  const newMotion=document.createElement('button');newMotion.dataset.openCreateMotion='';newMotion.className='iconButton primaryIcon';newMotion.title='Create animation';newMotion.setAttribute('aria-label','Create animation');newMotion.innerHTML=icons.plus;
-  const details=document.createElement('details');details.className='toolbarMore';details.innerHTML=`<summary title="More tools" aria-label="More tools">${icons.more}</summary><div class="toolbarMenu"><b>Project & editor</b></div>`;
+  const newMotion=document.createElement('button');newMotion.dataset.openCreateMotion='';newMotion.className='iconButton primaryIcon';newMotion.title='Create animation';newMotion.setAttribute('aria-label','Create animation');newMotion.innerHTML=icons.plus??'';
+  const details=document.createElement('details');details.className='toolbarMore';details.innerHTML=`<summary title="More tools" aria-label="More tools">${icons.more??''}</summary><div class="toolbarMenu"><b>Project & editor</b></div>`;
   const menu=details.querySelector<HTMLElement>('.toolbarMenu')!;
   const path=toolbar.querySelector<HTMLElement>('[data-path-input]');
   const openPath=toolbar.querySelector<HTMLElement>('[data-action="open-project"]');
