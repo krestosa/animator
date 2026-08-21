@@ -1,9 +1,11 @@
 import './app/styles.css';
 import './app/extras.css';
 import './app/ui-polish.css';
+import './app/timeline-v2.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
+import { mountTimelineV2 } from './app/timeline-v2';
 
 const root = document.querySelector<HTMLElement>('#root');
 if (!root) throw new Error('Animator root element not found');
@@ -11,6 +13,7 @@ if (!root) throw new Error('Animator root element not found');
 const cleanupApp = mountApp(root);
 const cleanupExtras = mountEditorExtras(root);
 const cleanupPolish = mountUiPolish(root);
-const cleanup = (): void => { cleanupPolish(); cleanupExtras(); cleanupApp(); };
+const cleanupTimeline = mountTimelineV2(root);
+const cleanup = (): void => { cleanupTimeline(); cleanupPolish(); cleanupExtras(); cleanupApp(); };
 
 if (import.meta.hot) import.meta.hot.dispose(cleanup);
