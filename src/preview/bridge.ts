@@ -12,6 +12,10 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
     else if(msg.type==='SELECT_ELEMENT'){store.upsertElements([msg.element]);store.set({selectedElementId:msg.element.id,picker:false});}
     else if(msg.type==='ANIMATION') store.addAnimation(msg.animation);
     else if(msg.type==='EVENT') store.addEvent(msg.event);
+    else if(msg.type==='TIMELINE_STATE') {
+      const current=store.get().playhead;
+      if(Math.abs(current-msg.time)>.25) store.set({playhead:Math.max(0,msg.time)});
+    }
     else if(msg.type==='DIAGNOSTIC') store.set({diagnostics:[...store.get().diagnostics, `${msg.level}: ${msg.message}`].slice(-100)});
   };
   window.addEventListener('message',handler); return()=>window.removeEventListener('message',handler);
