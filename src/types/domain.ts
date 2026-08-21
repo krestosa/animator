@@ -30,10 +30,12 @@ export type EditorCommand =
  | {source:'animator-editor'; type:'PLAY_ALL'}
  | {source:'animator-editor'; type:'PAUSE_ALL'}
  | {source:'animator-editor'; type:'RESTART_ALL'}
+ | {source:'animator-editor'; type:'SET_ALL_PLAYBACK_RATE'; rate:number}
+ | {source:'animator-editor'; type:'SET_REDUCED_MOTION'; enabled:boolean}
  | {source:'animator-editor'; type:'SET_PLAYBACK_RATE'; id:string; rate:number}
  | {source:'animator-editor'; type:'PLAY_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'PAUSE_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'RESTART_ANIMATION'; id:string}
- | {source:'animator-editor'; type:'APPLY_OVERRIDE'; animationId:string; duration?:number | undefined; easing?:string | undefined; keyframes?:Array<Record<string, string | number | null>> | undefined}
- | {source:'animator-editor'; type:'CREATE_ANIMATION'; elementId:string; keyframes:Array<Record<string,string|number|null>>; duration:number; easing:string}
+ | {source:'animator-editor'; type:'APPLY_OVERRIDE'; animationId:string; duration?:number | undefined; delay?:number | undefined; easing?:string | undefined; keyframes?:Array<Record<string, string | number | null>> | undefined}
+ | {source:'animator-editor'; type:'CREATE_ANIMATION'; elementId:string; keyframes:Array<Record<string,string|number|null>>; duration:number; delay?:number; easing:string; iterations?:number; direction?:string; fill?:string}
  | {source:'animator-editor'; type:'CLEAR_OVERRIDES'};
