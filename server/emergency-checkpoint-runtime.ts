@@ -1,8 +1,19 @@
 export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
   if(window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__)return;window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__=true;
-  let recording=true,timer=0,busy=false;
+  let recording=true,timer=0,busy=false,guardActive=false;const topLevel=window===window.top;
   const capturable=()=>location.protocol==='http:'||location.protocol==='https:';
   const emit=payload=>{const target=window.__animatorEmit;if(typeof target!=='function')return;try{void target(payload);}catch{}};
+  const guardText={preparing:['Preparing reconstruction…','Animator is securing this page before interaction is enabled.'],finalizing:['Finalizing reconstruction…','Capture is stopped. Animator is finishing the document for the timeline.'],complete:['Capture complete','The reconstructed page is ready in Animator.']};
+  const blockEvent=event=>{if(!guardActive)return;event.preventDefault();event.stopImmediatePropagation();};
+  if(topLevel)for(const type of ['pointerdown','mousedown','touchstart','click','wheel','keydown'])addEventListener(type,blockEvent,{capture:true,passive:false});
+  const setGuard=(enabled,mode='preparing')=>{
+    if(!topLevel)return;guardActive=!!enabled;let overlay=document.querySelector('[data-animator-reconstruction-guard]');
+    if(!enabled){overlay?.remove();document.documentElement.removeAttribute('data-animator-reconstruction-pending');return;}
+    document.documentElement.setAttribute('data-animator-reconstruction-pending',String(mode));
+    if(!overlay){overlay=document.createElement('div');overlay.setAttribute('data-animator-reconstruction-guard','');overlay.setAttribute('data-animator-internal','');overlay.innerHTML='<div data-animator-reconstruction-card><i></i><strong></strong><span></span></div>';Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:'2147483647',display:'grid',placeItems:'center',background:'rgba(9,12,16,.88)',color:'#e1e7ee',fontFamily:'Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',pointerEvents:'auto',cursor:'wait',backdropFilter:'blur(6px)'});const card=overlay.firstElementChild;Object.assign(card.style,{display:'grid',justifyItems:'center',gap:'9px',maxWidth:'460px',padding:'28px 32px',textAlign:'center'});const dot=card.querySelector('i');Object.assign(dot.style,{width:'18px',height:'18px',border:'2px solid #526171',borderTopColor:'#e1e7ee',borderRadius:'50%',animation:'animator-reconstruction-spin .7s linear infinite'});const style=document.createElement('style');style.setAttribute('data-animator-internal','');style.textContent='@keyframes animator-reconstruction-spin{to{transform:rotate(360deg)}} [data-animator-reconstruction-card] strong{font-size:14px;font-weight:650}[data-animator-reconstruction-card] span{font-size:12px;line-height:1.5;color:#8d9aaa}';document.documentElement.append(style);document.documentElement.append(overlay);}
+    const copy=guardText[mode]||guardText.preparing,card=overlay.querySelector('[data-animator-reconstruction-card]');card.querySelector('strong').textContent=copy[0];card.querySelector('span').textContent=copy[1];const dot=card.querySelector('i');dot.style.display=mode==='complete'?'none':'block';
+  };
+  if(topLevel){const bootGuard=()=>document.documentElement&&setGuard(true,'preparing');if(!bootGuard())addEventListener('DOMContentLoaded',bootGuard,{once:true});}
   const capture=()=>{
     if(!recording||busy||!capturable()||!document.documentElement||typeof window.__animatorEmit!=='function')return;busy=true;
     try{
@@ -14,7 +25,7 @@ export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
     }catch{}finally{busy=false;}
   };
   const schedule=delay=>{if(timer)clearTimeout(timer);if(!recording||typeof window.__animatorEmit!=='function')return;timer=setTimeout(()=>{timer=0;capture();schedule(900);},Math.max(80,Number(delay)||900));};
-  addEventListener('message',event=>{const message=event.data;if(!message||typeof message.type!=='string')return;if(message.type==='CAPTURE_BROWSER_CHECKPOINT'&&message.source==='animator-editor'){capture();schedule(900);return;}if(message.type!=='SET_RECORDING'||(message.source!=='animator-editor'&&message.source!=='animator-timeline'))return;recording=!!message.enabled;if(recording){capture();schedule(900);}else if(timer){clearTimeout(timer);timer=0;}});
+  addEventListener('message',event=>{const message=event.data;if(!message||typeof message.type!=='string')return;if(message.type==='SET_RECONSTRUCTION_GUARD'&&(message.source==='animator-editor'||message.source==='animator-timeline')){setGuard(message.enabled!==false,String(message.mode||'preparing'));return;}if(message.type==='CAPTURE_BROWSER_CHECKPOINT'&&message.source==='animator-editor'){capture();schedule(900);return;}if(message.type!=='SET_RECORDING'||(message.source!=='animator-editor'&&message.source!=='animator-timeline'))return;recording=!!message.enabled;if(recording){setGuard(true,'preparing');capture();schedule(900);}else{setGuard(true,'finalizing');if(timer){clearTimeout(timer);timer=0;}}});
   addEventListener('DOMContentLoaded',()=>{capture();schedule(900);},{once:true});
   addEventListener('load',()=>capture(),{once:true});
   addEventListener('pagehide',()=>capture(),{capture:true});
