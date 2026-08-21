@@ -64,16 +64,17 @@ async function captureViewport(root:HTMLElement):Promise<Blob>{
 
   const frame=snapshotFrame??previewFrame;
   if(!frame?.contentWindow)throw new Error('Viewport is not ready');
+  const backgroundColor=effectiveBackgroundColor(frame);
   const document=currentFrameDocument(frame);
-  if(document)return captureDocument(document);
-  return captureFrameRuntime(frame);
+  if(document)return captureDocument(document,backgroundColor);
+  return captureFrameRuntime(frame,backgroundColor);
 }
 
 function currentFrameDocument(frame:HTMLIFrameElement):Document|null{
   try{return frame.contentDocument?.documentElement?frame.contentDocument:null;}catch{return null;}
 }
 
-async function captureDocument(document:Document):Promise<Blob>{
+async function captureDocument(document:Document,backgroundColor:string):Promise<Blob>{
   const view=document.defaultView;
   if(!view||!document.documentElement)throw new Error('Viewport document is not ready');
   const running:Animation[]=[];
@@ -85,14 +86,14 @@ async function captureDocument(document:Document):Promise<Blob>{
   }
   try{
     await Promise.resolve();
-    const canvas=await html2canvas(document.documentElement,{backgroundColor:null,logging:false,useCORS:true,allowTaint:false,scale:1,width:view.innerWidth,height:view.innerHeight,x:view.scrollX,y:view.scrollY,scrollX:view.scrollX,scrollY:view.scrollY,windowWidth:view.innerWidth,windowHeight:view.innerHeight,removeContainer:true});
+    const canvas=await html2canvas(document.documentElement,{backgroundColor,logging:false,useCORS:true,allowTaint:false,scale:1,width:view.innerWidth,height:view.innerHeight,x:view.scrollX,y:view.scrollY,scrollX:view.scrollX,scrollY:view.scrollY,windowWidth:view.innerWidth,windowHeight:view.innerHeight,removeContainer:true});
     return await canvasBlob(canvas);
   } finally {
     for(const animation of running)try{animation.play();}catch{}
   }
 }
 
-async function captureFrameRuntime(frame:HTMLIFrameElement):Promise<Blob>{
+async function captureFrameRuntime(frame:HTMLIFrameElement,backgroundColor:string):Promise<Blob>{
   const target=frame.contentWindow;
   if(!target)throw new Error('Viewport is not ready');
   await waitForCaptureRuntime(target);
@@ -112,7 +113,7 @@ async function captureFrameRuntime(frame:HTMLIFrameElement):Promise<Blob>{
     };
     const timer=window.setTimeout(()=>finish(new Error('Viewport rendering took too long')),30000);
     window.addEventListener('message',onMessage);
-    target.postMessage({source:'animator-editor',type:'CAPTURE_VIEWPORT_PNG',requestId},'*');
+    target.postMessage({source:'animator-editor',type:'CAPTURE_VIEWPORT_PNG',requestId,backgroundColor},'*');
   });
 }
 
@@ -127,5 +128,13 @@ function waitForCaptureRuntime(target:Window):Promise<void>{
   });
 }
 
+function effectiveBackgroundColor(frame:HTMLElement):string{
+  let node:HTMLElement|null=frame;
+  while(node){const color=getComputedStyle(node).backgroundColor;if(!isTransparent(color))return color;node=node.parentElement;}
+  const body=getComputedStyle(document.body).backgroundColor;if(!isTransparent(body))return body;
+  const root=getComputedStyle(document.documentElement).backgroundColor;if(!isTransparent(root))return root;
+  return '#fff';
+}
+function isTransparent(color:string):boolean{return color==='transparent'||/^rgba\([^)]*,\s*0(?:\.0+)?\s*\)$/i.test(color);}
 function canvasBlob(canvas:HTMLCanvasElement):Promise<Blob>{return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Could not encode viewport PNG')),'image/png'));}
 function escapeHtml(value:string):string{return value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
