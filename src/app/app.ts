@@ -1,416 +1,182 @@
 import { connectPreview, sendCommand } from '../preview/bridge';
 import { store, type AnimatorState } from '../state/store';
 import { presets } from '../presets/presets';
+import { deleteCustomPreset, loadCustomPresets, saveCustomPreset, type CustomPreset } from '../presets/custom';
 import { generateCss, generateOverrideFiles, generateTs, generateUnifiedDiff } from '../exporters/generate';
 import { timelineDuration } from '../utils/timeline';
+import { addKeyframe, bezierPath, buildTransform, deleteKeyframe, duplicateKeyframe, filterAnimations, normalizedKeyframes, overview, parseBezier, parseTransform, performanceIssues, type MotionFilter, type TransformParts, updateKeyframe } from '../editor/motion';
 import type { DetectedAnimation, ProjectDescriptor, ProjectFile, StaticAnalysis } from '../types/domain';
 
 type Tab = 'motion' | 'source' | 'export';
 type Viewport = { width: number; height: number };
 type SourceState = { path: string; text: string };
-type UiState = { pathInput: string; viewport: Viewport; source?: SourceState; tab: Tab; playbackRate: number };
-type Signatures = { project: string; elements: string; right: string; timeline: string; events: string; duration: string; preview: string; diagnostic: string };
+type UiState = {
+  pathInput: string;
+  viewport: Viewport;
+  source?: SourceState;
+  tab: Tab;
+  playbackRate: number;
+  query: string;
+  filter: MotionFilter;
+  reducedMotion: boolean;
+  customPresets: CustomPreset[];
+  applyDiff: string;
+};
+type Signatures = { project:string; elements:string; motionList:string; right:string; timeline:string; events:string; duration:string; preview:string; diagnostic:string };
+type KeyframeDrag = { animationId:string; index:number; frames:Array<Record<string,string|number|null>>; marker:HTMLElement };
 
-const rates = [0.1, 0.25, 0.5, 1, 2, 4];
+const rates=[0.1,0.25,0.5,1,2,4];
+let keyframeDrag:KeyframeDrag|undefined;
 
-export function mountApp(root: HTMLElement): () => void {
-  const ui: UiState = { pathInput: '', viewport: { width: 1100, height: 700 }, tab: 'motion', playbackRate: 1 };
-  const signatures: Signatures = { project: '', elements: '', right: '', timeline: '', events: '', duration: '', preview: '', diagnostic: '' };
-  let iframe: HTMLIFrameElement | null = null;
-  let bridgeCleanup: (() => void) | undefined;
-  let previewKey = '';
-  let disposed = false;
-  let frameRequest = 0;
+export function mountApp(root:HTMLElement):()=>void {
+  const ui:UiState={pathInput:localStorage.getItem('animator.last-project')??'',viewport:{width:1100,height:700},tab:'motion',playbackRate:1,query:'',filter:'all',reducedMotion:false,customPresets:loadCustomPresets(),applyDiff:''};
+  const signatures:Signatures={project:'',elements:'',motionList:'',right:'',timeline:'',events:'',duration:'',preview:'',diagnostic:''};
+  let iframe:HTMLIFrameElement|null=null;
+  let bridgeCleanup:(()=>void)|undefined;
+  let previewKey='';
+  let disposed=false;
+  let frameRequest=0;
+  root.innerHTML=buildStableShell();
 
-  root.innerHTML = buildStableShell();
-
-  const render = (): void => {
-    frameRequest = 0;
-    if (disposed) return;
-    const state = store.get();
-    updateToolbar(root, state, ui);
-    updateProject(root, state, signatures);
-    updateElements(root, state, signatures);
-    updateRightPanel(root, state, ui, signatures);
-    updateTimeline(root, state, signatures);
-    updateDiagnostic(root, state, signatures);
-
-    const nextPreviewKey = state.project ? `${state.project.id}:${state.project.selectedEntry}` : '';
-    const previewSignature = `${nextPreviewKey}:${ui.viewport.width}x${ui.viewport.height}:${state.analysis?.reducedMotion ?? false}`;
-    if (signatures.preview !== previewSignature) {
-      signatures.preview = previewSignature;
-      const device = root.querySelector<HTMLElement>('[data-device]');
-      const chrome = root.querySelector<HTMLElement>('[data-preview-chrome]');
-      if (device) {
-        const scale = Math.min(1, 900 / ui.viewport.width, 620 / ui.viewport.height);
-        device.style.width = `${ui.viewport.width}px`;
-        device.style.height = `${ui.viewport.height}px`;
-        device.style.transform = `scale(${scale})`;
-      }
-      if (chrome) chrome.innerHTML = renderPreviewChrome(state.project, state.analysis);
-      if (nextPreviewKey !== previewKey) {
-        bridgeCleanup?.();
-        bridgeCleanup = undefined;
-        iframe?.remove();
-        iframe = null;
-        previewKey = nextPreviewKey;
-        if (device && state.project) {
-          iframe = document.createElement('iframe');
-          iframe.dataset.previewFrame = '';
-          iframe.title = 'Project preview';
-          iframe.src = previewUrl(state.project);
-          device.appendChild(iframe);
-          bridgeCleanup = connectPreview(iframe);
-        }
+  const render=():void=>{
+    frameRequest=0;if(disposed)return;
+    const state=store.get();
+    updateToolbar(root,state,ui);
+    updateProject(root,state,signatures);
+    updateMotionList(root,state,ui,signatures);
+    updateElements(root,state,signatures);
+    updateRightPanel(root,state,ui,signatures);
+    updateTimeline(root,state,ui,signatures);
+    updateDiagnostic(root,state,signatures);
+    const nextPreviewKey=state.project?`${state.project.id}:${state.project.selectedEntry}`:'';
+    const previewSignature=`${nextPreviewKey}:${ui.viewport.width}x${ui.viewport.height}:${state.analysis?.reducedMotion??false}`;
+    if(signatures.preview!==previewSignature){
+      signatures.preview=previewSignature;
+      const device=root.querySelector<HTMLElement>('[data-device]');
+      const chrome=root.querySelector<HTMLElement>('[data-preview-chrome]');
+      if(device){const scale=Math.min(1,900/ui.viewport.width,620/ui.viewport.height);device.style.width=`${ui.viewport.width}px`;device.style.height=`${ui.viewport.height}px`;device.style.transform=`scale(${scale})`;}
+      if(chrome)chrome.innerHTML=renderPreviewChrome(state.project,state.analysis,ui.reducedMotion);
+      if(nextPreviewKey!==previewKey){
+        bridgeCleanup?.();bridgeCleanup=undefined;iframe?.remove();iframe=null;previewKey=nextPreviewKey;
+        if(device&&state.project){iframe=document.createElement('iframe');iframe.dataset.previewFrame='';iframe.title='Project preview';iframe.src=previewUrl(state.project);device.appendChild(iframe);bridgeCleanup=connectPreview(iframe);}
       }
     }
   };
-
-  const requestRender = (): void => {
-    if (disposed || frameRequest) return;
-    frameRequest = requestAnimationFrame(render);
-  };
-
-  const onClick = (event: MouseEvent): void => handleClick(event, root, ui, () => iframe, requestRender);
-  const onChange = (event: Event): void => handleChange(event, root, ui, () => iframe, requestRender);
-  const onInput = (event: Event): void => handleInput(event, root, ui, () => iframe);
-  const onPointerDown = (event: PointerEvent): void => handleTimelinePointerDown(event, root, () => iframe);
-  const onPointerMove = (event: PointerEvent): void => handleTimelinePointerMove(event, root, () => iframe);
-
-  root.addEventListener('click', onClick);
-  root.addEventListener('change', onChange);
-  root.addEventListener('input', onInput);
-  root.addEventListener('pointerdown', onPointerDown);
-  root.addEventListener('pointermove', onPointerMove);
-
-  const unsubscribe = store.subscribe(requestRender);
-  render();
-
-  return () => {
-    disposed = true;
-    if (frameRequest) cancelAnimationFrame(frameRequest);
-    bridgeCleanup?.();
-    unsubscribe();
-    root.removeEventListener('click', onClick);
-    root.removeEventListener('change', onChange);
-    root.removeEventListener('input', onInput);
-    root.removeEventListener('pointerdown', onPointerDown);
-    root.removeEventListener('pointermove', onPointerMove);
-    root.replaceChildren();
-  };
+  const requestRender=():void=>{if(disposed||frameRequest)return;frameRequest=requestAnimationFrame(render);};
+  const getIframe=()=>iframe;
+  const onClick=(event:MouseEvent)=>handleClick(event,root,ui,getIframe,requestRender);
+  const onChange=(event:Event)=>handleChange(event,root,ui,getIframe,requestRender);
+  const onInput=(event:Event)=>handleInput(event,root,ui,getIframe,requestRender);
+  const onPointerDown=(event:PointerEvent)=>handleTimelinePointerDown(event,root,getIframe);
+  const onPointerMove=(event:PointerEvent)=>handleTimelinePointerMove(event,root,getIframe);
+  const onPointerUp=(event:PointerEvent)=>handleTimelinePointerUp(event,getIframe);
+  root.addEventListener('click',onClick);root.addEventListener('change',onChange);root.addEventListener('input',onInput);root.addEventListener('pointerdown',onPointerDown);root.addEventListener('pointermove',onPointerMove);root.addEventListener('pointerup',onPointerUp);
+  const unsubscribe=store.subscribe(requestRender);render();
+  return()=>{disposed=true;if(frameRequest)cancelAnimationFrame(frameRequest);bridgeCleanup?.();unsubscribe();root.removeEventListener('click',onClick);root.removeEventListener('change',onChange);root.removeEventListener('input',onInput);root.removeEventListener('pointerdown',onPointerDown);root.removeEventListener('pointermove',onPointerMove);root.removeEventListener('pointerup',onPointerUp);root.replaceChildren();};
 }
 
-function buildStableShell(): string {
+function buildStableShell():string {
   return `<div class="app">
-    <header class="toolbar">
-      <b>Animator</b>
-      <button data-action="pick-folder" title="Choose a local project folder">Open folder…</button>
-      <input class="path" data-path-input placeholder="Or enter local project path">
-      <button data-action="open-project">Open path</button><span class="sep"></span>
-      <button data-action="picker">Pick element</button><button data-action="record">Record</button><span class="sep"></span>
-      <button data-action="previous-event" title="Previous event">◀|</button><button data-action="restart" title="Restart animation">↺</button><button data-action="play" title="Play">▶</button><button data-action="pause" title="Pause">Ⅱ</button><button data-action="next-event" title="Next event">|▶</button>
-      <select data-playback-rate title="Playback speed">${rates.map(rate => `<option value="${rate}">${rate}x</option>`).join('')}</select>
-      <button data-action="clear-overrides">Clear overrides</button><button data-action="undo">Undo</button><button data-action="redo">Redo</button>
-      <span class="grow"></span><select data-viewport><option value="390">Mobile</option><option value="768">Tablet</option><option value="1100" selected>Desktop</option></select><span data-viewport-label>1100×700</span>
-    </header>
-    <main class="workspace">
-      <aside class="leftPanel"><section data-project-region></section><section class="elementList" data-elements-region></section></aside>
-      <section class="previewArea"><div class="previewChrome" data-preview-chrome><span>No preview</span></div><div class="stage"><div class="device" data-device></div></div></section>
-      <aside class="rightPanel"><nav>${(['motion', 'source', 'export'] as const).map(tab => `<button data-tab="${tab}" class="${tab === 'motion' ? 'active' : ''}">${capitalize(tab)}</button>`).join('')}</nav><div data-right-region></div></aside>
-    </main>
-    <section class="timeline">
-      <div class="timelineTop"><b>Timeline</b><span data-playhead-label>0 ms</span><input data-zoom type="range" min="0.5" max="4" step="0.25" value="1"></div>
-      <div class="timelineScroll" data-timeline-scroll><div class="timelineCanvas" data-timeline data-duration="1000" data-px-per-ms="0.1"><div class="ruler" data-ruler></div><div class="tracks" data-tracks></div><div class="eventTrack" data-event-track></div><div class="playhead" data-playhead></div></div></div>
-    </section>
-    <div class="diagnostics" data-diagnostic hidden></div>
+    <header class="toolbar"><b>Animator</b><button data-action="pick-folder">Open folder…</button><input class="path" data-path-input placeholder="Or enter local project path"><button data-action="open-project">Open path</button><span class="sep"></span><button data-action="picker">Pick element</button><button data-action="record">Record</button><span class="sep"></span><button data-action="previous-event">◀|</button><button data-action="restart">↺</button><button data-action="play">▶</button><button data-action="pause">Ⅱ</button><button data-action="next-event">|▶</button><select data-playback-rate>${rates.map(rate=>`<option value="${rate}">${rate}x</option>`).join('')}</select><label class="toolbarToggle"><input type="checkbox" data-reduced-motion> Reduced</label><button data-action="clear-overrides">Clear overrides</button><button data-action="undo">Undo</button><button data-action="redo">Redo</button><span class="grow"></span><select data-viewport><option value="390">Mobile</option><option value="768">Tablet</option><option value="1100" selected>Desktop</option></select><span data-viewport-label>1100×700</span></header>
+    <main class="workspace"><aside class="leftPanel"><section data-project-region></section><section data-motion-region></section><section class="elementList" data-elements-region></section></aside><section class="previewArea"><div class="previewChrome" data-preview-chrome><span>No preview</span></div><div class="stage"><div class="device" data-device></div></div></section><aside class="rightPanel"><nav>${(['motion','source','export'] as const).map(tab=>`<button data-tab="${tab}" class="${tab==='motion'?'active':''}">${capitalize(tab)}</button>`).join('')}</nav><div data-right-region></div></aside></main>
+    <section class="timeline"><div class="timelineTop"><b>Timeline</b><span data-playhead-label>0 ms</span><input data-zoom type="range" min="0.5" max="4" step="0.25" value="1"><span class="muted">drag playhead/keyframes</span></div><div class="timelineScroll" data-timeline-scroll><div class="timelineCanvas" data-timeline data-duration="1000" data-px-per-ms="0.1"><div class="ruler" data-ruler></div><div class="tracks" data-tracks></div><div class="eventTrack" data-event-track></div><div class="playhead" data-playhead></div></div></div></section><div class="diagnostics" data-diagnostic hidden></div>
   </div>`;
 }
 
-function updateToolbar(root: HTMLElement, state: AnimatorState, ui: UiState): void {
-  const picker = root.querySelector<HTMLButtonElement>('[data-action="picker"]');
-  const record = root.querySelector<HTMLButtonElement>('[data-action="record"]');
-  const path = root.querySelector<HTMLInputElement>('[data-path-input]');
-  const rate = root.querySelector<HTMLSelectElement>('[data-playback-rate]');
-  const viewport = root.querySelector<HTMLSelectElement>('[data-viewport]');
-  const viewportLabel = root.querySelector<HTMLElement>('[data-viewport-label]');
-  picker?.classList.toggle('active', state.picker);
-  if (record) { record.classList.toggle('active', state.recording); record.textContent = state.recording ? 'Recording' : 'Record'; }
-  if (path && document.activeElement !== path && path.value !== ui.pathInput) path.value = ui.pathInput;
-  if (rate && rate.value !== String(ui.playbackRate)) rate.value = String(ui.playbackRate);
-  if (viewport && viewport.value !== String(ui.viewport.width)) viewport.value = String(ui.viewport.width);
-  if (viewportLabel) viewportLabel.textContent = `${ui.viewport.width}×${ui.viewport.height}`;
+function updateToolbar(root:HTMLElement,state:AnimatorState,ui:UiState):void {
+  const picker=root.querySelector<HTMLButtonElement>('[data-action="picker"]');const record=root.querySelector<HTMLButtonElement>('[data-action="record"]');const path=root.querySelector<HTMLInputElement>('[data-path-input]');const rate=root.querySelector<HTMLSelectElement>('[data-playback-rate]');const viewport=root.querySelector<HTMLSelectElement>('[data-viewport]');const viewportLabel=root.querySelector<HTMLElement>('[data-viewport-label]');const reduced=root.querySelector<HTMLInputElement>('[data-reduced-motion]');
+  picker?.classList.toggle('active',state.picker);if(record){record.classList.toggle('active',state.recording);record.textContent=state.recording?'Recording':'Record';}if(path&&document.activeElement!==path&&path.value!==ui.pathInput)path.value=ui.pathInput;if(rate&&rate.value!==String(ui.playbackRate))rate.value=String(ui.playbackRate);if(viewport&&viewport.value!==String(ui.viewport.width))viewport.value=String(ui.viewport.width);if(viewportLabel)viewportLabel.textContent=`${ui.viewport.width}×${ui.viewport.height}`;if(reduced)reduced.checked=ui.reducedMotion;
 }
-
-function updateProject(root: HTMLElement, state: AnimatorState, signatures: Signatures): void {
-  const signature = state.project ? `${state.project.id}:${state.project.root}:${state.project.tree.length}` : 'none';
-  if (signature === signatures.project) return;
-  signatures.project = signature;
-  const region = root.querySelector<HTMLElement>('[data-project-region]');
-  if (region) region.innerHTML = `<h3>Project</h3>${state.project ? renderTree(state.project.tree) : '<p class="muted">Open a local project folder to inspect its files and motion.</p>'}`;
+function updateProject(root:HTMLElement,state:AnimatorState,signatures:Signatures):void {const signature=state.project?`${state.project.id}:${state.project.root}:${state.project.tree.length}`:'none';if(signature===signatures.project)return;signatures.project=signature;const region=root.querySelector<HTMLElement>('[data-project-region]');if(region)region.innerHTML=`<h3>Project</h3>${state.project?`<div class="projectRoot" title="${attr(state.project.root)}">${html(state.project.root)}</div>${renderTree(state.project.tree)}`:'<p class="muted">Open a local project folder.</p>'}`;}
+function updateMotionList(root:HTMLElement,state:AnimatorState,ui:UiState,signatures:Signatures):void {
+  const visible=filterAnimations(state.animations,ui.query,ui.filter);const counts=overview(state.animations);const signature=`${ui.query}|${ui.filter}|${state.selectedAnimationId??''}|${state.animations.map(a=>`${a.id}:${a.runtimeState}:${a.confidence}`).join(',')}`;if(signature===signatures.motionList)return;signatures.motionList=signature;const region=root.querySelector<HTMLElement>('[data-motion-region]');if(!region)return;
+  region.innerHTML=`<h3>Motion <small>${counts.total}</small></h3><div class="overview"><button data-filter="css">CSS <b>${counts.cssAnimations}</b></button><button data-filter="transition">Transitions <b>${counts.cssTransitions}</b></button><button data-filter="waapi">WAAPI <b>${counts.waapi}</b></button><button data-filter="all">Other <b>${counts.javascript+counts.unknown}</b></button></div><input class="search" data-motion-search value="${attr(ui.query)}" placeholder="Search animations, source, property"><select data-motion-filter>${(['all','running','css','transition','waapi','exact','inferred'] as MotionFilter[]).map(f=>`<option value="${f}"${ui.filter===f?' selected':''}>${f}</option>`).join('')}</select><div class="motionRows">${visible.slice(0,160).map(a=>`<button class="motionRow${state.selectedAnimationId===a.id?' selected':''}" data-animation-id="${attr(a.id)}"><span>${html(a.name??a.type)}</span><small>${html(a.type)} · ${html(a.confidence)}</small></button>`).join('')||'<p class="muted">No matching motion.</p>'}</div>`;
 }
+function updateElements(root:HTMLElement,state:AnimatorState,signatures:Signatures):void {const signature=`${state.selectedElementId??''}|${state.elements.map(e=>`${e.id}:${e.alive?1:0}`).join(',')}`;if(signature===signatures.elements)return;signatures.elements=signature;const region=root.querySelector<HTMLElement>('[data-elements-region]');if(!region)return;region.innerHTML=`<h3>Elements <small>${state.elements.length}</small></h3>${state.elements.slice(0,300).map(e=>`<button class="row${state.selectedElementId===e.id?' selected':''}" data-element-id="${attr(e.id)}"><code>${html(e.tag)}</code>${e.domId?`#${html(e.domId)}`:''}${e.classes[0]?`.${html(e.classes[0])}`:''}</button>`).join('')}`;}
+function updateRightPanel(root:HTMLElement,state:AnimatorState,ui:UiState,signatures:Signatures):void {root.querySelectorAll<HTMLElement>('[data-tab]').forEach(button=>button.classList.toggle('active',button.dataset.tab===ui.tab));const selected=selectAnimation(state);const signature=`${ui.tab}|${state.selectedElementId??''}|${selected?`${selected.id}:${selected.duration??''}:${selected.delay??''}:${selected.easing??''}:${JSON.stringify(selected.keyframes??[])}`:''}|${ui.source?.path??''}:${ui.source?.text.length??0}|${ui.customPresets.length}|${ui.applyDiff.length}`;if(signature===signatures.right)return;signatures.right=signature;const region=root.querySelector<HTMLElement>('[data-right-region]');if(!region)return;region.innerHTML=ui.tab==='motion'?renderMotion(selected,!!state.selectedElementId,ui.customPresets,state.animations):ui.tab==='source'?renderSource(ui.source,selected):renderExport(selected,ui.applyDiff);}
 
-function updateElements(root: HTMLElement, state: AnimatorState, signatures: Signatures): void {
-  const signature = `${state.selectedElementId ?? ''}|${state.elements.map(element => `${element.id}:${element.alive ? 1 : 0}`).join(',')}`;
-  if (signature === signatures.elements) return;
-  signatures.elements = signature;
-  const region = root.querySelector<HTMLElement>('[data-elements-region]');
-  if (!region) return;
-  region.innerHTML = `<h3>Elements <small>${state.elements.length}</small></h3>${state.elements.slice(0, 300).map(element => `<button class="row${state.selectedElementId === element.id ? ' selected' : ''}" data-element-id="${attr(element.id)}"><code>${html(element.tag)}</code>${element.domId ? `#${html(element.domId)}` : ''}${element.classes[0] ? `.${html(element.classes[0])}` : ''}</button>`).join('')}`;
+function updateTimeline(root:HTMLElement,state:AnimatorState,ui:UiState,signatures:Signatures):void {
+  const duration=timelineDuration(state.animations,state.events);const pxPerMs=Math.max(0.05,state.zoom/10);const canvas=root.querySelector<HTMLElement>('[data-timeline]');const ruler=root.querySelector<HTMLElement>('[data-ruler]');const tracks=root.querySelector<HTMLElement>('[data-tracks]');const events=root.querySelector<HTMLElement>('[data-event-track]');const playhead=root.querySelector<HTMLElement>('[data-playhead]');const playheadLabel=root.querySelector<HTMLElement>('[data-playhead-label]');const zoom=root.querySelector<HTMLInputElement>('[data-zoom]');if(!canvas||!ruler||!tracks||!events||!playhead)return;
+  const durationSignature=`${Math.ceil(duration)}:${state.zoom}`;if(durationSignature!==signatures.duration){signatures.duration=durationSignature;canvas.dataset.duration=String(duration);canvas.dataset.pxPerMs=String(pxPerMs);canvas.style.width=`${Math.max(100,duration*pxPerMs+100)}px`;const step=chooseRulerStep(pxPerMs);const marks:string[]=[];for(let time=0;time<=duration+step;time+=step)marks.push(`<span style="left:${time*pxPerMs}px">${Math.round(time)}ms</span>`);ruler.innerHTML=marks.join('');}
+  const visible=filterAnimations(state.animations,ui.query,ui.filter);const timelineSignature=`${state.selectedAnimationId??''}|${state.zoom}|${visible.map(a=>`${a.id}:${a.startTime}:${a.duration??100}:${JSON.stringify(a.keyframes?.map(f=>f.offset)??[])}`).join(',')}`;if(timelineSignature!==signatures.timeline&&!keyframeDrag){signatures.timeline=timelineSignature;tracks.innerHTML=visible.slice(0,160).map(a=>{const left=Math.max(0,a.startTime*pxPerMs);const width=Math.max(4,(a.duration??100)*pxPerMs);const markers=state.selectedAnimationId===a.id?normalizedKeyframes(a).map((f,i)=>`<i class="keyframeMarker" data-kf-marker data-animation-id="${attr(a.id)}" data-kf-index="${i}" style="left:${Math.max(0,Math.min(1,Number(f.offset??0)))*width}px"></i>`).join(''):'';return `<button class="track${state.selectedAnimationId===a.id?' selected':''}" data-animation-id="${attr(a.id)}"><span class="trackLabel">${html(a.name??a.type)}</span><span class="clip" style="left:${left}px;width:${width}px">${markers}</span></button>`;}).join('');}
+  const eventSignature=`${state.zoom}|${state.events.map(e=>`${e.id}:${e.at}`).join(',')}`;if(eventSignature!==signatures.events){signatures.events=eventSignature;events.innerHTML=state.events.slice(-300).map(e=>`<i title="${attr(e.label)}" style="left:${Math.max(0,e.at*pxPerMs)}px"></i>`).join('');}
+  playhead.style.left=`${Math.max(0,state.playhead*pxPerMs)}px`;if(playheadLabel)playheadLabel.textContent=`${Math.round(state.playhead)} ms`;if(zoom&&document.activeElement!==zoom)zoom.value=String(state.zoom);
 }
+function updateDiagnostic(root:HTMLElement,state:AnimatorState,signatures:Signatures):void {const message=state.diagnostics.at(-1)??'';if(message===signatures.diagnostic)return;signatures.diagnostic=message;const region=root.querySelector<HTMLElement>('[data-diagnostic]');if(!region)return;region.hidden=!message;region.textContent=message;}
 
-function updateRightPanel(root: HTMLElement, state: AnimatorState, ui: UiState, signatures: Signatures): void {
-  root.querySelectorAll<HTMLElement>('[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === ui.tab));
-  const selected = selectAnimation(state);
-  const signature = `${ui.tab}|${state.selectedElementId ?? ''}|${selected ? `${selected.id}:${selected.duration ?? ''}:${selected.delay ?? ''}:${selected.easing ?? ''}:${selected.runtimeState}:${selected.properties.map(p => `${p.name}:${p.values?.join('|') ?? ''}`).join(';')}` : ''}|${ui.source?.path ?? ''}:${ui.source?.text.length ?? 0}`;
-  if (signature === signatures.right) return;
-  signatures.right = signature;
-  const region = root.querySelector<HTMLElement>('[data-right-region]');
-  if (!region) return;
-  region.innerHTML = ui.tab === 'motion' ? renderMotion(selected, !!state.selectedElementId) : ui.tab === 'source' ? renderSource(ui.source, selected) : renderExport(selected);
+function renderPreviewChrome(project:ProjectDescriptor|undefined,analysis:StaticAnalysis|undefined,reduced:boolean):string {const pages=project?`<select data-entry>${project.entries.map(entry=>`<option value="${attr(entry)}"${entry===project.selectedEntry?' selected':''}>${html(entry)}</option>`).join('')}</select>`:'<span>No preview</span>';return `${pages}<span>${reduced?'Reduced motion emulated':analysis?.reducedMotion?'Project has reduced-motion CSS':'Normal motion'}</span>`;}
+function previewUrl(project:ProjectDescriptor):string{return `/preview/${encodeURIComponent(project.id)}/${project.selectedEntry.split('/').map(encodeURIComponent).join('/')}`;}
+function renderTree(nodes:ProjectFile[]):string{return `<div class="tree">${nodes.map(node=>node.type==='directory'?`<details><summary>${html(node.name)}</summary>${node.children?renderTree(node.children):''}</details>`:`<button data-file="${attr(node.path)}">${html(node.name)}</button>`).join('')}</div>`;}
+
+function renderMotion(selected:DetectedAnimation|undefined,hasElement:boolean,customPresets:CustomPreset[],animations:DetectedAnimation[]):string {
+  const issues=selected?performanceIssues([selected]):[];const frames=selected?normalizedKeyframes(selected):[];const bezier=selected?parseBezier(selected.easing??''):undefined;const lastFrame=frames.at(-1);const transform=parseTransform(typeof lastFrame?.transform==='string'?lastFrame.transform:undefined);
+  const details=selected?`<div class="badges"><span>${html(selected.type)}</span><span>${html(selected.confidence)}</span><span>${html(selected.runtimeState)}</span></div><div class="controlGrid"><label>Duration<input data-duration-range type="range" min="1" max="10000" step="1" value="${selected.duration??400}"><input data-duration-number type="number" value="${selected.duration??400}"><em>ms</em></label><label>Delay<input data-delay type="number" value="${selected.delay??0}"><em>ms</em></label><label>Easing<input data-easing-text value="${attr(selected.easing??'ease')}"></label><label>Iterations<input data-iterations type="number" min="1" step="1" value="${selected.iterations??1}"></label></div>${renderEasing(bezier)}<h4>Keyframes <button class="tiny" data-action="add-keyframe">+</button><button class="tiny" data-action="add-property">property</button></h4><div class="keyframeEditor">${frames.map((frame,index)=>renderKeyframe(frame,index,frames.length)).join('')}</div><h4>Transform · last keyframe</h4>${renderTransform(transform)}${issues.length?`<h4>Performance</h4>${issues.map(issue=>`<div class="perf ${issue.severity}">${html(issue.message)}</div>`).join('')}`:''}`:'';
+  const allPresets=[...presets,...customPresets];
+  return `<div class="inspector"><h3>${html(selected?.name??selected?.type??'No animation selected')}</h3>${details}<h4>Create / presets</h4><div class="actions"><button data-action="create-animation" ${hasElement?'':'disabled'}>Create animation</button><select data-preset ${hasElement?'':'disabled'}><option value="" selected>Apply preset…</option>${allPresets.map(p=>`<option value="${attr(p.id)}">${html(p.label)}</option>`).join('')}</select></div>${selected?`<div class="actions"><button data-action="save-preset">Save as preset</button></div>`:''}${customPresets.length?`<div class="customPresets">${customPresets.map(p=>`<span>${html(p.label)}<button data-delete-preset="${attr(p.id)}">×</button></span>`).join('')}</div>`:''}${hasElement?'':'<p class="muted">Pick an element first.</p>'}<h4>Scene diagnostics</h4><p class="muted">${animations.length} detected animations. Scrubbing controls CSS/WAAPI animations frame by frame; arbitrary JS/rAF remains observation-only.</p></div>`;
 }
+function renderEasing(bezier:[number,number,number,number]|undefined):string {const pts=bezier??[0.25,0.1,0.25,1];return `<div class="easingEditor"><svg viewBox="0 0 160 160" aria-label="Easing curve"><path d="M10 150 L150 10" class="guide"></path><path d="${bezierPath(pts)}" class="curve"></path></svg><div>${pts.map((v,i)=>`<label>P${Math.floor(i/2)+1}${i%2===0?'x':'y'}<input data-bezier-index="${i}" type="number" step="0.01" value="${v}"></label>`).join('')}</div></div>`;}
+function renderKeyframe(frame:Record<string,string|number|null>,index:number,count:number):string {const keys=Object.keys(frame).filter(k=>!['computedOffset','composite'].includes(k));return `<div class="keyframeCard"><header><b>${index+1}</b><label>offset <input data-kf-index="${index}" data-kf-key="offset" type="number" min="0" max="1" step="0.01" value="${Number(frame.offset??index/Math.max(1,count-1))}"></label><button class="tiny" data-duplicate-kf="${index}">duplicate</button><button class="tiny" data-delete-kf="${index}" ${count<=2?'disabled':''}>delete</button></header>${keys.filter(k=>k!=='offset').map(key=>`<label><code>${html(key)}</code><input data-kf-index="${index}" data-kf-key="${attr(key)}" value="${attr(String(frame[key]??''))}"></label>`).join('')}</div>`;}
+function renderTransform(t:TransformParts):string {return `<div class="transformGrid">${(['translateX','translateY','scaleX','scaleY','rotate','skewX','skewY'] as const).map(key=>`<label>${key}<input data-transform-key="${key}" type="number" step="${key.startsWith('scale')?'0.01':'1'}" value="${t[key]}"></label>`).join('')}</div>`;}
+function renderSource(source:SourceState|undefined,selected:DetectedAnimation|undefined):string {const open=selected?.source?`<button data-file="${attr(selected.source.file)}">Open ${html(selected.source.file)}:${selected.source.line??'?'}</button>`:'';return `<div class="sourceView">${open}<h3>${html(source?.path??'Source')}</h3><pre>${html(source?.text??selected?.source?.snippet??'Select a file or source-correlated animation.')}</pre></div>`;}
+function renderExport(selected:DetectedAnimation|undefined,applyDiff:string):string {const generated=selected?{css:generateCss(selected),ts:generateTs(selected),diff:generateUnifiedDiff(selected)}:{css:'',ts:'',diff:''};const safe=!!selected?.source?.file.endsWith('.css')&&!!selected.source.selector&&(selected.confidence==='exact'||selected.confidence==='source-correlated');return `<div class="exportView"><h3>Generated change</h3><div class="actions"><button data-copy="css">Copy CSS</button><button data-copy="ts">Copy TS</button><button data-copy="diff">Copy diff</button><button data-action="write-overrides">Write override files</button>${safe?'<button data-action="preview-apply">Preview apply</button><button data-action="apply-source">Apply to CSS</button>':''}</div>${safe?'<p class="muted">Direct apply is limited to source-attributed CSS declarations and creates a .animator-backup file.</p>':''}<h4>Proposed diff</h4><pre data-generated="diff">${html(applyDiff||generated.diff||'Select an animation.')}</pre><h4>CSS</h4><pre data-generated="css">${html(generated.css||'Select an animation.')}</pre><h4>TypeScript</h4><pre data-generated="ts">${html(generated.ts||'Select an animation.')}</pre></div>`;}
 
-function updateTimeline(root: HTMLElement, state: AnimatorState, signatures: Signatures): void {
-  const duration = timelineDuration(state.animations, state.events);
-  const pxPerMs = Math.max(0.05, state.zoom / 10);
-  const canvas = root.querySelector<HTMLElement>('[data-timeline]');
-  const ruler = root.querySelector<HTMLElement>('[data-ruler]');
-  const tracks = root.querySelector<HTMLElement>('[data-tracks]');
-  const events = root.querySelector<HTMLElement>('[data-event-track]');
-  const playhead = root.querySelector<HTMLElement>('[data-playhead]');
-  const playheadLabel = root.querySelector<HTMLElement>('[data-playhead-label]');
-  const zoom = root.querySelector<HTMLInputElement>('[data-zoom]');
-  if (!canvas || !ruler || !tracks || !events || !playhead) return;
-
-  const durationSignature = `${Math.ceil(duration)}:${state.zoom}`;
-  if (durationSignature !== signatures.duration) {
-    signatures.duration = durationSignature;
-    canvas.dataset.duration = String(duration);
-    canvas.dataset.pxPerMs = String(pxPerMs);
-    canvas.style.width = `${Math.max(100, duration * pxPerMs + 100)}px`;
-    const step = chooseRulerStep(pxPerMs);
-    const marks: string[] = [];
-    for (let time = 0; time <= duration + step; time += step) marks.push(`<span style="left:${time * pxPerMs}px">${Math.round(time)}ms</span>`);
-    ruler.innerHTML = marks.join('');
-  }
-
-  const timelineSignature = `${state.selectedAnimationId ?? ''}|${state.zoom}|${state.animations.map(animation => `${animation.id}:${animation.startTime}:${animation.duration ?? 100}:${animation.name ?? animation.type}`).join(',')}`;
-  if (timelineSignature !== signatures.timeline) {
-    signatures.timeline = timelineSignature;
-    tracks.innerHTML = state.animations.slice(0, 120).map(animation => {
-      const left = Math.max(0, animation.startTime * pxPerMs);
-      const width = Math.max(4, (animation.duration ?? 100) * pxPerMs);
-      return `<button class="track${state.selectedAnimationId === animation.id ? ' selected' : ''}" data-animation-id="${attr(animation.id)}"><span class="trackLabel">${html(animation.name ?? animation.type)}</span><span class="clip" style="left:${left}px;width:${width}px"></span></button>`;
-    }).join('');
-  }
-
-  const eventSignature = `${state.zoom}|${state.events.map(event => `${event.id}:${event.at}`).join(',')}`;
-  if (eventSignature !== signatures.events) {
-    signatures.events = eventSignature;
-    events.innerHTML = state.events.slice(-300).map(event => `<i title="${attr(event.label)}" style="left:${Math.max(0, event.at * pxPerMs)}px"></i>`).join('');
-  }
-
-  playhead.style.left = `${Math.max(0, state.playhead * pxPerMs)}px`;
-  if (playheadLabel) playheadLabel.textContent = `${Math.round(state.playhead)} ms`;
-  if (zoom && document.activeElement !== zoom) zoom.value = String(state.zoom);
+function handleClick(event:MouseEvent,root:HTMLElement,ui:UiState,getIframe:()=>HTMLIFrameElement|null,render:()=>void):void {
+  const target=(event.target as Element|null)?.closest<HTMLElement>('button,[data-tab]');if(!target)return;const action=target.dataset.action;
+  if(action==='pick-folder'){void pickFolder(ui);return;}if(action==='open-project'){void openProject(ui);return;}if(action==='picker'){const enabled=!store.get().picker;store.set({picker:enabled});sendCommand(getIframe(),{type:'SET_PICKER',enabled});return;}if(action==='record'){const enabled=!store.get().recording;store.set({recording:enabled});sendCommand(getIframe(),{type:'SET_RECORDING',enabled});return;}if(action==='undo'){store.undo();return;}if(action==='redo'){store.redo();return;}if(action==='clear-overrides'){sendCommand(getIframe(),{type:'CLEAR_OVERRIDES'});return;}if(action==='previous-event'){jumpEvent(-1,getIframe());return;}if(action==='next-event'){jumpEvent(1,getIframe());return;}if(action==='restart'){store.set({playhead:0});sendCommand(getIframe(),{type:'RESTART_ALL'});return;}if(action==='play'){sendCommand(getIframe(),{type:'PLAY_ALL'});return;}if(action==='pause'){sendCommand(getIframe(),{type:'PAUSE_ALL'});return;}if(action==='write-overrides'){void writeOverrides();return;}
+  const selected=selectAnimation(store.get());
+  if(action==='create-animation'){const elementId=store.get().selectedElementId;if(elementId)sendCommand(getIframe(),{type:'CREATE_ANIMATION',elementId,keyframes:[{offset:0,opacity:0,transform:'translateY(24px)'},{offset:1,opacity:1,transform:'translateY(0px)'}],duration:400,easing:'ease-out',fill:'both'});return;}
+  if(action==='add-keyframe'&&selected){commitEdit(getIframe(),{keyframes:addKeyframe(normalizedKeyframes(selected))});return;}
+  if(action==='add-property'&&selected){const name=prompt('CSS property to animate (for example opacity, transform, filter)')?.trim();if(name){const frames=normalizedKeyframes(selected).map(frame=>({...frame,[name]:frame[name]??''}));commitEdit(getIframe(),{keyframes:frames});}return;}
+  if(action==='save-preset'&&selected){const label=prompt('Preset name',selected.name??'Custom motion');if(label){ui.customPresets=saveCustomPreset(label,selected);store.touch();}return;}
+  if(action==='preview-apply'){void previewSafeApply(ui);return;}if(action==='apply-source'){void applySafeSource(ui);return;}
+  if(target.dataset.deletePreset){ui.customPresets=deleteCustomPreset(target.dataset.deletePreset);store.touch();return;}
+  if(target.dataset.duplicateKf&&selected){commitEdit(getIframe(),{keyframes:duplicateKeyframe(normalizedKeyframes(selected),Number(target.dataset.duplicateKf))});return;}
+  if(target.dataset.deleteKf&&selected){commitEdit(getIframe(),{keyframes:deleteKeyframe(normalizedKeyframes(selected),Number(target.dataset.deleteKf))});return;}
+  if(target.dataset.filter){ui.filter=target.dataset.filter as MotionFilter;signaturesReset(ui);render();return;}
+  if(target.dataset.tab){ui.tab=target.dataset.tab as Tab;render();return;}if(target.dataset.file){void openFile(target.dataset.file,ui);return;}if(target.dataset.elementId){store.set({selectedElementId:target.dataset.elementId});return;}if(target.dataset.animationId){store.set({selectedAnimationId:target.dataset.animationId});return;}if(target.dataset.copy){const generated=root.querySelector<HTMLElement>(`[data-generated="${target.dataset.copy}"]`);if(generated)void navigator.clipboard.writeText(generated.textContent??'');}
 }
-
-function updateDiagnostic(root: HTMLElement, state: AnimatorState, signatures: Signatures): void {
-  const message = state.diagnostics.at(-1) ?? '';
-  if (message === signatures.diagnostic) return;
-  signatures.diagnostic = message;
-  const region = root.querySelector<HTMLElement>('[data-diagnostic]');
-  if (!region) return;
-  region.hidden = !message;
-  region.textContent = message;
+function handleChange(event:Event,root:HTMLElement,ui:UiState,getIframe:()=>HTMLIFrameElement|null,render:()=>void):void {
+  const target=event.target;if(!(target instanceof HTMLInputElement||target instanceof HTMLSelectElement))return;
+  if(target.matches('[data-playback-rate]')){ui.playbackRate=Number(target.value);sendCommand(getIframe(),{type:'SET_ALL_PLAYBACK_RATE',rate:ui.playbackRate});return;}
+  if(target.matches('[data-reduced-motion]')){ui.reducedMotion=(target as HTMLInputElement).checked;sendCommand(getIframe(),{type:'SET_REDUCED_MOTION',enabled:ui.reducedMotion});render();return;}
+  if(target.matches('[data-viewport]')){const width=Number(target.value);ui.viewport=width===390?{width:390,height:844}:width===768?{width:768,height:1024}:{width:1100,height:700};render();return;}
+  if(target.matches('[data-entry]')){const project=store.get().project;if(project)store.set({project:{...project,selectedEntry:target.value},animations:[],events:[],elements:[],playhead:0});return;}
+  if(target.matches('[data-motion-filter]')){ui.filter=target.value as MotionFilter;render();return;}
+  if(target.matches('[data-duration-range],[data-duration-number]')){commitEdit(getIframe(),{duration:Number(target.value)});return;}if(target.matches('[data-delay]')){commitEdit(getIframe(),{delay:Number(target.value)});return;}if(target.matches('[data-easing-text]')){commitEdit(getIframe(),{easing:target.value});return;}
+  if(target.matches('[data-preset]')){const elementId=store.get().selectedElementId;const preset=[...presets,...ui.customPresets].find(item=>item.id===target.value);if(elementId&&preset)sendCommand(getIframe(),{type:'CREATE_ANIMATION',elementId,keyframes:preset.keyframes,duration:preset.duration,easing:preset.easing,fill:'both'});target.value='';return;}
+  if(target.matches('[data-zoom]')){store.set({zoom:Number(target.value)});return;}
+  if(target.dataset.kfIndex!==undefined&&target.dataset.kfKey){editKeyframeField(target,getIframe());return;}
+  if(target.dataset.transformKey){editTransformField(root,target,getIframe());return;}
+  if(target.dataset.bezierIndex!==undefined){editBezier(root,getIframe());return;}
 }
+function handleInput(event:Event,root:HTMLElement,ui:UiState,getIframe:()=>HTMLIFrameElement|null,render:()=>void):void {const target=event.target;if(!(target instanceof HTMLInputElement))return;if(target.matches('[data-path-input]')){ui.pathInput=target.value;return;}if(target.matches('[data-motion-search]')){ui.query=target.value;render();return;}if(target.matches('[data-duration-range]')){const number=root.querySelector<HTMLInputElement>('[data-duration-number]');if(number)number.value=target.value;previewEdit(getIframe(),{duration:Number(target.value)});}}
 
-function renderPreviewChrome(project: ProjectDescriptor | undefined, analysis: StaticAnalysis | undefined): string {
-  const pages = project ? `<select data-entry>${project.entries.map(entry => `<option value="${attr(entry)}"${entry === project.selectedEntry ? ' selected' : ''}>${html(entry)}</option>`).join('')}</select>` : '<span>No preview</span>';
-  return `${pages}<span>${analysis?.reducedMotion ? 'Reduced motion CSS detected' : 'Normal motion'}</span>`;
-}
+function editKeyframeField(target:HTMLInputElement,frame:HTMLIFrameElement|null):void {const selected=selectAnimation(store.get());if(!selected)return;const index=Number(target.dataset.kfIndex);const key=target.dataset.kfKey!;const value=key==='offset'?Number(target.value):target.value;commitEdit(frame,{keyframes:updateKeyframe(normalizedKeyframes(selected),index,key,value)});}
+function editTransformField(root:HTMLElement,target:HTMLInputElement,frame:HTMLIFrameElement|null):void {const selected=selectAnimation(store.get());if(!selected)return;const frames=normalizedKeyframes(selected);const last=frames.at(-1);if(!last)return;const current=parseTransform(typeof last.transform==='string'?last.transform:undefined);const key=target.dataset.transformKey as keyof Omit<TransformParts,'origin'>;current[key]=Number(target.value);frames[frames.length-1]={...last,transform:buildTransform(current)};commitEdit(frame,{keyframes:frames});}
+function editBezier(root:HTMLElement,frame:HTMLIFrameElement|null):void {const inputs=[...root.querySelectorAll<HTMLInputElement>('[data-bezier-index]')];if(inputs.length!==4)return;const p=inputs.map(i=>Number(i.value));if(p.some(v=>!Number.isFinite(v)))return;commitEdit(frame,{easing:`cubic-bezier(${p.join(',')})`});}
 
-function previewUrl(project: ProjectDescriptor): string {
-  return `/preview/${encodeURIComponent(project.id)}/${project.selectedEntry.split('/').map(encodeURIComponent).join('/')}`;
-}
+function handleTimelinePointerDown(event:PointerEvent,root:HTMLElement,getIframe:()=>HTMLIFrameElement|null):void {const marker=(event.target as Element|null)?.closest<HTMLElement>('[data-kf-marker]');if(marker){const selected=selectAnimation(store.get());if(!selected||marker.dataset.kfIndex===undefined)return;marker.setPointerCapture(event.pointerId);keyframeDrag={animationId:selected.id,index:Number(marker.dataset.kfIndex),frames:normalizedKeyframes(selected),marker};event.stopPropagation();return;}const canvas=(event.target as Element|null)?.closest<HTMLElement>('[data-timeline]');if(!canvas)return;canvas.setPointerCapture(event.pointerId);scrubTimeline(event,canvas,getIframe());}
+function handleTimelinePointerMove(event:PointerEvent,root:HTMLElement,getIframe:()=>HTMLIFrameElement|null):void {if(keyframeDrag){const selected=store.get().animations.find(a=>a.id===keyframeDrag!.animationId);const canvas=root.querySelector<HTMLElement>('[data-timeline]');if(!selected||!canvas)return;const rect=canvas.getBoundingClientRect();const pxPerMs=Number(canvas.dataset.pxPerMs??0.1);const global=(event.clientX-rect.left)/pxPerMs;const offset=Math.max(0,Math.min(1,(global-selected.startTime)/Math.max(1,selected.duration??1)));keyframeDrag.frames=updateKeyframe(keyframeDrag.frames,keyframeDrag.index,'offset',offset);keyframeDrag.marker.style.left=`${offset*Math.max(4,(selected.duration??100)*pxPerMs)}px`;previewEdit(getIframe(),{keyframes:keyframeDrag.frames});return;}const canvas=(event.target as Element|null)?.closest<HTMLElement>('[data-timeline]');if(!canvas||!canvas.hasPointerCapture(event.pointerId))return;scrubTimeline(event,canvas,getIframe());}
+function handleTimelinePointerUp(_event:PointerEvent,frame:HTMLIFrameElement|null):void {if(!keyframeDrag)return;const drag=keyframeDrag;keyframeDrag=undefined;const selected=store.get().animations.find(a=>a.id===drag.animationId);if(selected)store.updateAnimation(selected.id,{keyframes:drag.frames});previewEdit(frame,{keyframes:drag.frames});}
+function scrubTimeline(event:PointerEvent,canvas:HTMLElement,frame:HTMLIFrameElement|null):void {const rect=canvas.getBoundingClientRect();const pxPerMs=Number(canvas.dataset.pxPerMs??0.1);const duration=Number(canvas.dataset.duration??0);setPlayhead(Math.max(0,Math.min(duration,(event.clientX-rect.left)/pxPerMs)),frame);}
+function chooseRulerStep(pxPerMs:number):number {const raw=90/pxPerMs;return [10,20,50,100,200,500,1000,2000,5000,10000].find(value=>value>=raw)??10000;}
+function setPlayhead(time:number,frame:HTMLIFrameElement|null):void {store.set({playhead:time});sendCommand(frame,{type:'SCRUB_TIMELINE',time});}
+function jumpEvent(direction:-1|1,frame:HTMLIFrameElement|null):void {const state=store.get();const events=[...state.events].sort((a,b)=>a.at-b.at);const event=direction>0?events.find(item=>item.at>state.playhead+0.5):[...events].reverse().find(item=>item.at<state.playhead-0.5);if(event)setPlayhead(event.at,frame);}
+function previewEdit(frame:HTMLIFrameElement|null,patch:Partial<DetectedAnimation>):void {const current=selectAnimation(store.get());if(!current)return;sendCommand(frame,{type:'APPLY_OVERRIDE',animationId:current.id,duration:patch.duration??current.duration,delay:patch.delay??current.delay,easing:patch.easing??current.easing,keyframes:patch.keyframes??current.keyframes});}
+function commitEdit(frame:HTMLIFrameElement|null,patch:Partial<DetectedAnimation>):void {const current=selectAnimation(store.get());if(!current)return;store.updateAnimation(current.id,patch);previewEdit(frame,patch);}
 
-function renderTree(nodes: ProjectFile[]): string {
-  return `<div class="tree">${nodes.map(node => node.type === 'directory' ? `<details><summary>${html(node.name)}</summary>${node.children ? renderTree(node.children) : ''}</details>` : `<button data-file="${attr(node.path)}">${html(node.name)}</button>`).join('')}</div>`;
-}
+async function pickFolder(ui:UiState):Promise<void>{try{const response=await fetch('/api/projects/pick-folder',{method:'POST'});if(response.status===204)return;const body=await response.json() as ProjectDescriptor&{error?:string};if(!response.ok)return diagnostic(body.error??'Folder selection failed');ui.pathInput=body.root;localStorage.setItem('animator.last-project',body.root);await activateProject(body);}catch(error){diagnostic(String(error));}}
+async function openProject(ui:UiState):Promise<void>{if(!ui.pathInput.trim())return diagnostic('Enter a local project path or choose Open folder…');try{const response=await fetch('/api/projects/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:ui.pathInput})});const body=await response.json() as ProjectDescriptor&{error?:string};if(!response.ok)return diagnostic(body.error??'Open failed');localStorage.setItem('animator.last-project',body.root);await activateProject(body);}catch(error){diagnostic(String(error));}}
+async function activateProject(project:ProjectDescriptor):Promise<void>{store.set({project,analysis:undefined,animations:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0});const response=await fetch(`/api/projects/${project.id}/analysis`);if(!response.ok)return diagnostic('Static analysis failed');const analysis=await response.json() as StaticAnalysis;store.set({analysis});for(const animation of analysis.animations as DetectedAnimation[])store.addAnimation(animation);}
+async function openFile(file:string,ui:UiState):Promise<void>{const project=store.get().project;if(!project)return;try{const response=await fetch(`/api/projects/${project.id}/source?path=${encodeURIComponent(file)}`);ui.source={path:file,text:await response.text()};ui.tab='source';store.touch();}catch(error){diagnostic(String(error));}}
+async function writeOverrides():Promise<void>{const state=store.get();if(!state.project)return;try{const output=generateOverrideFiles(state.animations.filter(animation=>animation.confidence!=='unknown'));const response=await fetch(`/api/projects/${state.project.id}/export-overrides`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(output)});const body=await response.json() as {cssPath?:string;error?:string};diagnostic(response.ok?`Overrides written: ${body.cssPath??'.animator'}`:body.error??'Export failed');}catch(error){diagnostic(String(error));}}
+async function previewSafeApply(ui:UiState):Promise<void>{const state=store.get();const selected=selectAnimation(state);if(!state.project||!selected?.source?.file||!selected.source.selector)return;const response=await fetch(`/api/projects/${state.project.id}/preview-css-apply`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:selected.source.file,selector:selected.source.selector,duration:selected.duration,delay:selected.delay,easing:selected.easing})});const body=await response.json() as {before?:string;after?:string;file?:string;error?:string};if(!response.ok)return diagnostic(body.error??'Could not preview apply');ui.applyDiff=simpleDiff(body.before??'',body.after??'',body.file??selected.source.file);ui.tab='export';store.touch();}
+async function applySafeSource(ui:UiState):Promise<void>{const state=store.get();const selected=selectAnimation(state);if(!state.project||!selected?.source?.file||!selected.source.selector)return;await previewSafeApply(ui);if(!confirm(`Apply timing changes to ${selected.source.file}? A backup will be created.`))return;const response=await fetch(`/api/projects/${state.project.id}/apply-css`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:selected.source.file,selector:selected.source.selector,duration:selected.duration,delay:selected.delay,easing:selected.easing})});const body=await response.json() as {file?:string;backup?:string;error?:string};diagnostic(response.ok?`Applied to ${body.file}; backup: ${body.backup}`:body.error??'Apply failed');}
+function simpleDiff(before:string,after:string,file:string):string {const a=before.split('\n'),b=after.split('\n');const out=[`--- ${file}`,`+++ ${file}`];const max=Math.max(a.length,b.length);for(let i=0;i<max;i++){if(a[i]===b[i])continue;if(a[i]!==undefined)out.push(`-${a[i]}`);if(b[i]!==undefined)out.push(`+${b[i]}`);}return out.join('\n');}
 
-function renderMotion(selected: DetectedAnimation | undefined, hasElement: boolean): string {
-  const details = selected ? `<div class="badges"><span>${html(selected.type)}</span><span>${html(selected.confidence)}</span></div><label>Duration <input data-duration-range type="range" min="50" max="5000" step="10" value="${selected.duration ?? 400}"><input data-duration-number type="number" value="${selected.duration ?? 400}"> ms</label><label>Delay <input data-delay type="number" value="${selected.delay ?? 0}"> ms</label><label>Easing <select data-easing>${['linear','ease','ease-in','ease-out','ease-in-out','cubic-bezier(.2,.8,.2,1)','steps(4,end)'].map(value => `<option value="${attr(value)}"${value === (selected.easing ?? 'ease') ? ' selected' : ''}>${html(value)}</option>`).join('')}</select></label><h4>Properties</h4>${selected.properties.length ? selected.properties.map(property => `<div class="prop"><code>${html(property.name)}</code><span>${html(property.values?.join(' → ') ?? `${property.from ?? '?'} → ${property.to ?? '?'}`)}</span></div>`).join('') : '<p class="muted">No normalized property values available.</p>'}` : '';
-  return `<div class="inspector"><h3>${html(selected?.name ?? selected?.type ?? 'No animation selected')}</h3>${details}<h4>Create / presets</h4><select data-preset ${hasElement ? '' : 'disabled'}><option value="" selected disabled>Apply editable preset…</option>${presets.map(preset => `<option value="${attr(preset.id)}">${html(preset.label)}</option>`).join('')}</select>${hasElement ? '' : '<p class="muted">Pick an element first.</p>'}</div>`;
-}
-
-function renderSource(source: SourceState | undefined, selected: DetectedAnimation | undefined): string {
-  const open = selected?.source ? `<button data-file="${attr(selected.source.file)}">Open ${html(selected.source.file)}:${selected.source.line ?? '?'}</button>` : '';
-  return `<div class="sourceView">${open}<h3>${html(source?.path ?? 'Source')}</h3><pre>${html(source?.text ?? selected?.source?.snippet ?? 'Select a file or a source-correlated animation.')}</pre></div>`;
-}
-
-function renderExport(selected: DetectedAnimation | undefined): string {
-  const generated = selected ? { css: generateCss(selected), ts: generateTs(selected), diff: generateUnifiedDiff(selected) } : { css: '', ts: '', diff: '' };
-  return `<div class="exportView"><h3>Generated change</h3><div class="actions"><button data-copy="css">Copy CSS</button><button data-copy="ts">Copy TS</button><button data-copy="diff">Copy diff</button><button data-action="write-overrides">Write override files</button></div><h4>Proposed diff</h4><pre data-generated="diff">${html(generated.diff || 'Select an animation.')}</pre><h4>CSS</h4><pre data-generated="css">${html(generated.css || 'Select an animation.')}</pre><h4>TypeScript</h4><pre data-generated="ts">${html(generated.ts || 'Select an animation.')}</pre></div>`;
-}
-
-function handleClick(event: MouseEvent, root: HTMLElement, ui: UiState, getIframe: () => HTMLIFrameElement | null, render: () => void): void {
-  const target = (event.target as Element | null)?.closest<HTMLElement>('button,[data-tab]');
-  if (!target) return;
-  const action = target.dataset.action;
-  if (action === 'pick-folder') { void pickFolder(ui); return; }
-  if (action === 'open-project') { void openProject(ui); return; }
-  if (action === 'picker') { const enabled = !store.get().picker; store.set({ picker: enabled }); sendCommand(getIframe(), { type: 'SET_PICKER', enabled }); return; }
-  if (action === 'record') { const enabled = !store.get().recording; store.set({ recording: enabled }); sendCommand(getIframe(), { type: 'SET_RECORDING', enabled }); return; }
-  if (action === 'undo') { store.undo(); return; }
-  if (action === 'redo') { store.redo(); return; }
-  if (action === 'clear-overrides') { sendCommand(getIframe(), { type: 'CLEAR_OVERRIDES' }); return; }
-  if (action === 'previous-event') { jumpEvent(-1, getIframe()); return; }
-  if (action === 'next-event') { jumpEvent(1, getIframe()); return; }
-  const selected = selectAnimation(store.get());
-  if (action === 'restart' && selected) { sendCommand(getIframe(), { type: 'RESTART_ANIMATION', id: selected.id }); return; }
-  if (action === 'play' && selected) { sendCommand(getIframe(), { type: 'PLAY_ANIMATION', id: selected.id }); return; }
-  if (action === 'pause' && selected) { sendCommand(getIframe(), { type: 'PAUSE_ANIMATION', id: selected.id }); return; }
-  if (action === 'write-overrides') { void writeOverrides(); return; }
-  if (target.dataset.tab) { ui.tab = target.dataset.tab as Tab; render(); return; }
-  if (target.dataset.file) { void openFile(target.dataset.file, ui); return; }
-  if (target.dataset.elementId) { store.set({ selectedElementId: target.dataset.elementId }); return; }
-  if (target.dataset.animationId) { store.set({ selectedAnimationId: target.dataset.animationId }); return; }
-  if (target.dataset.copy) {
-    const generated = root.querySelector<HTMLElement>(`[data-generated="${target.dataset.copy}"]`);
-    if (generated) void navigator.clipboard.writeText(generated.textContent ?? '');
-  }
-}
-
-function handleChange(event: Event, _root: HTMLElement, ui: UiState, getIframe: () => HTMLIFrameElement | null, render: () => void): void {
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
-  if (target.matches('[data-playback-rate]')) { ui.playbackRate = Number(target.value); const current = selectAnimation(store.get()); if (current) sendCommand(getIframe(), { type: 'SET_PLAYBACK_RATE', id: current.id, rate: ui.playbackRate }); return; }
-  if (target.matches('[data-viewport]')) { const width = Number(target.value); ui.viewport = width === 390 ? { width: 390, height: 844 } : width === 768 ? { width: 768, height: 1024 } : { width: 1100, height: 700 }; render(); return; }
-  if (target.matches('[data-entry]')) { const project = store.get().project; if (project) store.set({ project: { ...project, selectedEntry: target.value } }); return; }
-  if (target.matches('[data-duration-range],[data-duration-number]')) { commitEdit(getIframe(), { duration: Number(target.value) }); return; }
-  if (target.matches('[data-delay]')) { commitEdit(getIframe(), { delay: Number(target.value) }); return; }
-  if (target.matches('[data-easing]')) { commitEdit(getIframe(), { easing: target.value }); return; }
-  if (target.matches('[data-preset]')) { const elementId = store.get().selectedElementId; const preset = presets.find(item => item.id === target.value); if (elementId && preset) sendCommand(getIframe(), { type: 'CREATE_ANIMATION', elementId, keyframes: preset.keyframes, duration: preset.duration, easing: preset.easing }); return; }
-  if (target.matches('[data-zoom]')) { store.set({ zoom: Number(target.value) }); }
-}
-
-function handleInput(event: Event, root: HTMLElement, ui: UiState, getIframe: () => HTMLIFrameElement | null): void {
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  if (target.matches('[data-path-input]')) { ui.pathInput = target.value; return; }
-  if (target.matches('[data-duration-range]')) { const number = root.querySelector<HTMLInputElement>('[data-duration-number]'); if (number) number.value = target.value; previewEdit(getIframe(), { duration: Number(target.value) }); }
-}
-
-function handleTimelinePointerDown(event: PointerEvent, root: HTMLElement, getIframe: () => HTMLIFrameElement | null): void {
-  const canvas = (event.target as Element | null)?.closest<HTMLElement>('[data-timeline]');
-  if (!canvas) return;
-  canvas.setPointerCapture(event.pointerId);
-  scrubTimeline(event, canvas, getIframe());
-}
-
-function handleTimelinePointerMove(event: PointerEvent, _root: HTMLElement, getIframe: () => HTMLIFrameElement | null): void {
-  const canvas = (event.target as Element | null)?.closest<HTMLElement>('[data-timeline]');
-  if (!canvas || !canvas.hasPointerCapture(event.pointerId)) return;
-  scrubTimeline(event, canvas, getIframe());
-}
-
-function scrubTimeline(event: PointerEvent, canvas: HTMLElement, frame: HTMLIFrameElement | null): void {
-  const rect = canvas.getBoundingClientRect();
-  const pxPerMs = Number(canvas.dataset.pxPerMs ?? 0.1);
-  const duration = Number(canvas.dataset.duration ?? 0);
-  const time = Math.max(0, Math.min(duration, (event.clientX - rect.left) / pxPerMs));
-  setPlayhead(time, frame);
-}
-
-function chooseRulerStep(pxPerMs: number): number {
-  const desiredPixels = 90;
-  const raw = desiredPixels / pxPerMs;
-  const powers = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
-  return powers.find(value => value >= raw) ?? 10000;
-}
-
-function setPlayhead(time: number, frame: HTMLIFrameElement | null): void {
-  store.set({ playhead: time });
-  const current = selectAnimation(store.get());
-  if (current) sendCommand(frame, { type: 'SET_ANIMATION_TIME', id: current.id, time: Math.max(0, time - current.startTime) });
-}
-
-function jumpEvent(direction: -1 | 1, frame: HTMLIFrameElement | null): void {
-  const state = store.get();
-  const events = [...state.events].sort((a, b) => a.at - b.at);
-  const event = direction > 0 ? events.find(item => item.at > state.playhead + 0.5) : [...events].reverse().find(item => item.at < state.playhead - 0.5);
-  if (event) setPlayhead(event.at, frame);
-}
-
-function previewEdit(frame: HTMLIFrameElement | null, patch: Partial<DetectedAnimation>): void {
-  const current = selectAnimation(store.get());
-  if (!current) return;
-  sendCommand(frame, { type: 'APPLY_OVERRIDE', animationId: current.id, duration: patch.duration ?? current.duration, easing: patch.easing ?? current.easing, keyframes: patch.keyframes ?? current.keyframes });
-}
-
-function commitEdit(frame: HTMLIFrameElement | null, patch: Partial<DetectedAnimation>): void {
-  const current = selectAnimation(store.get());
-  if (!current) return;
-  store.updateAnimation(current.id, patch);
-  previewEdit(frame, patch);
-}
-
-async function pickFolder(ui: UiState): Promise<void> {
-  try {
-    const response = await fetch('/api/projects/pick-folder', { method: 'POST' });
-    if (response.status === 204) return;
-    const body = await response.json() as ProjectDescriptor & { error?: string };
-    if (!response.ok) return diagnostic(body.error ?? 'Folder selection failed');
-    ui.pathInput = body.root;
-    await activateProject(body);
-  } catch (error) { diagnostic(String(error)); }
-}
-
-async function openProject(ui: UiState): Promise<void> {
-  if (!ui.pathInput.trim()) return diagnostic('Enter a local project path or choose Open folder…');
-  try {
-    const response = await fetch('/api/projects/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: ui.pathInput }) });
-    const body = await response.json() as ProjectDescriptor & { error?: string };
-    if (!response.ok) return diagnostic(body.error ?? 'Open failed');
-    await activateProject(body);
-  } catch (error) { diagnostic(String(error)); }
-}
-
-async function activateProject(project: ProjectDescriptor): Promise<void> {
-  store.set({ project, analysis: undefined, animations: [], events: [], elements: [], selectedElementId: undefined, selectedAnimationId: undefined, playhead: 0 });
-  const analysisResponse = await fetch(`/api/projects/${project.id}/analysis`);
-  if (!analysisResponse.ok) return diagnostic('Static analysis failed');
-  const analysis = await analysisResponse.json() as StaticAnalysis;
-  store.set({ analysis });
-  for (const animation of analysis.animations as DetectedAnimation[]) store.addAnimation(animation);
-}
-
-async function openFile(file: string, ui: UiState): Promise<void> {
-  const project = store.get().project;
-  if (!project) return;
-  try {
-    const response = await fetch(`/api/projects/${project.id}/source?path=${encodeURIComponent(file)}`);
-    ui.source = { path: file, text: await response.text() };
-    ui.tab = 'source';
-    store.touch();
-  } catch (error) { diagnostic(String(error)); }
-}
-
-async function writeOverrides(): Promise<void> {
-  const state = store.get();
-  if (!state.project) return;
-  try {
-    const output = generateOverrideFiles(state.animations.filter(animation => animation.confidence !== 'unknown'));
-    const response = await fetch(`/api/projects/${state.project.id}/export-overrides`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(output) });
-    const body = await response.json() as { cssPath?: string; error?: string };
-    diagnostic(response.ok ? `Overrides written: ${body.cssPath ?? '.animator'}` : body.error ?? 'Export failed');
-  } catch (error) { diagnostic(String(error)); }
-}
-
-function selectAnimation(state: AnimatorState): DetectedAnimation | undefined {
-  return state.animations.find(animation => animation.id === state.selectedAnimationId) ?? state.animations.find(animation => animation.elementId === state.selectedElementId);
-}
-
-function diagnostic(message: string): void { store.set({ diagnostics: [...store.get().diagnostics, message] }); }
-function capitalize(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1); }
-function html(value: string): string { return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char); }
-function attr(value: string): string { return html(value); }
+function selectAnimation(state:AnimatorState):DetectedAnimation|undefined{return state.animations.find(a=>a.id===state.selectedAnimationId)??state.animations.find(a=>a.elementId===state.selectedElementId);}
+function signaturesReset(_ui:UiState):void{/* state render signatures naturally update from UI values */}
+function diagnostic(message:string):void{store.set({diagnostics:[...store.get().diagnostics,message]});}
+function capitalize(value:string):string{return value.charAt(0).toUpperCase()+value.slice(1);}
+function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
+function attr(value:string):string{return html(value);}
