@@ -28,13 +28,13 @@ export type PreviewMessage =
  | {source:'animator-preview'; type:'EVENT'; event:TimelineEvent}
  | {source:'animator-preview'; type:'EVENTS'; events:TimelineEvent[]}
  | {source:'animator-preview'; type:'TIMELINE_STATE'; time:number; frame?:number | undefined; fps?:number | undefined; playing:boolean; controlled:boolean}
- | {source:'animator-preview'; type:'RECORDING_STATE'; enabled:boolean; requestId?:string | undefined}
+ | {source:'animator-preview'; type:'RECORDING_STATE'; enabled:boolean; requestId?:string | undefined; reason?:string | undefined}
  | {source:'animator-preview'; type:'CAPTURE_REPORT'; reason:string; visibleElements:number; activeAnimations:number; capturedAnimations:number; styleTracks:number; autoCapture:boolean; burstActive:boolean; at:number}
  | {source:'animator-preview'; type:'DIAGNOSTIC'; level:'info'|'warn'|'error'; message:string};
 
 export type EditorCommand =
  | {source:'animator-editor'; type:'SET_PICKER'; enabled:boolean}
- | {source:'animator-editor'; type:'SET_RECORDING'; enabled:boolean; requestId?:string | undefined}
+ | {source:'animator-editor'; type:'SET_RECORDING'; enabled:boolean; requestId?:string | undefined; reason?:string | undefined}
  | {source:'animator-editor'; type:'SET_COLOR_SCHEME'; mode:'auto'|'light'|'dark'}
  | {source:'animator-editor'; type:'SET_VIEW_HISTORY_CAPTURE'; enabled:boolean; reset?:boolean | undefined}
  | {source:'animator-editor'; type:'SET_VIEW_HISTORY_MODE'; mode:'off'|'attached'|'detached'}
