@@ -5,7 +5,7 @@ export const mutationRuntimeSource = String.raw`(()=>{
   let seq=0,controlled=false,applying=false,highlight=null;
   const post=(type,payload={})=>parent.postMessage({source:OUT,type,...payload},'*');
   const now=()=>performance.now()-started;
-  const idFor=el=>{let id=ids.get(el);if(!id){id='motion-el-'+(++seq);ids.set(el,id);}return id;};
+  const idFor=el=>{const shared=window.__ANIMATOR_ELEMENT_ID__;if(typeof shared==='function')return shared(el);let id=ids.get(el);if(!id){id='motion-el-'+(++seq);ids.set(el,id);}return id;};
   const elementMeta=el=>{const rect=el.getBoundingClientRect();return{id:idFor(el),tag:el.tagName.toLowerCase(),domId:el.id||undefined,classes:[...el.classList],text:(el.textContent||'').trim().slice(0,80)||undefined,rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},alive:el.isConnected};};
   const parseStyle=text=>{const map=new Map();for(const part of String(text||'').split(';')){const at=part.indexOf(':');if(at<0)continue;const key=part.slice(0,at).trim(),value=part.slice(at+1).trim();if(key)map.set(key,value);}return map;};
   const changedProperties=(before,after)=>{const a=parseStyle(before),b=parseStyle(after),keys=new Set([...a.keys(),...b.keys()]);return[...keys].filter(key=>a.get(key)!==b.get(key));};
