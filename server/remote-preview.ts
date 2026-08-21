@@ -59,7 +59,7 @@ export function mapRemoteRedirect(location:string,target:URL,localOrigin:string)
 }
 
 function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin:()=>string):http.Server{
-  let colorScheme:PreviewColorScheme='system';
+  let colorScheme:PreviewColorScheme='auto';
   return http.createServer(async(req,res)=>{
     if(serveRuntime(req,res))return;
     try{
@@ -91,7 +91,7 @@ function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin
 function proxyHeaders(headers:Headers):Record<string,string>{const output:Record<string,string>={};headers.forEach((value,name)=>{if(!blockedResponseHeaders.has(name.toLowerCase())&&name.toLowerCase()!=='location')output[name]=value;});output['cache-control']='no-store';output['access-control-allow-origin']='*';return output;}
 function rewriteSameOrigin(text:string,remoteOrigin:string,localOrigin:string):string{const escaped=remoteOrigin.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),protocolRelative='//'+new URL(remoteOrigin).host;return text.replace(new RegExp(escaped,'g'),localOrigin).split(protocolRelative).join(localOrigin);}
 function injectHtml(html:string,mode:PreviewColorScheme):string{if(html.includes('/__animator/seek-runtime.js'))return html;const injection=previewColorSchemeBootstrap(mode)+runtimeInjection;const head=/<head(?:\s[^>]*)?>/i.exec(html);if(head&&head.index!==undefined){const at=head.index+head[0].length;return html.slice(0,at)+injection+html.slice(at);}return injection+html;}
-function appendTheme(input:string,mode:PreviewColorScheme):string{const url=new URL(input);url.searchParams.set('__animator_color_scheme',mode);return url.toString();}
+function appendTheme(input:string,mode:PreviewColorScheme):string{const url=new URL(input);if(mode==='auto'||mode==='system')url.searchParams.delete('__animator_color_scheme');else url.searchParams.set('__animator_color_scheme',mode);return url.toString();}
 function serveRuntime(req:IncomingMessage,res:ServerResponse):boolean{const pathname=new URL(req.url??'/', 'http://preview.local').pathname,source=runtimePaths.get(pathname);if(source===undefined)return false;res.statusCode=200;res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','no-store');res.end(source);return true;}
 function readBody(req:IncomingMessage):Promise<Buffer>{return new Promise((resolve,reject)=>{const chunks:Buffer[]=[];req.on('data',chunk=>chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk)));req.on('end',()=>resolve(Buffer.concat(chunks)));req.on('error',reject);});}
 function listenRandom(server:http.Server):Promise<number>{return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.off('error',reject);const address=server.address();if(!address||typeof address==='string')return reject(new Error('Remote preview server did not expose a TCP port'));resolve(address.port);});});}
