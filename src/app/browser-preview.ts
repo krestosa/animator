@@ -13,13 +13,16 @@ export function mountBrowserPreview(root:HTMLElement):()=>void{
   const keyDown=(event:KeyboardEvent):void=>{if(!surface||document.activeElement!==surface)return;event.preventDefault();postInput({type:'keyDown',key:event.key});};
   const keyUp=(event:KeyboardEvent):void=>{if(!surface||document.activeElement!==surface)return;event.preventDefault();postInput({type:'keyUp',key:event.key});};
   const removeSurface=():void=>{if(frameTimer)clearTimeout(frameTimer);if(stateTimer)clearTimeout(stateTimer);frameTimer=0;stateTimer=0;if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl='';surface?.removeEventListener('pointermove',pointerMove);surface?.removeEventListener('pointerdown',pointerDown);surface?.removeEventListener('pointerup',pointerUp);surface?.removeEventListener('wheel',wheel);surface?.removeEventListener('keydown',keyDown);surface?.removeEventListener('keyup',keyUp);surface?.remove();surface=null;image=null;};
+  const removeIframes=():void=>device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());
   const pollFrame=async():Promise<void>=>{if(disposed||!sessionId||!image)return;try{const response=await fetch(`${endpoint('/frame')}?t=${Date.now()}`,{cache:'no-store'});if(response.ok){const blob=await response.blob(),next=URL.createObjectURL(blob),previous=objectUrl;objectUrl=next;image.src=next;if(previous)URL.revokeObjectURL(previous);}}catch{}finally{if(!disposed&&sessionId)frameTimer=window.setTimeout(()=>void pollFrame(),80);}};
   const pollState=async():Promise<void>=>{if(disposed||!sessionId||!surface)return;try{const response=await fetch(endpoint('/state'),{cache:'no-store'});if(response.ok){const state=await response.json() as{url:string;title:string;width:number;height:number};lastWidth=state.width;lastHeight=state.height;surface.title=`${state.title||'Browser preview'} — ${state.url}`;}}catch{}finally{if(!disposed&&sessionId)stateTimer=window.setTimeout(()=>void pollState(),500);}};
   const resize=():void=>{if(!sessionId)return;const width=Math.max(320,Math.round(device.clientWidth)),height=Math.max(240,Math.round(device.clientHeight));if(width===lastWidth&&height===lastHeight)return;lastWidth=width;lastHeight=height;postInput({type:'resize',width,height});};
   const mount=():void=>{
-    const next=store.get().project?.browserSessionId??'';if(next===sessionId&&surface?.isConnected){resize();return;}
+    const next=store.get().project?.browserSessionId??'';
+    if(next)removeIframes();
+    if(next===sessionId&&surface?.isConnected){resize();return;}
     const previous=sessionId;removeSurface();sessionId=next;if(previous&&previous!==next)void fetch(`/api/browser-sessions/${encodeURIComponent(previous)}`,{method:'DELETE'}).catch(()=>{});if(!sessionId)return;
-    device.querySelector<HTMLIFrameElement>('[data-preview-frame]')?.remove();
+    removeIframes();
     surface=document.createElement('div');surface.className='browserPreviewSurface';surface.dataset.browserPreview='';surface.tabIndex=0;surface.setAttribute('role','application');surface.setAttribute('aria-label','Interactive browser preview');
     image=document.createElement('img');image.draggable=false;image.alt='';surface.append(image);device.append(surface);
     surface.addEventListener('pointermove',pointerMove);surface.addEventListener('pointerdown',pointerDown);surface.addEventListener('pointerup',pointerUp);surface.addEventListener('wheel',wheel,{passive:false});surface.addEventListener('keydown',keyDown);surface.addEventListener('keyup',keyUp);
