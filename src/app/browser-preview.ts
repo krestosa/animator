@@ -19,7 +19,7 @@ export function mountBrowserPreview(root:HTMLElement):()=>void{
   };
   const pollMotion=async():Promise<void>=>{
     if(disposed||!sessionId||motionBusy)return;const requestedSession=sessionId;motionBusy=true;
-    try{const response=await fetch(endpoint('/motion'),{cache:'no-store'});if(response.ok&&requestedSession===sessionId)applyMotion(await response.json() as MotionSnapshot);}catch{}finally{motionBusy=false;if(!disposed&&requestedSession===sessionId&&store.get().recording)scheduleMotion(650);}
+    try{const response=await fetch(`/api/browser-sessions/${encodeURIComponent(requestedSession)}/motion`,{cache:'no-store'});if(response.ok&&requestedSession===sessionId)applyMotion(await response.json() as MotionSnapshot);}catch{}finally{motionBusy=false;if(!disposed&&requestedSession===sessionId&&store.get().recording)scheduleMotion(650);}
   };
   const flushInput=():void=>{
     if(inputTimer)clearTimeout(inputTimer);inputTimer=0;const events:PendingInput[]=[];
@@ -40,9 +40,9 @@ export function mountBrowserPreview(root:HTMLElement):()=>void{
   };
   const removeIframes=():void=>device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());
   const pollState=async():Promise<void>=>{
-    if(disposed||!sessionId||!surface)return;
-    try{const response=await fetch(endpoint('/state'),{cache:'no-store'});if(response.ok){const state=await response.json() as{url:string;title:string;width:number;height:number;engine:string;profile:string};lastWidth=state.width;lastHeight=state.height;surface.title=`${state.title||'Browser preview'} — ${state.url}`;surface.dataset.browserEngineActive=state.engine;surface.dataset.browserProfileActive=state.profile;surface.dataset.browserWidth=String(state.width);surface.dataset.browserHeight=String(state.height);}}
-    catch{}finally{if(!disposed&&sessionId)stateTimer=window.setTimeout(()=>void pollState(),750);}
+    if(disposed||!sessionId||!surface)return;const requestedSession=sessionId,requestedSurface=surface;
+    try{const response=await fetch(`/api/browser-sessions/${encodeURIComponent(requestedSession)}/state`,{cache:'no-store'});if(response.ok&&requestedSession===sessionId&&requestedSurface===surface&&requestedSurface.isConnected){const state=await response.json() as{url:string;title:string;width:number;height:number;engine:string;profile:string};if(requestedSession!==sessionId||requestedSurface!==surface||!requestedSurface.isConnected)return;lastWidth=state.width;lastHeight=state.height;requestedSurface.title=`${state.title||'Browser preview'} — ${state.url}`;requestedSurface.dataset.browserEngineActive=state.engine;requestedSurface.dataset.browserProfileActive=state.profile;requestedSurface.dataset.browserWidth=String(state.width);requestedSurface.dataset.browserHeight=String(state.height);}}
+    catch{}finally{if(!disposed&&requestedSession===sessionId&&requestedSurface===surface&&requestedSurface.isConnected)stateTimer=window.setTimeout(()=>void pollState(),750);}
   };
   const mount=():void=>{
     const project=store.get().project,next=project?.browserSessionId??'';

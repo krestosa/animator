@@ -22,6 +22,7 @@ try{
       await waitUntil(async()=>await surface.getAttribute('data-browser-engine-active')===engine&&await surface.getAttribute('data-browser-profile-active')===profile,`${engine}/${profile} state metadata was not applied`);
       const expected=profile==='mobile'?['390','844']:['1100','700'];assert.equal(await surface.getAttribute('data-browser-width'),expected[0],`${engine}/${profile} width mismatch`);assert.equal(await surface.getAttribute('data-browser-height'),expected[1],`${engine}/${profile} height mismatch`);
       await waitUntil(async()=>await surface.locator('img').evaluate(image=>image.naturalWidth>0&&image.naturalHeight>0),`${engine}/${profile} did not receive streamed frames`);
+      await waitUntil(async()=>await surface.getAttribute('data-browser-runtime')==='true',`${engine}/${profile} instrumentation runtime did not bootstrap`);
       await waitUntil(async()=>await page.locator('[data-motion-region] .motionRow').count()>0,`${engine}/${profile} did not detect animations`);
       await waitUntil(async()=>await page.locator('[data-timeline-v2] .v2Clip').count()>0,`${engine}/${profile} did not build timeline clips`);
     }

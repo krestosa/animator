@@ -61,7 +61,8 @@ export async function openBrowserSession(input:string,options:{width?:number;hei
   const session:BrowserSession={id,browser,context,page,events:[],width:size.width,height:size.height,closed:false,sticky:new Map(),navigationVersion:0,engine,profile,frameListeners:new Set(),screenshotPumpRunning:false};sessions.set(id,session);
   await page.exposeBinding('__animatorEmit',(_source,payload:unknown)=>{if(payload&&typeof payload==='object')pushEvent(session,payload as BrowserEvent);});
   const forwarder=`(()=>{if(window.__ANIMATOR_BROWSER_FORWARDER__)return;window.__ANIMATOR_BROWSER_FORWARDER__=true;const nativePost=window.postMessage.bind(window);window.postMessage=function(value,...args){if(value&&value.source==='animator-preview'&&typeof window.__animatorEmit==='function'){try{void window.__animatorEmit(value);}catch{}}return nativePost(value,...args);};})();`;
-  await page.addInitScript({content:forwarder+gateRuntimeSource+runtimeSource+recordResumeRuntimeSource+seekRuntimeSource+mutationRuntimeSource+auxiliaryRuntimeSource});
+  const runtimeBundle=forwarder+gateRuntimeSource+runtimeSource+recordResumeRuntimeSource+seekRuntimeSource+mutationRuntimeSource+auxiliaryRuntimeSource;
+  await page.addInitScript({content:deferRuntimeUntilDocumentRoot(runtimeBundle)});
   page.on('framenavigated',frame=>{
     if(frame!==page.mainFrame())return;
     pushEvent(session,{source:'animator-preview',type:'DIAGNOSTIC',level:'info',message:`${browserLabels[engine]} preview: ${frame.url()}`});
@@ -185,6 +186,7 @@ function mobileUserAgent(engine:BrowserEngine):string{
   if(engine==='webkit')return'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
   return'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36';
 }
+function deferRuntimeUntilDocumentRoot(source:string):string{return`(()=>{let booted=false;const boot=()=>{if(booted||!document.documentElement)return false;booted=true;${source};return true;};if(boot())return;const observer=new MutationObserver(()=>{if(boot()){observer.disconnect();}});observer.observe(document,{childList:true,subtree:true});addEventListener('DOMContentLoaded',()=>{boot();observer.disconnect();},{once:true});})();`;}
 function parseUrl(input:string):URL{const raw=input.trim();if(!raw)throw new Error('Enter a web URL');const value=/^https?:\/\//i.test(raw)?raw:'https://'+raw,url=new URL(value);if(!['http:','https:'].includes(url.protocol))throw new Error('Only http and https URLs are supported');return url;}
 function number(value:unknown):number{const parsed=Number(value);return Number.isFinite(parsed)?parsed:0;}
 function clamp(value:number,min:number,max:number):number{return Math.max(min,Math.min(max,Math.round(value||min)));}
