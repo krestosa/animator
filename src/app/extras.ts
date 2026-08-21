@@ -64,7 +64,7 @@ function eventGraph(events:TimelineEvent[]):string {
   return `<div class="eventGraphRows">${groups.slice(-20).map(group=>`<div class="eventNode"><div><span>${Math.round(group.root.at)}ms</span>${escapeHtml(group.root.label)}</div>${group.children.slice(0,12).map(child=>`<div class="eventChild"><span>${Math.round(child.at-group.root.at)}ms</span>${escapeHtml(child.label)} <small>${escapeHtml(child.kind)}</small></div>`).join('')}</div>`).join('')}</div>`;
 }
 
-function enhanceSource(root:HTMLElement|undefined):void {
+function enhanceSource(root:HTMLElement|null|undefined):void {
   const pre=root?.querySelector<HTMLElement>('.sourceView pre');if(!pre||pre.dataset.enhanced==='1')return;
   const source=pre.textContent??'';pre.dataset.enhanced='1';pre.classList.add('sourceLines');pre.innerHTML=source.split('\n').map((line,index)=>`<span data-line="${index+1}">${highlight(line)}</span>`).join('');
 }
