@@ -27,8 +27,19 @@ export function connectPreview(iframe:HTMLIFrameElement|null):()=>void {
   };
   const browserSessionId=store.get().project?.browserSessionId;
   if(browserSessionId){
-    const poll=async():Promise<void>=>{if(disposed)return;try{const response=await fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/events`,{cache:'no-store'});if(response.ok){const values=await response.json() as unknown[];for(const value of values)if(isPreviewMessage(value))handle(value);}}catch{}finally{if(!disposed)pollTimer=window.setTimeout(()=>void poll(),45);}};
-    void poll();return()=>{disposed=true;if(pollTimer)clearTimeout(pollTimer);};
+    const controller=new AbortController();
+    const ownsSession=():boolean=>!disposed&&store.get().project?.browserSessionId===browserSessionId;
+    const poll=async():Promise<void>=>{
+      if(!ownsSession())return;
+      try{
+        const response=await fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/events`,{cache:'no-store',signal:controller.signal});
+        if(!response.ok||!ownsSession())return;
+        const values=await response.json() as unknown[];
+        if(!ownsSession())return;
+        for(const value of values){if(!ownsSession())break;if(isPreviewMessage(value))handle(value);}
+      }catch{}finally{if(ownsSession())pollTimer=window.setTimeout(()=>void poll(),45);}
+    };
+    void poll();return()=>{disposed=true;controller.abort();if(pollTimer)clearTimeout(pollTimer);};
   }
   if(!iframe)return()=>{disposed=true;};
   const handler=(event:MessageEvent<unknown>)=>{if(event.source!==iframe.contentWindow||!isPreviewMessage(event.data))return;handle(event.data);};
@@ -39,8 +50,9 @@ const timelineCommands=new Set<string>(['SET_ANIMATION_TIME','SCRUB_TIMELINE','S
 export function sendCommand(iframe:HTMLIFrameElement|null,command:EditorCommandInput):void{
   const browserSessionId=store.get().project?.browserSessionId;
   if(browserSessionId){
-    void fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/command`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(command)}).then(response=>{
-      if(!response.ok||command.type!=='SET_RECORDING')return;
+    const requestedSessionId=browserSessionId;
+    void fetch(`/api/browser-sessions/${encodeURIComponent(requestedSessionId)}/command`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(command)}).then(response=>{
+      if(store.get().project?.browserSessionId!==requestedSessionId||!response.ok||command.type!=='SET_RECORDING')return;
       const detail:Extract<PreviewMessage,{type:'RECORDING_STATE'}>={source:'animator-preview',type:'RECORDING_STATE',enabled:command.enabled,requestId:command.requestId};
       window.dispatchEvent(new CustomEvent(RECORDING_STATE_EVENT,{detail}));
     }).catch(()=>{});return;
