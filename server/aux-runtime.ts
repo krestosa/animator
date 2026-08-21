@@ -1,6 +1,6 @@
 export const auxiliaryRuntimeSource = String.raw`(()=>{
   if(window.__ANIMATOR_AUX_RUNTIME__)return;window.__ANIMATOR_AUX_RUNTIME__=true;
-  const SOURCE='animator-preview',started=performance.now(),eventQueue=[],births=[],birthSeen=new WeakSet(),savedDisplay=new WeakMap();
+  const SOURCE='animator-preview',started=performance.now(),eventQueue=[],births=[],birthSeen=new WeakSet(),savedVisibility=new WeakMap();
   let lastFrame=started,lastDrop=0,lastConcurrent=0,flushTimer=0,birthCursor=0,loadEnd=0,highlight=null;
   const post=(type,payload={})=>parent.postMessage({source:SOURCE,type,...payload},'*');
   const now=()=>Math.max(0,performance.now()-started);
@@ -15,7 +15,7 @@ export const auxiliaryRuntimeSource = String.raw`(()=>{
   try{domObserver.observe(document.documentElement||document,{subtree:true,childList:true});}catch{}
   event('document-lifecycle','Frame 0 · empty document',{phase:'bootstrap',url:location.href},0);
   addEventListener('DOMContentLoaded',()=>{const at=now();loadEnd=Math.max(loadEnd,at);event('document-lifecycle','DOMContentLoaded',{phase:'dom-content-loaded'},at);},{once:true});
-  addEventListener('load',()=>{const at=now();loadEnd=Math.max(loadEnd,at);event('document-lifecycle','Window load',{phase:'load'},at);flush();},{once:true});
+  addEventListener('load',()=>{const at=now();loadEnd=Math.max(loadEnd,at);event('network-resource','document',{url:location.href,start:0,end:at,duration:at,initiatorType:'navigation'},at);event('document-lifecycle','Window load',{phase:'load'},at);flush();},{once:true});
   try{
     const resources=new PerformanceObserver(list=>{for(const entry of list.getEntries()){
       const start=Math.max(0,Number(entry.startTime)-started),end=Math.max(start,Number(entry.startTime)+Number(entry.duration)-started);loadEnd=Math.max(loadEnd,end);
@@ -26,8 +26,8 @@ export const auxiliaryRuntimeSource = String.raw`(()=>{
   try{const observer=new PerformanceObserver(list=>{for(const entry of list.getEntries())event('performance-long-task','Long task '+Math.round(entry.duration)+' ms',{duration:entry.duration,startTime:entry.startTime});});observer.observe({entryTypes:['longtask']});addEventListener('beforeunload',()=>observer.disconnect(),{once:true});}catch{}
   const frame=t=>{const delta=t-lastFrame;lastFrame=t;if(delta>50&&t-lastDrop>750){lastDrop=t;event('performance-frame-drop','Frame gap '+Math.round(delta)+' ms',{duration:delta});}const running=document.getAnimations().filter(a=>a.playState==='running').length;if(running>=10&&running!==lastConcurrent){lastConcurrent=running;event('performance-concurrency',String(running)+' concurrent animations',{count:running});}requestAnimationFrame(frame);};
   requestAnimationFrame(frame);
-  const hideBirth=birth=>{if(birth.hidden||!(birth.el instanceof HTMLElement)||!birth.el.isConnected)return;if(!savedDisplay.has(birth.el))savedDisplay.set(birth.el,{value:birth.el.style.getPropertyValue('display'),priority:birth.el.style.getPropertyPriority('display')});birth.el.style.setProperty('display','none','important');birth.hidden=true;};
-  const showBirth=birth=>{if(!birth.hidden||!(birth.el instanceof HTMLElement))return;const saved=savedDisplay.get(birth.el);if(saved&&saved.value)birth.el.style.setProperty('display',saved.value,saved.priority);else birth.el.style.removeProperty('display');birth.hidden=false;};
+  const hideBirth=birth=>{if(birth.hidden||!(birth.el instanceof HTMLElement)||!birth.el.isConnected)return;if(!savedVisibility.has(birth.el))savedVisibility.set(birth.el,{value:birth.el.style.getPropertyValue('visibility'),priority:birth.el.style.getPropertyPriority('visibility')});birth.el.style.setProperty('visibility','hidden','important');birth.hidden=true;};
+  const showBirth=birth=>{if(!birth.hidden||!(birth.el instanceof HTMLElement))return;const saved=savedVisibility.get(birth.el);if(saved&&saved.value)birth.el.style.setProperty('visibility',saved.value,saved.priority);else birth.el.style.removeProperty('visibility');birth.hidden=false;};
   const seekLoad=time=>{const target=Math.max(0,Number(time)||0);while(birthCursor>0&&births[birthCursor-1].at>target){birthCursor--;hideBirth(births[birthCursor]);}while(birthCursor<births.length&&births[birthCursor].at<=target){showBirth(births[birthCursor]);birthCursor++;}};
   const releaseLoad=()=>{for(const birth of births)showBirth(birth);birthCursor=births.length;};
   const wrapReplay=()=>{const replay=window.__ANIMATOR_MUTATION_REPLAY__;if(!replay||replay.__animatorLoadWrapped)return false;replay.__animatorLoadWrapped=true;const baseSeek=replay.seek?.bind(replay),baseRelease=replay.release?.bind(replay),baseEnd=replay.end?.bind(replay);replay.seek=time=>{baseSeek?.(time);seekLoad(time);};replay.release=()=>{releaseLoad();baseRelease?.();};replay.end=()=>Math.max(Number(baseEnd?.())||0,loadEnd);replay.loadBirths=births;return true;};
