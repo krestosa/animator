@@ -18,6 +18,8 @@ describe('preview runtime',()=>{
     expect(runtimeSource).toContain('MutationObserver');
     expect(runtimeSource).toContain('externalControl');
     expect(runtimeSource).toContain("message.source!=='animator-timeline'");
+    expect(runtimeSource).toContain("'SET_SOLO_ANIMATION'");
+    expect(runtimeSource).toContain("'PLAY_ANIMATION'");
     expect(runtimeSource).not.toContain('replayAttributes');
     expect(runtimeSource).not.toContain('replayNodes');
     expect(runtimeSource).not.toContain('masterTime');
@@ -33,6 +35,30 @@ describe('preview runtime',()=>{
     expect(runtimeSource).toContain('reportedAnimations=new Map()');
   });
 
+  it('stops capture at every runtime boundary when recording is disabled',()=>{
+    expect(runtimeSource).toContain('if(!recording||externalControl)return');
+    expect(runtimeSource).toContain('Recording stopped immediately');
+    expect(mutationRuntimeSource).toContain('if(!recording||controlled||applying)return');
+    expect(mutationRuntimeSource).toContain("m.type==='SET_RECORDING'");
+    expect(auxiliaryRuntimeSource).toContain("message.type==='SET_RECORDING'");
+    expect(auxiliaryRuntimeSource).toContain('eventQueue.length=0');
+  });
+
+  it('never records animator overlays as project activity',()=>{
+    for(const source of [runtimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource]){
+      expect(source).toContain('data-animator-internal');
+      expect(source).toContain('isInternal');
+    }
+    expect(runtimeSource).toContain("outline.dataset.animatorInternal=''");
+    expect(mutationRuntimeSource).toContain("highlight.dataset.animatorInternal=''");
+    expect(auxiliaryRuntimeSource).toContain("highlight.dataset.animatorInternal=''");
+  });
+
+  it('shares element identity between css and javascript capture',()=>{
+    expect(runtimeSource).toContain('window.__ANIMATOR_ELEMENT_ID__=idFor');
+    expect(mutationRuntimeSource).toContain("typeof window.__ANIMATOR_ELEMENT_ID__==='function'");
+  });
+
   it('uses a worker-backed dedicated timeline with exact frame stepping',()=>{
     expect(seekRuntimeSource).toContain("IN='animator-timeline'");
     expect(seekRuntimeSource).toContain("post('TIMELINE_STATE'");
@@ -46,6 +72,7 @@ describe('preview runtime',()=>{
     expect(seekRuntimeSource).toContain("new Worker('/__animator/clock-worker.js'");
     expect(seekRuntimeSource).not.toContain('getComputedStyle(target)');
     expect(seekRuntimeSource).not.toContain('replayAttributes(time)');
+    expect(seekRuntimeSource).not.toContain('HIGHLIGHT_ANIMATION');
   });
 
   it('replays and recalculates only animated inline style properties for javascript motion',()=>{
