@@ -1,4 +1,5 @@
 import './app/styles.css';
+import './app/extras.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 
