@@ -2,6 +2,7 @@ import './app/styles.css';
 import './app/extras.css';
 import './app/ui-polish.css';
 import './app/timeline-v2.css';
+import './app/timeline-labels.css';
 import './app/motion-catalog.css';
 import './app/editor-pro.css';
 import { mountApp } from './app/app';
