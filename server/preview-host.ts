@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import http, { type IncomingMessage, type OutgoingHttpHeaders, type ServerResponse } from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -83,7 +83,7 @@ function createProxyServer(upstreamPort:number):http.Server{
     if(serveRuntime(req,res))return;
     const stripped=stripPreviewColorScheme(req.url??'/'),documentRequest=isDocumentRequest(req),requestScheme=resolvePreviewColorScheme(stripped.mode,stringHeader(req.headers.referer),documentRequest,colorScheme);
     if(documentRequest)colorScheme=requestScheme;
-    const headers={...req.headers,host:`127.0.0.1:${upstreamPort}`,'accept-encoding':'identity'};
+    const headers:OutgoingHttpHeaders={...req.headers,host:`127.0.0.1:${upstreamPort}`,'accept-encoding':'identity'};
     if(requestScheme==='light'||requestScheme==='dark')headers['sec-ch-prefers-color-scheme']=requestScheme;else delete headers['sec-ch-prefers-color-scheme'];
     const proxy=http.request({hostname:'127.0.0.1',port:upstreamPort,path:stripped.path,method:req.method,headers},upstream=>{
       const responseHeaders={...upstream.headers};
