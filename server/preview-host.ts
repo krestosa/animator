@@ -11,7 +11,7 @@ import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
 import { mutationRuntimeSource } from './mutation-runtime.js';
 import { clockWorkerSource } from './clock-worker.js';
-import { previewColorSchemeBootstrap, rewriteColorSchemeCss, stripPreviewColorScheme, type PreviewColorScheme } from './color-scheme.js';
+import { previewColorSchemeBootstrap, resolvePreviewColorScheme, rewriteColorSchemeCss, rewriteInlineColorSchemeStyles, stripPreviewColorScheme, type PreviewColorScheme } from './color-scheme.js';
 
 interface PreviewSession {
   origin:string;
@@ -48,10 +48,11 @@ export function closePreviewOrigin(projectId:string):void{
 }
 
 function createStaticServer(project:LoadedProject):http.Server{
-  let colorScheme:PreviewColorScheme='system';
+  let colorScheme:PreviewColorScheme='auto';
   return http.createServer((req,res)=>{
     if(serveRuntime(req,res))return;
-    const stripped=stripPreviewColorScheme(req.url??'/');if(stripped.mode)colorScheme=stripped.mode;
+    const stripped=stripPreviewColorScheme(req.url??'/'),documentRequest=isDocumentRequest(req),requestScheme=resolvePreviewColorScheme(stripped.mode,stringHeader(req.headers.referer),documentRequest,colorScheme);
+    if(documentRequest)colorScheme=requestScheme;
     const requestUrl=new URL(stripped.path,'http://preview.local');
     let requested=decodeURIComponent(requestUrl.pathname).replace(/^\/+/, '');
     if(!requested)requested=project.selectedEntry;
@@ -64,8 +65,8 @@ function createStaticServer(project:LoadedProject):http.Server{
         if(!acceptsHtml)return sendText(res,404,'Preview resource not found');
         target=resolveInside(project.root,project.selectedEntry);
       }
-      if(/\.html?$/i.test(target))return sendHtml(res,injectHtml(fs.readFileSync(target,'utf8'),colorScheme));
-      if(/\.css$/i.test(target))return send(res,200,'text/css; charset=utf-8',Buffer.from(rewriteColorSchemeCss(fs.readFileSync(target,'utf8'),colorScheme)));
+      if(/\.html?$/i.test(target))return sendHtml(res,injectHtml(fs.readFileSync(target,'utf8'),requestScheme));
+      if(/\.css$/i.test(target))return send(res,200,'text/css; charset=utf-8',Buffer.from(rewriteColorSchemeCss(fs.readFileSync(target,'utf8'),requestScheme)));
       if(/\.[cm]?tsx?$/i.test(target)){
         const source=fs.readFileSync(target,'utf8');
         const output=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX,sourceMap:true},fileName:target});
@@ -77,11 +78,13 @@ function createStaticServer(project:LoadedProject):http.Server{
 }
 
 function createProxyServer(upstreamPort:number):http.Server{
-  let colorScheme:PreviewColorScheme='system';
+  let colorScheme:PreviewColorScheme='auto';
   const server=http.createServer((req,res)=>{
     if(serveRuntime(req,res))return;
-    const stripped=stripPreviewColorScheme(req.url??'/');if(stripped.mode)colorScheme=stripped.mode;
+    const stripped=stripPreviewColorScheme(req.url??'/'),documentRequest=isDocumentRequest(req),requestScheme=resolvePreviewColorScheme(stripped.mode,stringHeader(req.headers.referer),documentRequest,colorScheme);
+    if(documentRequest)colorScheme=requestScheme;
     const headers={...req.headers,host:`127.0.0.1:${upstreamPort}`,'accept-encoding':'identity'};
+    if(requestScheme==='light'||requestScheme==='dark')headers['sec-ch-prefers-color-scheme']=requestScheme;else delete headers['sec-ch-prefers-color-scheme'];
     const proxy=http.request({hostname:'127.0.0.1',port:upstreamPort,path:stripped.path,method:req.method,headers},upstream=>{
       const responseHeaders={...upstream.headers};
       delete responseHeaders['content-security-policy'];delete responseHeaders['content-security-policy-report-only'];delete responseHeaders['x-frame-options'];delete responseHeaders['content-length'];
@@ -91,14 +94,14 @@ function createProxyServer(upstreamPort:number):http.Server{
       const chunks:Buffer[]=[];upstream.on('data',(chunk:Buffer|string)=>chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk)));
       upstream.on('end',()=>{
         const source=Buffer.concat(chunks).toString('utf8');
-        const text=contentType.includes('text/html')?injectHtml(source,colorScheme):rewriteColorSchemeCss(source,colorScheme);
+        const text=contentType.includes('text/html')?injectHtml(source,requestScheme):rewriteColorSchemeCss(source,requestScheme);
         const body=Buffer.from(text);res.writeHead(upstream.statusCode??200,{...responseHeaders,'content-type':contentType.includes('text/html')?'text/html; charset=utf-8':'text/css; charset=utf-8','content-length':String(body.length)});res.end(body);
       });
     });
     proxy.on('error',error=>sendText(res,502,`Project dev server unavailable: ${error.message}`));req.pipe(proxy);
   });
   server.on('upgrade',(req,socket,head)=>{
-    const stripped=stripPreviewColorScheme(req.url??'/');if(stripped.mode)colorScheme=stripped.mode;
+    const stripped=stripPreviewColorScheme(req.url??'/');
     const upstream=net.connect(upstreamPort,'127.0.0.1',()=>{
       const headers=Object.entries({...req.headers,host:`127.0.0.1:${upstreamPort}`}).map(([key,value])=>`${key}: ${Array.isArray(value)?value.join(', '):value??''}`).join('\r\n');
       upstream.write(`${req.method??'GET'} ${stripped.path} HTTP/${req.httpVersion}\r\n${headers}\r\n\r\n`);if(head.length)upstream.write(head);socket.pipe(upstream).pipe(socket);
@@ -115,10 +118,13 @@ function serveRuntime(req:IncomingMessage,res:ServerResponse):boolean{
 
 function injectHtml(html:string,mode:PreviewColorScheme):string{
   if(html.includes('/__animator/seek-runtime.js'))return html;
-  const injection=previewColorSchemeBootstrap(mode)+runtimeInjection;
-  const head=/<head(?:\s[^>]*)?>/i.exec(html);if(head&&head.index!==undefined){const at=head.index+head[0].length;return html.slice(0,at)+injection+html.slice(at);}
-  return injection+html;
+  const source=rewriteInlineColorSchemeStyles(html,mode),injection=previewColorSchemeBootstrap(mode)+runtimeInjection;
+  const head=/<head(?:\s[^>]*)?>/i.exec(source);if(head&&head.index!==undefined){const at=head.index+head[0].length;return source.slice(0,at)+injection+source.slice(at);}
+  return injection+source;
 }
+
+function isDocumentRequest(req:IncomingMessage):boolean{return String(req.headers['sec-fetch-dest']??'')==='document'||String(req.headers.accept??'').includes('text/html');}
+function stringHeader(value:string|string[]|undefined):string|undefined{return Array.isArray(value)?value[0]:value;}
 
 async function startKnownDevServer(root:string):Promise<{port:number;process:ChildProcess}|undefined>{
   const packagePath=path.join(root,'package.json');if(!fs.existsSync(packagePath)||!fs.existsSync(path.join(root,'node_modules')))return undefined;
@@ -146,7 +152,7 @@ function stopChild(child:ChildProcess):void{
 async function waitForHttp(port:number,timeoutMs:number,stopped:()=>boolean):Promise<boolean>{
   const deadline=Date.now()+timeoutMs;
   while(Date.now()<deadline&&!stopped()){
-    const ok=await new Promise<boolean>(resolve=>{const req=http.get({hostname:'127.0.0.1',port,path:'/'},res=>{res.resume();resolve((res.statusCode??500)<500);});req.setTimeout(500,()=>{req.destroy();resolve(false);});req.on('error',()=>resolve(false));});
+    const ok=await new Promise<boolean>(resolve=>{const req=http.get({hostname:'127.0.0.1',port,path:'/'},res=>{res.resume();resolve((res.statusCode??500)<500);});req.setTimeout(500,()=>{req.destroy();resolve(false);});req.on('error',()=>resolve(false);});
     if(ok)return true;await new Promise(resolve=>setTimeout(resolve,150));
   }
   return false;
