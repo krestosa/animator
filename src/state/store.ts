@@ -32,6 +32,7 @@ let state:AnimatorState={project:undefined,analysis:undefined,elements:[],animat
 const listeners=new Set<()=>void>();const emit=():void=>{for(const listener of listeners)listener();};
 const snapshot=(animation:DetectedAnimation):EditableSnapshot=>({duration:animation.duration,delay:animation.delay,easing:animation.easing,iterations:animation.iterations,direction:animation.direction,fill:animation.fill,keyframes:animation.keyframes?.map(frame=>({...frame}))});
 const applySnapshot=(animation:DetectedAnimation,value:EditableSnapshot):DetectedAnimation=>({...animation,duration:value.duration,delay:value.delay,easing:value.easing,iterations:value.iterations,direction:value.direction,fill:value.fill,keyframes:value.keyframes?.map(frame=>({...frame}))});
+const sameSnapshot=(a:EditableSnapshot,b:EditableSnapshot):boolean=>a.duration===b.duration&&a.delay===b.delay&&a.easing===b.easing&&a.iterations===b.iterations&&a.direction===b.direction&&a.fill===b.fill&&JSON.stringify(a.keyframes)===JSON.stringify(b.keyframes);
 const projectContext=(project:ProjectDescriptor|undefined):string=>project?`${project.id}:${project.selectedEntry}`:'';
 
 export const store={
@@ -39,7 +40,7 @@ export const store={
   subscribe(listener:()=>void):()=>void{listeners.add(listener);return()=>listeners.delete(listener);},
   touch():void{emit();},
   set(patch:Partial<AnimatorState>):void{const projectChanged=Object.prototype.hasOwnProperty.call(patch,'project')&&projectContext(patch.project)!==projectContext(state.project);state={...state,...patch,...(projectChanged?{history:[],future:[]}:{})};emit();},
-  updateAnimation(id:string,patch:Partial<DetectedAnimation>,record=true):void{const current=state.animations.find(animation=>animation.id===id);if(!current)return;const updated={...current,...patch};const history=record?[...state.history,{id,before:snapshot(current),after:snapshot(updated)}]:state.history;state={...state,history,future:record?[]:state.future,animations:state.animations.map(animation=>animation.id===id?updated:animation)};emit();},
+  updateAnimation(id:string,patch:Partial<DetectedAnimation>,record=true):void{const current=state.animations.find(animation=>animation.id===id);if(!current)return;const updated={...current,...patch},before=snapshot(current),after=snapshot(updated),editableChanged=!sameSnapshot(before,after),recordEdit=record&&editableChanged;const history=recordEdit?[...state.history,{id,before,after}]:state.history;state={...state,history,future:recordEdit?[]:state.future,animations:state.animations.map(animation=>animation.id===id?updated:animation)};emit();},
   addAnimation(animation:DetectedAnimation):void{
     const normalized=correlateSource(animation,state.analysis);
     const index=state.animations.findIndex(item=>item.id===normalized.id);
