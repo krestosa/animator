@@ -8,6 +8,7 @@ export const runtimeSource = String.raw`(()=>{
   const documentAnimations=()=>{try{return document.getAnimations({subtree:true});}catch{return document.getAnimations();}};
   const mutationReplay=()=>window.__ANIMATOR_MUTATION_REPLAY__;
   const idFor=el=>{let id=ids.get(el);if(!id){id='el-'+(++seq);ids.set(el,id);byId.set(id,el);}return id;};
+  window.__ANIMATOR_ELEMENT_ID__=idFor;
   const meta=el=>{const rect=el.getBoundingClientRect();return{id:idFor(el),tag:el.tagName.toLowerCase(),domId:el.id||undefined,classes:[...el.classList],text:(el.textContent||'').trim().slice(0,80)||undefined,rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},alive:el.isConnected};};
   const ensureElement=el=>{if(reportedElements.has(el))return;reportedElements.add(el);post('ELEMENTS',{elements:[meta(el)]});};
   const emitEvent=(kind,el,label,data={})=>{if(!recording||externalControl)return;post('EVENT',{event:{id:'ev-'+Math.random().toString(36).slice(2),at:now(),kind,elementId:el?idFor(el):undefined,label,data}});};
