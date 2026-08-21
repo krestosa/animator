@@ -2,6 +2,7 @@ import { store } from '../state/store';
 import type { EditorCommand, PreviewMessage } from '../types/domain';
 
 export const TIMELINE_STATE_EVENT='animator:timeline-state';
+export const CAPTURE_REPORT_EVENT='animator:capture-report';
 
 export function isPreviewMessage(value:unknown): value is PreviewMessage {
   return !!value && typeof value==='object' && (value as {source?:unknown}).source==='animator-preview' && typeof (value as {type?:unknown}).type==='string';
@@ -23,6 +24,7 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
         if(Math.abs(current-msg.time)>.25) store.set({playhead:Math.max(0,msg.time)});
       }
     }
+    else if(msg.type==='CAPTURE_REPORT') window.dispatchEvent(new CustomEvent(CAPTURE_REPORT_EVENT,{detail:msg}));
     else if(msg.type==='DIAGNOSTIC') store.set({diagnostics:[...store.get().diagnostics, `${msg.level}: ${msg.message}`].slice(-100)});
   };
   window.addEventListener('message',handler); return()=>window.removeEventListener('message',handler);
@@ -35,7 +37,7 @@ const timelineCommands=new Set<string>([
 ]);
 export function sendCommand(iframe:HTMLIFrameElement|null, command:EditorCommandInput):void {
   const target=iframe?.contentWindow;if(!target)return;
-  if(command.type==='CLEAR_OVERRIDES'){
+  if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){
     target.postMessage({source:'animator-timeline',...command},'*');
     target.postMessage({source:'animator-editor',...command},'*');
     return;
