@@ -22,13 +22,22 @@ const icons:Record<string,string>={
 export function mountUiPolish(root:HTMLElement):()=>void {
   const toolbar=root.querySelector<HTMLElement>('.toolbar');
   if(!toolbar)return()=>{};
-  const more=buildToolbar(root,toolbar);
+  const more=buildToolbar(toolbar);
   const status=document.createElement('span');status.className='previewMode';status.textContent='LIVE';
   root.querySelector<HTMLElement>('[data-preview-chrome]')?.append(status);
-  let raf=0;
-  const schedule=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;applyGrouping(root);ensurePreviewStatus(root,status);});};
+  let raf=0,mutating=false;
+  const decorate=()=>{
+    setIcon(root,'[data-action="picker"]','pick','Pick element');
+    setIcon(root,'[data-action="record"]','record',store.get().recording?'Recording interactions':'Record interactions');
+  };
+  const apply=()=>{
+    raf=0;if(mutating)return;mutating=true;
+    decorate();applyGrouping(root);ensurePreviewStatus(root,status);
+    queueMicrotask(()=>{mutating=false;});
+  };
+  const schedule=()=>{if(!raf)raf=requestAnimationFrame(apply);};
   const unsubscribe=store.subscribe(schedule);
-  const observer=new MutationObserver(schedule);observer.observe(root,{subtree:true,childList:true});
+  const observer=new MutationObserver(()=>{if(!mutating)schedule();});observer.observe(root,{subtree:true,childList:true});
   const capture=(event:Event)=>{
     const target=(event.target as Element|null)?.closest<HTMLElement>('button,[data-timeline]');
     if(!target)return;
@@ -52,7 +61,7 @@ export function mountUiPolish(root:HTMLElement):()=>void {
   return()=>{unsubscribe();observer.disconnect();if(raf)cancelAnimationFrame(raf);root.removeEventListener('pointerdown',capture,true);root.removeEventListener('click',capture,true);more.remove();status.remove();};
 }
 
-function buildToolbar(root:HTMLElement,toolbar:HTMLElement):HTMLDetailsElement {
+function buildToolbar(toolbar:HTMLElement):HTMLDetailsElement {
   setIcon(toolbar,'[data-action="pick-folder"]','folder','Open folder');
   setIcon(toolbar,'[data-action="open-project"]','path','Open entered path');
   setIcon(toolbar,'[data-action="picker"]','pick','Pick element');
@@ -71,7 +80,7 @@ function buildToolbar(root:HTMLElement,toolbar:HTMLElement):HTMLDetailsElement {
   const menu=details.querySelector<HTMLElement>('.toolbarMenu')!;
   const path=toolbar.querySelector<HTMLElement>('[data-path-input]');
   const openPath=toolbar.querySelector<HTMLElement>('[data-action="open-project"]');
-  const reduced=toolbar.querySelector<HTMLElement>('.toolbarToggle:has([data-reduced-motion])');
+  const reduced=[...toolbar.querySelectorAll<HTMLElement>('.toolbarToggle')].find(label=>label.querySelector('[data-reduced-motion]'));
   const clear=toolbar.querySelector<HTMLElement>('[data-action="clear-overrides"]');
   const undo=toolbar.querySelector<HTMLElement>('[data-action="undo"]');
   const redo=toolbar.querySelector<HTMLElement>('[data-action="redo"]');
@@ -83,8 +92,8 @@ function buildToolbar(root:HTMLElement,toolbar:HTMLElement):HTMLDetailsElement {
   return details;
 }
 
-function setIcon(root:HTMLElement,selector:string,icon:string,label:string):void {
-  const button=root.querySelector<HTMLButtonElement>(selector);if(!button)return;button.classList.add('iconButton');button.title=label;button.setAttribute('aria-label',label);button.innerHTML=icons[icon]??'';
+function setIcon(root:ParentNode,selector:string,icon:string,label:string):void {
+  const button=root.querySelector<HTMLButtonElement>(selector);if(!button)return;button.classList.add('iconButton');button.title=label;button.setAttribute('aria-label',label);if(button.innerHTML!==icons[icon])button.innerHTML=icons[icon]??'';
 }
 
 function applyGrouping(root:HTMLElement):void {
@@ -110,7 +119,7 @@ function applyGrouping(root:HTMLElement):void {
     const representativeClip=representative.querySelector<HTMLElement>('.clip');if(representativeClip)seen.add(`${representativeClip.style.left}|${representativeClip.style.width}`);
     for(const track of groupTracks){if(track===representative)continue;track.hidden=true;const clip=track.querySelector<HTMLElement>('.clip');if(!clip)continue;const signature=`${clip.style.left}|${clip.style.width}`;if(seen.has(signature))continue;seen.add(signature);const clone=clip.cloneNode(true) as HTMLElement;clone.classList.add('groupInstanceClip');clone.querySelectorAll('.keyframeMarker').forEach(marker=>marker.remove());representative.append(clone);}
   }
-  const visibleGroups=new Set(motionRows.filter(row=>!row.hidden).map(row=>byId.get(row.dataset.animationId??'')?.key).filter(Boolean));
+  const visibleGroups=new Set<string>();for(const row of motionRows)if(!row.hidden){const key=byId.get(row.dataset.animationId??'')?.key;if(key)visibleGroups.add(key);}
   const heading=root.querySelector<HTMLElement>('[data-motion-region] h3 small');if(heading)heading.textContent=String(visibleGroups.size||groups.length);
 }
 
