@@ -71,34 +71,62 @@ try{
     await waitUntil(async()=>await firstInstance.evaluate(node=>node.classList.contains('selected')),'component instance was not individually selectable');
     await waitUntil(async()=>await page.locator('.elementList .row.selected').count()>=1,'selecting a timeline instance must select its DOM component');
 
+    const ruler=page.locator('.v2RulerMotion');
+    const rulerBefore=await ruler.boundingBox();assert(rulerBefore,'timeline ruler has no bounds');
+    await timeline.evaluate(element=>element.scrollTop=Math.min(100,element.scrollHeight-element.clientHeight));await page.waitForTimeout(80);
+    const rulerAfter=await ruler.boundingBox();assert(rulerAfter,'timeline ruler disappeared after vertical scroll');
+    assert(Math.abs(rulerAfter.y-rulerBefore.y)<2,`timeline ruler is not sticky: ${rulerBefore.y} -> ${rulerAfter.y}`);
+    await timeline.evaluate(element=>element.scrollTop=0);
+
+    const playhead=async()=>Number.parseInt(await page.locator('[data-playhead-label]').textContent()??'0',10);
+    const playheadBeforeTrackClick=await playhead();const groupMotion=group.locator('.v2Motion');const groupMotionBox=await groupMotion.boundingBox();assert(groupMotionBox,'timeline motion surface has no box');
+    await groupMotion.click({position:{x:Math.max(20,groupMotionBox.width*.75),y:groupMotionBox.height/2},force:true});await page.waitForTimeout(80);
+    assert.equal(await playhead(),playheadBeforeTrackClick,'clicking a regular timeline track scrubbed the playhead');
+
     const zoomBefore=Number(await timeline.getAttribute('data-px-per-ms'));await page.locator('[data-timeline-zoom="in"]').click();
     await waitUntil(async()=>Number(await timeline.getAttribute('data-px-per-ms'))>zoomBefore,'timeline zoom-in control did not increase frame scale');
     await page.locator('[data-timeline-zoom="frame"]').click();
     await waitUntil(async()=>Math.abs(Number(await timeline.getAttribute('data-px-per-ms'))*(1000/60)-24)<1.5,'1f zoom did not target a readable per-frame scale');
     await page.locator('[data-timeline-zoom="fit"]').click();await page.waitForTimeout(120);
+
     await page.locator('[data-isolate="animation"]').click();
     await waitUntil(async()=>await page.locator('.v2GroupRow').evaluateAll(nodes=>nodes.filter(node=>!node.hidden).length)===1,'animation isolation did not hide unrelated timeline groups');
     assert.equal(await page.locator('.v2LoadRow').evaluateAll(nodes=>nodes.filter(node=>!node.hidden).length),0,'load tracks remained visible while a motion was isolated');
+    const focusedOrigin=Number(await timeline.getAttribute('data-origin-ms'));assert(Number.isFinite(focusedOrigin)&&focusedOrigin>=0,'surgical inspection did not expose a local timeline origin');
+    const visibleFocusedClip=page.locator('.v2Clip[data-v2-instance]').filter({visible:true}).first();
+    await waitUntil(async()=>{const box=await visibleFocusedClip.boundingBox();return !!box&&box.width>=5;},'focused animation duration bar disappeared');
+    const focusedClipLeft=Number.parseFloat(await visibleFocusedClip.evaluate(element=>element.style.left)||'0');assert(focusedClipLeft<2,'focused animation was not moved to local timeline zero');
+
+    await page.locator('[data-focus-mode]').click();
+    await waitUntil(async()=>await page.locator('.app').evaluate(node=>node.classList.contains('animationFocusMode')),'Focus mode did not hide editor chrome');
+    assert.equal(await page.locator('.toolbar').evaluate(node=>getComputedStyle(node).display),'none','toolbar remained visible in Focus mode');
+    assert.equal(await page.locator('.timeline').evaluate(node=>getComputedStyle(node).display),'none','timeline remained visible in Focus mode');
+    await waitUntil(async()=>await frame.locator('[data-animator-focus-target]').count()===1,'focused element was not marked inside preview');
+    assert.equal(await frame.locator('[data-animator-focus-target]').evaluate(node=>getComputedStyle(node).visibility),'visible','focused element is not visible');
+    const hiddenSiblings=await frame.locator('.repeat-motion:not([data-animator-focus-target])').evaluateAll(nodes=>nodes.filter(node=>getComputedStyle(node).visibility==='hidden').length);assert(hiddenSiblings>=1,'Focus mode did not hide unrelated animated elements');
+    await page.keyboard.press('Escape');
+    await waitUntil(async()=>!await page.locator('.app').evaluate(node=>node.classList.contains('animationFocusMode')),'Escape did not exit Focus mode');
+
     await page.locator('[data-isolate="element"]').click();
     await waitUntil(async()=>await page.locator('[data-isolate="element"]').evaluate(node=>node.classList.contains('active')),'element isolation did not activate');
     assert(await page.locator('.v2GroupRow').evaluateAll(nodes=>nodes.filter(node=>!node.hidden).length)>=1,'element isolation hid the selected element motion');
+    assert.equal(Number(await timeline.getAttribute('data-origin-ms')),0,'element isolation kept the previous surgical timeline origin');
     await page.locator('[data-isolate="all"]').click();
     await waitUntil(async()=>await page.locator('.v2GroupRow').evaluateAll(nodes=>nodes.filter(node=>!node.hidden).length)>1,'All did not restore complete timeline');
 
-    const motion=group.locator('.v2Motion');assert(await motion.boundingBox(),'timeline motion surface has no box');
-    const seekOn=async(locator,ms)=>{const scale=Number(await timeline.getAttribute('data-px-per-ms'));assert(Number.isFinite(scale)&&scale>0,'timeline scale is invalid');const box=await locator.boundingBox();assert(box,'timeline motion surface has no box');const x=Math.max(.5,Math.min(box.width-.5,ms*scale));await locator.click({position:{x,y:box.height/2},force:true});await page.waitForTimeout(80);};
-    const playhead=async()=>Number.parseInt(await page.locator('[data-playhead-label]').textContent()??'0',10);
+    const seekTo=async ms=>{const scale=Number(await timeline.getAttribute('data-px-per-ms')),origin=Number(await timeline.getAttribute('data-origin-ms')??0);assert(Number.isFinite(scale)&&scale>0,'timeline scale is invalid');const box=await ruler.boundingBox();assert(box,'timeline ruler has no box');const x=Math.max(.5,Math.min(box.width-.5,(ms-origin)*scale));await ruler.click({position:{x,y:box.height/2},force:true});await page.waitForTimeout(80);};
     const frameNumber=async()=>Number((await page.locator('[data-preview-frame-label]').textContent()??'0').match(/Frame\s+(\d+)/)?.[1]??-1);
     const style=async selector=>frame.locator(selector).first().evaluate(element=>({opacity:Number(getComputedStyle(element).opacity),transform:getComputedStyle(element).transform}));
 
-    await seekOn(motion,0);const atStart=await style('.repeat-motion');
-    await seekOn(motion,400);const atMiddle=await style('.repeat-motion');
-    await seekOn(motion,760);const nearEnd=await style('.repeat-motion');
-    await seekOn(motion,0);const backAtStart=await style('.repeat-motion');
+    await seekTo(0);const atStart=await style('.repeat-motion');
+    await seekTo(400);const atMiddle=await style('.repeat-motion');
+    await seekTo(760);const nearEnd=await style('.repeat-motion');
+    await seekTo(0);const backAtStart=await style('.repeat-motion');
     assert(atMiddle.opacity>atStart.opacity+.15,`scrub did not advance visual opacity: ${atStart.opacity} -> ${atMiddle.opacity}`);
     assert(nearEnd.opacity>=atMiddle.opacity,`later frame regressed unexpectedly: ${atMiddle.opacity} -> ${nearEnd.opacity}`);
     assert(backAtStart.opacity<atMiddle.opacity-.15,`reverse scrub did not restore earlier visual frame: ${atMiddle.opacity} -> ${backAtStart.opacity}`);
     assert.notEqual(atStart.transform,atMiddle.transform,'transform must change between start and middle frames');
+    const stableClip=group.locator('.v2Clip').first();const stableClipBox=await stableClip.boundingBox();assert(stableClipBox&&stableClipBox.width>=5,'animation duration bar disappeared after timeline scrubbing');
 
     await page.keyboard.press('Home');await waitUntil(async()=>await frameNumber()===0,'Home did not seek to frame 0');
     const frame0=await style('.repeat-motion');
@@ -118,6 +146,7 @@ try{
     assert(heartbeat>12,`editor main thread became unresponsive during playback; heartbeat=${heartbeat}`);
     assert(playAdvanced.opacity>playStart.opacity+.08,`Play did not advance preview animation: ${playStart.opacity} -> ${playAdvanced.opacity}`);
     assert(await playhead()>100,'playhead did not advance during playback');
+    const clipAfterPlayback=await stableClip.boundingBox();assert(clipAfterPlayback&&clipAfterPlayback.width>=5,'animation duration bar disappeared during playback');
 
     await page.locator('[data-preview-live]').click();
     const htmlBefore=await frame.locator('body').evaluate(element=>({children:element.children.length,className:element.className}));
@@ -128,11 +157,11 @@ try{
     const jsStart=Number(match[1]),jsDuration=Number(match[2]);assert(jsDuration>500,'javascript rAF motion duration was not captured');
     const frameDebug=await frame.evaluate(id=>{const api=window.__ANIMATOR_MUTATION_REPLAY__;const track=api?.tracks?.get(id);return track?{start:track.start,last:track.last,count:track.events.length,values:[...new Set(track.events.map(event=>event.value))].slice(0,12)}:null;},jsId);
     assert(frameDebug&&frameDebug.count>5&&frameDebug.values.length>3,`javascript frame snapshots are not distinct: ${JSON.stringify(frameDebug)}`);
-    const jsMotion=jsGroup.locator('.v2Motion');assert(await jsMotion.boundingBox(),'javascript motion timeline row has no box');
+    assert(await jsGroup.locator('.v2Motion').boundingBox(),'javascript motion timeline row has no box');
     const jsState=async()=>frame.evaluate(id=>{const track=window.__ANIMATOR_MUTATION_REPLAY__?.tracks?.get(id);if(!track)return null;return{inline:track.el.getAttribute('style'),computed:getComputedStyle(track.el).transform,mirrorTime:Number(track.mirror?.currentTime),mirrorState:track.mirror?.playState,mirrorFrames:track.mirror?.effect?.getKeyframes?.().slice(0,3),animations:track.el.getAnimations().map(animation=>({state:animation.playState,currentTime:Number(animation.currentTime),mutation:!!animation.__animatorMutationMirror,animator:!!animation.__animatorMirror}))};},jsId);
-    await seekOn(jsMotion,jsStart+20);const reachedEarly=await playhead(),jsEarly=await style('#box'),jsEarlyState=await jsState();assert(Math.abs(reachedEarly-(jsStart+20))<80,`timeline missed JS early time: wanted ${jsStart+20}, got ${reachedEarly}; state=${JSON.stringify(jsEarlyState)}`);
-    await seekOn(jsMotion,jsStart+jsDuration*.75);const reachedLate=await playhead(),jsLate=await style('#box'),jsLateState=await jsState();assert(Math.abs(reachedLate-(jsStart+jsDuration*.75))<80,`timeline missed JS late time: wanted ${jsStart+jsDuration*.75}, got ${reachedLate}; state=${JSON.stringify(jsLateState)}`);
-    await seekOn(jsMotion,jsStart+20);const jsBack=await style('#box'),jsBackState=await jsState();
+    await seekTo(jsStart+20);const reachedEarly=await playhead(),jsEarly=await style('#box'),jsEarlyState=await jsState();assert(Math.abs(reachedEarly-(jsStart+20))<80,`timeline missed JS early time: wanted ${jsStart+20}, got ${reachedEarly}; state=${JSON.stringify(jsEarlyState)}`);
+    await seekTo(jsStart+jsDuration*.75);const reachedLate=await playhead(),jsLate=await style('#box'),jsLateState=await jsState();assert(Math.abs(reachedLate-(jsStart+jsDuration*.75))<80,`timeline missed JS late time: wanted ${jsStart+jsDuration*.75}, got ${reachedLate}; state=${JSON.stringify(jsLateState)}`);
+    await seekTo(jsStart+20);const jsBack=await style('#box'),jsBackState=await jsState();
     assert.notEqual(jsEarly.transform,jsLate.transform,`javascript rAF motion did not advance; capture=${JSON.stringify(frameDebug)} early=${JSON.stringify(jsEarlyState)} late=${JSON.stringify(jsLateState)} back=${JSON.stringify(jsBackState)}`);
     assert.equal(jsBack.transform,jsEarly.transform,`javascript rAF motion did not reverse; early=${JSON.stringify(jsEarlyState)} back=${JSON.stringify(jsBackState)}`);
     const htmlAfter=await frame.locator('body').evaluate(element=>({children:element.children.length,className:element.className}));assert.deepEqual(htmlAfter,htmlBefore,'timeline replay changed structural HTML state');
