@@ -3,7 +3,7 @@ export const runtimeSource = String.raw`(()=>{
   const SOURCE='animator-preview',started=performance.now(),ids=new WeakMap(),byId=new Map(),animationMeta=new Map(),lastAnimationReport=new Map(),reportedAnimations=new Map(),reportedElements=new WeakSet(),created=new Set(),visibleElements=new Set();
   const nativeRAF=window.requestAnimationFrame.bind(window),nativeCancelRAF=window.cancelAnimationFrame.bind(window),nativeAnimate=Element.prototype.animate;
   let seq=0,picker=false,recording=true,hover=null,reducedStyle=null,externalControl=false,autoViewportCapture=true,burstRaf=0,burstUntil=0,lastBurstScan=0,burstReason='idle',lastScrollEvent=0;
-  const post=(type,payload={})=>parent.postMessage({source:SOURCE,type,...payload},'*');
+  const post=(type,payload={})=>{const message={source:SOURCE,type,...payload};if(typeof window.__animatorEmit==='function'){try{void window.__animatorEmit(message);return;}catch{}}parent.postMessage(message,'*');};
   const now=()=>performance.now()-started;
   const documentAnimations=()=>{try{return document.getAnimations({subtree:true});}catch{return document.getAnimations();}};
   const mutationReplay=()=>window.__ANIMATOR_MUTATION_REPLAY__;
