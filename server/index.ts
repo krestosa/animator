@@ -13,7 +13,7 @@ import { mutationRuntimeSource } from './mutation-runtime.js';
 import { clockWorkerSource } from './clock-worker.js';
 import { ensurePreviewOrigin } from './preview-host.js';
 import { openRemotePreview } from './remote-preview.js';
-import { browserFrame, browserInput, browserState, closeAllBrowserSessions, closeBrowserSession, drainBrowserEvents, openBrowserSession, sendBrowserCommand } from './browser-session.js';
+import { browserFrame, browserInput, browserState, closeAllBrowserSessions, closeBrowserSession, drainBrowserEvents, installBrowserRuntimes, listBrowserRuntimes, openBrowserSession, sendBrowserCommand, subscribeBrowserFrames } from './browser-session.js';
 import { applyCssAnimationEdit, previewCssAnimationEdit, writeOverrides, type CssAnimationEdit } from './export.js';
 import { FolderSelectionCancelled, pickProjectFolder } from './folder-dialog.js';
 
@@ -22,8 +22,19 @@ const app=express();app.use(express.json({limit:'2mb'}));
 app.get('/api/health',(_req,res)=>res.json({ok:true}));
 app.post('/api/projects/open',async(req,res)=>{try{const project=loadProject(String(req.body?.path||''));return res.json(await preparePreview(project));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
 app.post('/api/projects/open-url',async(req,res)=>{try{return res.json(await openRemotePreview(String(req.body?.url||'')));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
-app.post('/api/browser-sessions/open',async(req,res)=>{try{return res.json(await openBrowserSession(String(req.body?.url||''),Number(req.body?.width)||1100,Number(req.body?.height)||700));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
+app.get('/api/browser-runtimes',async(_req,res)=>{try{return res.json({runtimes:await listBrowserRuntimes()});}catch(error){return res.status(500).json({error:error instanceof Error?error.message:String(error)});}});
+app.post('/api/browser-runtimes/install',async(req,res)=>{try{return res.json({runtimes:await installBrowserRuntimes(req.body?.engines)});}catch(error){return res.status(500).json({error:error instanceof Error?error.message:String(error)});}});
+app.post('/api/browser-sessions/open',async(req,res)=>{try{return res.json(await openBrowserSession(String(req.body?.url||''),{width:Number(req.body?.width)||1100,height:Number(req.body?.height)||700,engine:req.body?.engine,profile:req.body?.profile}));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
 app.get('/api/browser-sessions/:id/frame',async(req,res)=>{try{const frame=await browserFrame(req.params.id);res.setHeader('cache-control','no-store');return res.type('image/jpeg').send(frame);}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
+app.get('/api/browser-sessions/:id/stream',async(req,res)=>{
+  const boundary='animatorframe';let writable=true,unsubscribe:(()=>void)|undefined,closed=false;
+  const close=()=>{if(closed)return;closed=true;unsubscribe?.();unsubscribe=undefined;if(!res.writableEnded)res.end();};
+  try{
+    res.status(200);res.setHeader('content-type',`multipart/x-mixed-replace; boundary=${boundary}`);res.setHeader('cache-control','no-store, no-cache, must-revalidate');res.setHeader('pragma','no-cache');res.setHeader('connection','keep-alive');res.setHeader('x-accel-buffering','no');res.flushHeaders();
+    unsubscribe=await subscribeBrowserFrames(req.params.id,frame=>{if(closed||!writable||res.writableEnded)return;const header=Buffer.from(`--${boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`),payload=Buffer.concat([header,frame,Buffer.from('\r\n')]);writable=res.write(payload);if(!writable)res.once('drain',()=>{writable=true;});});
+    req.once('close',close);res.once('close',close);
+  }catch(error){unsubscribe?.();if(!res.headersSent)return res.status(404).json({error:error instanceof Error?error.message:String(error)});close();}
+});
 app.get('/api/browser-sessions/:id/events',(req,res)=>{try{return res.json(drainBrowserEvents(req.params.id));}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
 app.get('/api/browser-sessions/:id/state',async(req,res)=>{try{return res.json(await browserState(req.params.id));}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
 app.post('/api/browser-sessions/:id/command',async(req,res)=>{try{await sendBrowserCommand(req.params.id,req.body as Record<string,unknown>);return res.json({ok:true});}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
