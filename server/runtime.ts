@@ -5,7 +5,7 @@ export const runtimeSource = String.raw`(()=>{
   const attributeIndex=new WeakMap(),attributeTracks=[];
   const nodeIndex=new WeakMap(),nodeTracks=[];
   let seq=0,picker=false,recording=true,hover=null,reducedStyle=null,baselineReady=document.readyState!=='loading';
-  let controlled=false,playing=false,masterTime=0,masterRate=1,masterPerf=performance.now(),loop=false,applyingReplay=false;
+  let controlled=false,playing=false,masterTime=0,masterRate=1,masterPerf=performance.now(),loop=false,applyingReplay=false,replayGeneration=0;
   const started=performance.now();
   const nativeRAF=window.requestAnimationFrame.bind(window),nativeCancelRAF=window.cancelAnimationFrame.bind(window);
   let virtualRafSeq=1000000;const suspendedRafs=new Map();
@@ -91,8 +91,9 @@ export const runtimeSource = String.raw`(()=>{
   const replayNodes=(time)=>{for(const track of nodeTracks){let connected=track.baselineConnected,parent=track.baselineParent,next=track.baselineNext;for(const change of track.events){if(change.at>time)break;connected=change.kind==='insert';parent=change.parent;next=change.nextSibling;}try{if(connected){if(!track.node.isConnected&&parent&&parent.isConnected)parent.insertBefore(track.node,next&&next.parentNode===parent?next:null);}else if(track.node.isConnected)track.node.remove();}catch{}}};
   const forceVisualSample=()=>{void document.documentElement.getBoundingClientRect();};
   const applyMasterTime=(time)=>{
-    applyingReplay=true;
-    try{replayNodes(time);replayAttributes(time);for(const [id,animation] of animations)applyAnimationAt(id,animation,time);forceVisualSample();}finally{applyingReplay=false;}
+    const generation=++replayGeneration;applyingReplay=true;
+    try{replayNodes(time);replayAttributes(time);for(const [id,animation] of animations)applyAnimationAt(id,animation,time);forceVisualSample();}
+    finally{queueMicrotask(()=>{if(generation===replayGeneration)applyingReplay=false;});}
   };
   const recordedEnd=()=>{
     let end=0;
