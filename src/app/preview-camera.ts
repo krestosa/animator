@@ -8,17 +8,17 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   const tools=root.querySelector<HTMLElement>('.timelineProTools');
   const zoomButton=tools?.querySelector<HTMLButtonElement>('[data-magnify-mode]');
   const focusGroup=tools?.querySelector<HTMLElement>('.focusGroup');
-  if(!tools||!zoomButton||!focusGroup)return()=>{};
+  const previewDevice=root.querySelector<HTMLElement>('[data-device]');
+  if(!tools||!zoomButton||!focusGroup||!previewDevice)return()=>{};
 
   zoomButton.title='Camera zoom · center the real viewport on the selected element';
   const mouseButton=document.createElement('button');
   mouseButton.type='button';mouseButton.dataset.webInteraction='';mouseButton.className='webMouseToggle active';mouseButton.textContent='↖';mouseButton.setAttribute('aria-pressed','true');mouseButton.title='Mouse interaction with preview: on';
   const reset=focusGroup.querySelector('[data-inspection-clear]');focusGroup.insertBefore(mouseButton,reset);
 
-  let cameraActive=false,mouseEnabled=true,raf=0;
+  let cameraActive=false,mouseEnabled=true,raf=0,lastFrame:HTMLIFrameElement|null=null;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const stage=()=>root.querySelector<HTMLElement>('.stage');
-  const device=()=>root.querySelector<HTMLElement>('[data-device]');
   const selectedElement=()=>{
     const state=store.get();
     const animation=state.selectedAnimationId?state.animations.find(item=>item.id===state.selectedAnimationId):undefined;
@@ -28,12 +28,18 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   const selectedAnimation=()=>{const state=store.get();return state.selectedAnimationId?state.animations.find(item=>item.id===state.selectedAnimationId):undefined;};
 
   const updateMouse=():void=>{
-    const preview=frame();if(preview)preview.style.pointerEvents=mouseEnabled?'auto':'none';
-    stage()?.classList.toggle('webMouseLocked',!mouseEnabled);mouseButton.classList.toggle('active',mouseEnabled);mouseButton.setAttribute('aria-pressed',String(mouseEnabled));mouseButton.textContent=mouseEnabled?'↖':'⊘';mouseButton.title=`Mouse interaction with preview: ${mouseEnabled?'on':'off'}`;
+    const preview=frame();
+    if(preview&&preview!==lastFrame){lastFrame=preview;preview.style.pointerEvents=mouseEnabled?'auto':'none';}
+    else if(preview&&preview.style.pointerEvents!==(mouseEnabled?'auto':'none'))preview.style.pointerEvents=mouseEnabled?'auto':'none';
+    const locked=!mouseEnabled;const previewStage=stage();if(previewStage?.classList.contains('webMouseLocked')!==locked)previewStage?.classList.toggle('webMouseLocked',locked);
+    if(mouseButton.classList.contains('active')!==mouseEnabled)mouseButton.classList.toggle('active',mouseEnabled);
+    const pressed=String(mouseEnabled);if(mouseButton.getAttribute('aria-pressed')!==pressed)mouseButton.setAttribute('aria-pressed',pressed);
+    const text=mouseEnabled?'↖':'⊘';if(mouseButton.textContent!==text)mouseButton.textContent=text;
+    const title=`Mouse interaction with preview: ${mouseEnabled?'on':'off'}`;if(mouseButton.title!==title)mouseButton.title=title;
   };
   const resetCamera=():void=>{
     const preview=frame();if(preview){preview.style.removeProperty('transform');preview.style.removeProperty('transform-origin');preview.style.removeProperty('will-change');preview.dataset.cameraZoom='off';preview.removeAttribute('data-camera-scale');}
-    device()?.classList.remove('cameraZoomActive');
+    previewDevice.classList.remove('cameraZoomActive');
   };
   const applyCamera=():void=>{
     raf=0;if(!cameraActive){resetCamera();return;}
@@ -42,7 +48,13 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
     const scale=Math.max(CAMERA_MIN_SCALE,Math.min(CAMERA_MAX_SCALE,(vw*.72)/width,(vh*.72)/height));
     const centerX=rect.x+width/2,centerY=rect.y+height/2;
     const tx=vw/2-centerX*scale,ty=vh/2-centerY*scale;
-    preview.style.transformOrigin='0 0';preview.style.willChange='transform';preview.style.transform=`translate3d(${tx.toFixed(2)}px,${ty.toFixed(2)}px,0) scale(${scale.toFixed(4)})`;preview.dataset.cameraZoom='on';preview.dataset.cameraScale=scale.toFixed(4);device()?.classList.add('cameraZoomActive');
+    const transform=`translate3d(${tx.toFixed(2)}px,${ty.toFixed(2)}px,0) scale(${scale.toFixed(4)})`;
+    if(preview.style.transformOrigin!=='0px 0px'&&preview.style.transformOrigin!=='0 0')preview.style.transformOrigin='0 0';
+    if(preview.style.willChange!=='transform')preview.style.willChange='transform';
+    if(preview.style.transform!==transform)preview.style.transform=transform;
+    if(preview.dataset.cameraZoom!=='on')preview.dataset.cameraZoom='on';
+    const scaleText=scale.toFixed(4);if(preview.dataset.cameraScale!==scaleText)preview.dataset.cameraScale=scaleText;
+    previewDevice.classList.add('cameraZoomActive');
   };
   const scheduleCamera=():void=>{if(!cameraActive||raf)return;raf=requestAnimationFrame(applyCamera);};
   const refreshTarget=():void=>{
@@ -66,9 +78,9 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   };
   const key=(event:KeyboardEvent):void=>{if(event.key==='Escape'&&cameraActive){event.preventDefault();setCamera(false);}};
   const unsubscribe=store.subscribe(()=>{updateMouse();scheduleCamera();});
-  const mutation=new MutationObserver(()=>{updateMouse();scheduleCamera();});mutation.observe(root,{subtree:true,childList:true});
-  const resize=new ResizeObserver(scheduleCamera);const initialDevice=device();if(initialDevice)resize.observe(initialDevice);
+  const frameObserver=new MutationObserver(()=>{updateMouse();scheduleCamera();});frameObserver.observe(previewDevice,{childList:true});
+  const resize=new ResizeObserver(scheduleCamera);resize.observe(previewDevice);
 
   tools.addEventListener('click',intercept,true);window.addEventListener('keydown',key);updateMouse();
-  return()=>{if(raf)cancelAnimationFrame(raf);setCamera(false);unsubscribe();mutation.disconnect();resize.disconnect();tools.removeEventListener('click',intercept,true);window.removeEventListener('keydown',key);mouseButton.remove();};
+  return()=>{if(raf)cancelAnimationFrame(raf);setCamera(false);unsubscribe();frameObserver.disconnect();resize.disconnect();tools.removeEventListener('click',intercept,true);window.removeEventListener('keydown',key);mouseButton.remove();};
 }
