@@ -44,7 +44,7 @@ export const store={
     const index=state.animations.findIndex(item=>item.id===normalized.id);
     const existing=index>=0?state.animations[index]:undefined;
     const shouldSelect=normalized.name==='Created animation'||(!existing&&!!state.selectedElementId&&normalized.elementId===state.selectedElementId&&normalized.startTime>0);
-    state={...state,selectedAnimationId:shouldSelect?normalized.id:state.selectedAnimationId??normalized.id,animations:index>=0?state.animations.map(item=>item.id===normalized.id?correlateSource({...item,...normalized,startTime:item.startTime},state.analysis):item):[...state.animations,normalized]};emit();
+    state={...state,selectedAnimationId:shouldSelect?normalized.id:state.selectedAnimationId??normalized.id,animations:index>=0?state.animations.map(item=>item.id===normalized.id?mergeRuntimeReport(item,normalized,state.analysis):item):[...state.animations,normalized]};emit();
   },
   addEvent(event:TimelineEvent):void{state={...state,events:[...state.events,event].slice(-MAX_EVENTS)};emit();},
   addEvents(events:TimelineEvent[]):void{if(!events.length)return;state={...state,events:[...state.events,...events].slice(-MAX_EVENTS)};emit();},
@@ -53,4 +53,21 @@ export const store={
   redo():void{const command=state.future.at(-1);if(!command)return;state={...state,future:state.future.slice(0,-1),history:[...state.history,command],animations:state.animations.map(animation=>animation.id===command.id?applySnapshot(animation,command.after):animation)};emit();}
 };
 
+function mergeRuntimeReport(existing:DetectedAnimation,incoming:DetectedAnimation,analysis:StaticAnalysis|undefined):DetectedAnimation{
+  const merged:DetectedAnimation={
+    ...existing,
+    ...incoming,
+    startTime:existing.startTime,
+    duration:incoming.duration??existing.duration,
+    delay:incoming.delay??existing.delay,
+    easing:incoming.easing??existing.easing,
+    iterations:incoming.iterations??existing.iterations,
+    direction:incoming.direction??existing.direction,
+    fill:incoming.fill??existing.fill,
+    keyframes:incoming.keyframes??existing.keyframes,
+    source:incoming.source??existing.source,
+    properties:incoming.properties.length?incoming.properties:existing.properties
+  };
+  return correlateSource(merged,analysis);
+}
 function correlateSource(animation:DetectedAnimation,analysis:StaticAnalysis|undefined):DetectedAnimation{if(animation.source||!analysis)return animation;const match=analysis.animations.find(candidate=>{if(animation.name&&candidate.name===animation.name)return true;return candidate.type===animation.type&&candidate.properties.some(property=>animation.properties.some(runtimeProperty=>runtimeProperty.name===property.name));});if(!match?.source)return animation;return{...animation,source:match.source,confidence:animation.confidence==='runtime-observed'?'source-correlated':animation.confidence};}
