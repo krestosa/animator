@@ -43,6 +43,7 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
   };
 
   const liveState=(event:Event):void=>{const detail=(event as CustomEvent<TimelineStateMessage>).detail;if(!detail)return;viewport.style.setProperty('--timeline-playhead',`${Math.max(0,(detail.time-viewOriginMs)*livePxPerMs)}px`);};
+  const syncInspection=(event:Event):void=>{const detail=(event as CustomEvent<InspectionDetail>).detail;if(!detail)return;inspectedAnimationId=detail.id;viewOriginMs=Math.max(0,detail.origin);structuralSignature='';eventSignature='';schedule();};
   const selectAnimation=(animation:DetectedAnimation,inspect=false):void=>{
     store.set({selectedAnimationId:animation.id,selectedElementId:animation.elementId.startsWith('static:')?store.get().selectedElementId:animation.elementId});
     sendCommand(frame(),{type:'HIGHLIGHT_ANIMATION',id:animation.id});
@@ -78,9 +79,9 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
   const up=(event:PointerEvent):void=>{dragging=false;dragMotion=null;if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);};
   const clearInspection=():void=>{if(!inspectedAnimationId&&viewOriginMs===0)return;inspectedAnimationId=undefined;viewOriginMs=0;structuralSignature='';eventSignature='';schedule();};
 
-  viewport.addEventListener('click',click);viewport.addEventListener('pointerdown',down);viewport.addEventListener('pointermove',move);viewport.addEventListener('pointerup',up);viewport.addEventListener('pointercancel',up);window.addEventListener(TIMELINE_STATE_EVENT,liveState);window.addEventListener(ANIMATION_CLEAR_INSPECTION_EVENT,clearInspection);
+  viewport.addEventListener('click',click);viewport.addEventListener('pointerdown',down);viewport.addEventListener('pointermove',move);viewport.addEventListener('pointerup',up);viewport.addEventListener('pointercancel',up);window.addEventListener(TIMELINE_STATE_EVENT,liveState);window.addEventListener(ANIMATION_INSPECT_EVENT,syncInspection);window.addEventListener(ANIMATION_CLEAR_INSPECTION_EVENT,clearInspection);
   const unsubscribe=store.subscribe(schedule);render();
-  return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);viewport.removeEventListener('click',click);viewport.removeEventListener('pointerdown',down);viewport.removeEventListener('pointermove',move);viewport.removeEventListener('pointerup',up);viewport.removeEventListener('pointercancel',up);window.removeEventListener(TIMELINE_STATE_EVENT,liveState);window.removeEventListener(ANIMATION_CLEAR_INSPECTION_EVENT,clearInspection);viewport.remove();legacy.classList.remove('legacyTimeline');};
+  return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);viewport.removeEventListener('click',click);viewport.removeEventListener('pointerdown',down);viewport.removeEventListener('pointermove',move);viewport.removeEventListener('pointerup',up);viewport.removeEventListener('pointercancel',up);window.removeEventListener(TIMELINE_STATE_EVENT,liveState);window.removeEventListener(ANIMATION_INSPECT_EVENT,syncInspection);window.removeEventListener(ANIMATION_CLEAR_INSPECTION_EVENT,clearInspection);viewport.remove();legacy.classList.remove('legacyTimeline');};
 
   function updateEvents(view:HTMLElement,events:TimelineEvent[],pxPerMs:number,origin:number):void{
     const recent=events.slice(-400),next=`${pxPerMs}:${origin}:${recent.map(item=>`${item.id}:${item.at}`).join(',')}`;if(next===eventSignature)return;eventSignature=next;
