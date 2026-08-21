@@ -32,12 +32,12 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
     stage()?.classList.toggle('webMouseLocked',!mouseEnabled);mouseButton.classList.toggle('active',mouseEnabled);mouseButton.setAttribute('aria-pressed',String(mouseEnabled));mouseButton.textContent=mouseEnabled?'↖':'⊘';mouseButton.title=`Mouse interaction with preview: ${mouseEnabled?'on':'off'}`;
   };
   const resetCamera=():void=>{
-    const preview=frame();if(preview){preview.style.removeProperty('transform');preview.style.removeProperty('transform-origin');preview.style.removeProperty('will-change');preview.dataset.cameraZoom='off';}
+    const preview=frame();if(preview){preview.style.removeProperty('transform');preview.style.removeProperty('transform-origin');preview.style.removeProperty('will-change');preview.dataset.cameraZoom='off';preview.removeAttribute('data-camera-scale');}
     device()?.classList.remove('cameraZoomActive');
   };
   const applyCamera=():void=>{
     raf=0;if(!cameraActive){resetCamera();return;}
-    const preview=frame(),target=selectedElement();if(!preview||!target)return;
+    const preview=frame(),target=selectedElement();if(!preview||!target?.rect)return;
     const rect=target.rect,vw=Math.max(1,preview.clientWidth),vh=Math.max(1,preview.clientHeight),width=Math.max(1,rect.width),height=Math.max(1,rect.height);
     const scale=Math.max(CAMERA_MIN_SCALE,Math.min(CAMERA_MAX_SCALE,(vw*.72)/width,(vh*.72)/height));
     const centerX=rect.x+width/2,centerY=rect.y+height/2;
