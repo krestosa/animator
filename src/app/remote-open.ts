@@ -1,34 +1,58 @@
 import { store } from '../state/store';
-import type { ProjectDescriptor, StaticAnalysis } from '../types/domain';
+import type { BrowserEngine, BrowserProfile, ProjectDescriptor, StaticAnalysis } from '../types/domain';
 
 const emptyAnalysis:StaticAnalysis={animations:[],transitions:[],candidates:[],reducedMotion:false};
 const globe='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
+type RuntimeStatus={engine:BrowserEngine;label:string;installed:boolean};
 
 export function mountRemoteOpen(root:HTMLElement):()=>void{
   const toolbar=root.querySelector<HTMLElement>('.toolbar');if(!toolbar)return()=>{};
   const details=document.createElement('details');details.className='webLoader';
-  details.innerHTML=`<summary title="Open web page" aria-label="Open web page">${globe}</summary><div class="webLoaderPanel"><b>Load web page</b><p>Choose Proxy or Browser preview.</p><input data-web-url spellcheck="false" inputmode="url" placeholder="https://example.com"><select data-web-engine><option value="proxy">Proxy</option><option value="browser">Browser</option></select><button data-web-open>Load URL</button></div>`;
+  details.innerHTML=`<summary title="Open web page" aria-label="Open web page">${globe}</summary><div class="webLoaderPanel">
+    <b>Load web page</b><p>Proxy keeps the old preview. Browser runs the real page in a local Playwright engine.</p>
+    <input data-web-url spellcheck="false" inputmode="url" placeholder="https://example.com"><select data-web-engine><option value="proxy">Proxy</option><option value="browser">Browser</option></select>
+    <div class="browserOptions" data-browser-options>
+      <label>Engine<select data-browser-engine><option value="chromium">Chromium</option><option value="firefox">Firefox</option><option value="webkit">Safari / WebKit</option></select></label>
+      <label>Device<select data-browser-profile><option value="desktop">Desktop</option><option value="mobile">Mobile</option></select></label>
+      <div class="browserRuntimeManager"><span>Install locally</span><label><input type="checkbox" value="chromium" data-runtime-install checked> Chromium</label><label><input type="checkbox" value="firefox" data-runtime-install> Firefox</label><label><input type="checkbox" value="webkit" data-runtime-install> Safari / WebKit</label><button type="button" data-browser-install>Install selected</button><small data-browser-runtime-status>Checking runtimes…</small></div>
+    </div>
+    <button data-web-open>Load URL</button>
+  </div>`;
   toolbar.insertBefore(details,toolbar.querySelector('.grow'));
-  const input=details.querySelector<HTMLInputElement>('[data-web-url]')!,engine=details.querySelector<HTMLSelectElement>('[data-web-engine]')!;
-  input.value=localStorage.getItem('animator.last-url')??'';engine.value=localStorage.getItem('animator.web-engine')==='browser'?'browser':'proxy';
-  let opening=false;
+  const input=details.querySelector<HTMLInputElement>('[data-web-url]')!,engine=details.querySelector<HTMLSelectElement>('[data-web-engine]')!,browserEngine=details.querySelector<HTMLSelectElement>('[data-browser-engine]')!,profile=details.querySelector<HTMLSelectElement>('[data-browser-profile]')!,browserOptions=details.querySelector<HTMLElement>('[data-browser-options]')!,runtimeStatus=details.querySelector<HTMLElement>('[data-browser-runtime-status]')!;
+  input.value=localStorage.getItem('animator.last-url')??'';engine.value=localStorage.getItem('animator.web-engine')==='browser'?'browser':'proxy';browserEngine.value=storedEngine();profile.value=localStorage.getItem('animator.browser-profile')==='mobile'?'mobile':'desktop';
+  let opening=false,installing=false;
+  const syncMode=():void=>{browserOptions.hidden=engine.value!=='browser';};
+  const renderRuntimeStatus=(runtimes:RuntimeStatus[]):void=>{runtimeStatus.textContent=runtimes.map(runtime=>`${runtime.label}: ${runtime.installed?'installed':'not installed'}`).join(' · ');};
+  const refreshRuntimes=async():Promise<void>=>{try{const response=await fetch('/api/browser-runtimes',{cache:'no-store'}),body=await response.json() as{runtimes?:RuntimeStatus[]};if(response.ok&&body.runtimes)renderRuntimeStatus(body.runtimes);else runtimeStatus.textContent='Could not read browser runtimes';}catch{runtimeStatus.textContent='Could not read browser runtimes';}};
+  const install=async():Promise<void>=>{
+    if(installing)return;const selected=[...details.querySelectorAll<HTMLInputElement>('[data-runtime-install]:checked')].map(item=>item.value as BrowserEngine);if(!selected.length)return;
+    installing=true;const button=details.querySelector<HTMLButtonElement>('[data-browser-install]');if(button){button.disabled=true;button.textContent='Installing…';}runtimeStatus.textContent='Installing in .animator-browsers/…';
+    try{const response=await fetch('/api/browser-runtimes/install',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({engines:selected})}),body=await response.json() as{runtimes?:RuntimeStatus[];error?:string};if(!response.ok)throw new Error(body.error??'Browser installation failed');if(body.runtimes)renderRuntimeStatus(body.runtimes);}
+    catch(error){runtimeStatus.textContent=error instanceof Error?error.message:String(error);}finally{installing=false;if(button){button.disabled=false;button.textContent='Install selected';}}
+  };
   const open=async():Promise<void>=>{
-    const url=input.value.trim();if(!url||opening)return;opening=true;const button=details.querySelector<HTMLButtonElement>('[data-web-open]');if(button){button.disabled=true;button.textContent='Loading…';}
+    const url=input.value.trim();if(!url||opening)return;opening=true;const button=details.querySelector<HTMLButtonElement>('[data-web-open]');if(button){button.disabled=true;button.textContent=engine.value==='browser'?'Starting browser…':'Loading…';}
     try{
-      localStorage.setItem('animator.web-engine',engine.value);let body:ProjectDescriptor&{error?:string};
+      localStorage.setItem('animator.web-engine',engine.value);localStorage.setItem('animator.browser-engine',browserEngine.value);localStorage.setItem('animator.browser-profile',profile.value);let body:ProjectDescriptor&{error?:string};
       if(engine.value==='browser'){
-        const response=await fetch('/api/browser-sessions/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url,width:1100,height:700})});
-        const session=await response.json() as{id?:string;url?:string;error?:string};if(!response.ok||!session.id)throw new Error(session.error??'Could not start browser preview');
-        body={id:session.id,root:session.url??url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:session.url??url,kind:'remote',browserSessionId:session.id};
+        const selectedEngine=browserEngine.value as BrowserEngine,selectedProfile=profile.value as BrowserProfile,width=selectedProfile==='mobile'?390:1100,height=selectedProfile==='mobile'?844:700;
+        const response=await fetch('/api/browser-sessions/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url,width,height,engine:selectedEngine,profile:selectedProfile})});
+        const session=await response.json() as{id?:string;url?:string;engine?:BrowserEngine;profile?:BrowserProfile;error?:string};if(!response.ok||!session.id)throw new Error(session.error??'Could not start browser preview');
+        body={id:session.id,root:session.url??url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:session.url??url,kind:'remote',browserSessionId:session.id,browserEngine:session.engine??selectedEngine,browserProfile:session.profile??selectedProfile};void refreshRuntimes();
       }else{
         const response=await fetch('/api/projects/open-url',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url})});body=await response.json() as ProjectDescriptor&{error?:string};if(!response.ok)throw new Error(body.error??'Could not load web page');
       }
-      localStorage.setItem('animator.last-url',body.sourceUrl??url);store.set({project:body,analysis:emptyAnalysis,animations:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${body.browserSessionId?'Browser':'Proxy'} preview ${body.sourceUrl??url}`].slice(-100)});details.open=false;
+      localStorage.setItem('animator.last-url',body.sourceUrl??url);store.set({project:body,analysis:emptyAnalysis,animations:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${body.browserSessionId?`${browserLabel(body.browserEngine)} ${body.browserProfile??'desktop'}`:'Proxy'} preview ${body.sourceUrl??url}`].slice(-100)});details.open=false;
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;if(button){button.disabled=false;button.textContent='Load URL';}}
   };
-  const click=(event:MouseEvent):void=>{if((event.target as Element|null)?.closest('[data-web-open]'))void open();};
+  const click=(event:MouseEvent):void=>{const target=(event.target as Element|null);if(target?.closest('[data-web-open]'))void open();else if(target?.closest('[data-browser-install]'))void install();};
+  const change=():void=>{syncMode();localStorage.setItem('animator.web-engine',engine.value);localStorage.setItem('animator.browser-engine',browserEngine.value);localStorage.setItem('animator.browser-profile',profile.value);};
   const key=(event:KeyboardEvent):void=>{if(event.key==='Enter'&&event.target===input){event.preventDefault();void open();}};
-  details.addEventListener('click',click);details.addEventListener('keydown',key);
-  return()=>{details.removeEventListener('click',click);details.removeEventListener('keydown',key);details.remove();};
+  details.addEventListener('click',click);details.addEventListener('change',change);details.addEventListener('keydown',key);syncMode();void refreshRuntimes();
+  return()=>{details.removeEventListener('click',click);details.removeEventListener('change',change);details.removeEventListener('keydown',key);details.remove();};
 }
+
+function storedEngine():BrowserEngine{const value=localStorage.getItem('animator.browser-engine');return value==='firefox'?'firefox':value==='webkit'?'webkit':'chromium';}
+function browserLabel(engine:BrowserEngine|undefined):string{return engine==='firefox'?'Firefox':engine==='webkit'?'Safari / WebKit':'Chromium';}
