@@ -20,6 +20,7 @@ try{
     await waitUntil(async()=>/^http:\/\/127\.0\.0\.1:\d+\//.test(await frameLocator.getAttribute('src')??''),'preview was not moved to a dedicated local origin');
     const frameHandle=await frameLocator.elementHandle();const frame=await frameHandle?.contentFrame();assert(frame,'preview iframe did not load');
     await frame.locator('.repeat-motion').first().waitFor();
+    assert(await frame.locator('#root-asset').evaluate(image=>image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0),'root-relative preview asset did not load');
     await waitUntil(async()=>/^Ready/.test(await page.locator('[data-preview-capture-status]').textContent()??''),'startup animation capture did not complete');
 
     const group=page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).first();
