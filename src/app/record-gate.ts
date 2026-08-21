@@ -27,7 +27,12 @@ export function mountRecordGate(root:HTMLElement):()=>void{
     if(enabled)queueMicrotask(releasePendingPreview);
     transmit();
   };
-  const onAck=(event:Event):void=>{const detail=(event as CustomEvent<Extract<PreviewMessage,{type:'RECORDING_STATE'}>>).detail;if(!detail||!pendingId)return;if(detail.requestId&&detail.requestId!==pendingId)return;if(detail.enabled!==desired){transmit();return;}pendingId='';stopRetry();if(store.get().recording!==detail.enabled)store.set({recording:detail.enabled});if(detail.enabled)releasePendingPreview();};
+  const onAck=(event:Event):void=>{
+    const detail=(event as CustomEvent<Extract<PreviewMessage,{type:'RECORDING_STATE'}>>).detail;if(!detail)return;
+    if(!pendingId){if(detail.reason&&store.get().recording!==detail.enabled){desired=detail.enabled;store.set({recording:detail.enabled});if(detail.enabled)queueMicrotask(releasePendingPreview);}return;}
+    if(detail.requestId&&detail.requestId!==pendingId){if(detail.reason&&detail.enabled!==store.get().recording)store.set({recording:detail.enabled});return;}
+    if(detail.enabled!==desired){transmit();return;}pendingId='';stopRetry();if(store.get().recording!==detail.enabled)store.set({recording:detail.enabled});if(detail.enabled)releasePendingPreview();
+  };
   const onFrameLoad=():void=>{
     const preview=frame();if(!preview)return;
     const blocked=preview.dataset.recordBlocked==='true'||preview.getAttribute('src')==='about:blank';
