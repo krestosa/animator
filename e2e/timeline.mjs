@@ -72,7 +72,7 @@ try{
     await waitUntil(async()=>await page.locator('.elementList .row.selected').count()>=1,'selecting a timeline instance must select its DOM component');
     await waitUntil(async()=>!await page.locator('[data-action="record"]').evaluate(node=>node.classList.contains('active')),'selecting an animation did not pause recording');
     const clipsWhilePaused=await page.locator('.v2Clip[data-v2-instance]').count();
-    await frame.evaluate(()=>{const target=document.querySelector('.repeat-motion');if(!(target instanceof Element))return;const animation=target.animate([{opacity:.93},{opacity:1}],{duration:90});animation.finished.finally(()=>animation.cancel());});
+    await frame.evaluate(()=>{const target=document.querySelector('.repeat-motion');if(!(target instanceof Element))return;const animation=target.animate([{outlineOffset:'0px'},{outlineOffset:'2px'}],{duration:90});animation.finished.finally(()=>animation.cancel());});
     await page.waitForTimeout(220);
     assert.equal(await page.locator('.v2Clip[data-v2-instance]').count(),clipsWhilePaused,'paused recording still added a newly triggered animation');
 
