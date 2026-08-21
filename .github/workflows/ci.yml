@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - mvp
   pull_request:
   workflow_dispatch:
 
@@ -11,7 +14,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -35,5 +38,7 @@ jobs:
         run: node e2e/record-gate.mjs
       - name: Recorded viewport E2E
         run: node e2e/view-history.mjs
+      - name: Browser preview E2E
+        run: node e2e/browser-preview.mjs
       - name: Theme override E2E
         run: node e2e/theme-live.mjs
