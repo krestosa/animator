@@ -1,5 +1,5 @@
 export function mountTimelineLabelFit(root:HTMLElement):()=>void{
-  let raf=0;
+  let raf=0,stableWidth=260;
   const viewport=root.querySelector<HTMLElement>('[data-timeline-v2]');
   if(!viewport)return()=>{};
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(measure);};
@@ -15,8 +15,9 @@ export function mountTimelineLabelFit(root:HTMLElement):()=>void{
       desired=Math.max(desired,natural+fixed+34);
     }
     desired=Math.max(260,Math.min(440,Math.ceil(desired)));
+    stableWidth=Math.max(stableWidth,desired);
     const current=Number.parseFloat(getComputedStyle(viewport).getPropertyValue('--timeline-label-width'));
-    if(!Number.isFinite(current)||Math.abs(current-desired)>1)viewport.style.setProperty('--timeline-label-width',`${desired}px`,'important');
+    if(!Number.isFinite(current)||Math.abs(current-stableWidth)>1)viewport.style.setProperty('--timeline-label-width',`${stableWidth}px`,'important');
     for(const row of viewport.querySelectorAll<HTMLElement>('.v2GroupRow,.v2InstanceRow'))updateDisclosure(row);
   };
   const updateDisclosure=(row:HTMLElement):void=>{
