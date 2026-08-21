@@ -90,7 +90,9 @@ export function mountApp(root: HTMLElement): () => void {
     iframe?.remove();
     iframe = null;
     previewKey = key;
-    if (device && state.project) {
+    if (state.project?.browserSessionId) {
+      bridgeCleanup = connectPreview(null);
+    } else if (device && state.project) {
       iframe = document.createElement('iframe');
       iframe.dataset.previewFrame = '';
       iframe.title = 'Project preview';
