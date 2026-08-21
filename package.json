@@ -13,7 +13,7 @@
     "animator": "node ./bin/animator.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "node e2e/timeline.mjs && node e2e/record-gate.mjs && node e2e/view-history.mjs && node e2e/browser-preview.mjs && node e2e/control-plane.mjs && node e2e/theme-live.mjs",
+    "test:e2e": "node e2e/timeline.mjs && node e2e/record-gate.mjs && node e2e/view-history.mjs && node e2e/browser-preview.mjs && node e2e/control-plane.mjs && node e2e/viewport-screenshot.mjs && node e2e/theme-live.mjs",
     "setup:browser": "playwright install chromium firefox webkit",
     "setup:browsers": "playwright install chromium firefox webkit"
   },
