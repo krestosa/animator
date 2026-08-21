@@ -1,0 +1,22 @@
+export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
+  if(window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__)return;window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__=true;
+  let recording=true,timer=0,busy=false;
+  const emit=payload=>{const target=window.__animatorEmit;if(typeof target!=='function')return;try{void target(payload);}catch{}};
+  const capture=()=>{
+    if(!recording||busy||!document.documentElement||typeof window.__animatorEmit!=='function')return;busy=true;
+    try{
+      const idFor=window.__ANIMATOR_ELEMENT_ID__,marked=[],all=[document.documentElement,...document.documentElement.querySelectorAll('*')];
+      for(const element of all){if(!(element instanceof Element)||element.hasAttribute('data-animator-internal'))continue;const id=typeof idFor==='function'?idFor(element):element.id?'dom-'+element.id:'';if(!id)continue;marked.push([element,element.getAttribute('data-animator-capture-id')]);element.setAttribute('data-animator-capture-id',id);}
+      const animations=[];
+      for(const animation of document.getAnimations?.()??[]){const effect=animation.effect;if(!(effect instanceof KeyframeEffect))continue;const target=effect.target;if(!(target instanceof Element)||target.hasAttribute('data-animator-internal'))continue;const elementId=typeof idFor==='function'?idFor(target):target.getAttribute('data-animator-capture-id')||'';if(!elementId)continue;let timing={},rawFrames=[];try{timing=effect.getComputedTiming();rawFrames=effect.getKeyframes();}catch{}const keyframes=rawFrames.map(frame=>{const out={};for(const [key,value] of Object.entries(frame))if(value!==undefined)out[key]=value===null||typeof value==='number'||typeof value==='string'?value:String(value);return out;}),object=animation,current=Number(animation.currentTime),rate=Math.abs(Number(animation.playbackRate))||1,id=object.__animatorId||'anim-emergency-'+(animations.length+1),knownStart=Number(object.__animatorBrowserStartTime),iterations=Number(timing.iterations);animations.push({id,elementId,startTime:Number.isFinite(knownStart)?knownStart:Math.max(0,performance.now()-(Number.isFinite(current)?Math.max(0,current)/rate:0)),duration:Number(timing.duration)||0,delay:Number(timing.delay)||0,iterations:Number.isFinite(iterations)?iterations:'Infinity',direction:String(timing.direction||'normal'),easing:String(timing.easing||'linear'),fill:String(timing.fill||'both'),keyframes,currentTime:Number.isFinite(current)?current:null,playbackRate:Number(animation.playbackRate)||1});}
+      const clone=document.documentElement.cloneNode(true);for(const [element,previous] of marked){if(previous==null)element.removeAttribute('data-animator-capture-id');else element.setAttribute('data-animator-capture-id',previous);}clone.querySelectorAll('script,[data-animator-internal],[data-animator-picker-outline],[data-animator-recorded-viewport],[data-animator-recorded-cursor]').forEach(node=>node.remove());clone.querySelectorAll('meta[http-equiv]').forEach(node=>{if((node.getAttribute('http-equiv')||'').toLowerCase()==='content-security-policy')node.remove();});clone.querySelectorAll('base').forEach(node=>node.remove());emit({source:'animator-preview',type:'BROWSER_CHECKPOINT',html:'<!doctype html>'+clone.outerHTML,url:location.href,scrollX,scrollY,history:window.__ANIMATOR_VIEW_HISTORY__?.snapshot?.()??[],animations,visuals:[],capturedAt:Date.now()});
+    }catch{}finally{busy=false;}
+  };
+  const schedule=delay=>{if(timer)clearTimeout(timer);if(!recording||typeof window.__animatorEmit!=='function')return;timer=setTimeout(()=>{timer=0;capture();schedule(900);},Math.max(80,Number(delay)||900));};
+  addEventListener('message',event=>{const message=event.data;if(!message||message.type!=='SET_RECORDING'||(message.source!=='animator-editor'&&message.source!=='animator-timeline'))return;recording=!!message.enabled;if(recording){capture();schedule(900);}else if(timer){clearTimeout(timer);timer=0;} });
+  addEventListener('DOMContentLoaded',()=>{capture();schedule(900);},{once:true});
+  addEventListener('load',()=>capture(),{once:true});
+  addEventListener('pagehide',()=>capture(),{capture:true});
+  addEventListener('beforeunload',()=>capture(),{capture:true});
+  schedule(160);
+})();`;
