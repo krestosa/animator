@@ -21,7 +21,7 @@ export function mountPreviewTheme(root:HTMLElement):()=>void{
   const select=control.querySelector<HTMLSelectElement>('[data-preview-theme]');if(!select)return()=>{};
   control.title='Theme is shared by every preview opened during this Animator session. Restarting Animator resets it to Auto.';
   let currentFrame:HTMLIFrameElement|null=null,lastBrowserProject='';
-  const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
+  const frame=()=>root.querySelector<HTMLIFrameElement>('[data-browser-snapshot-frame], [data-preview-frame]');
   const ensureMounted=():void=>{if(!control.isConnected)chrome.insertBefore(control,chrome.firstChild);};
   const render=():void=>{ensureMounted();select.disabled=!store.get().project;if(select.value!==activeMode)select.value=activeMode;control.dataset.mode=activeMode;};
   const apply=():void=>sendCommand(frame(),{type:'SET_COLOR_SCHEME',mode:activeMode});
@@ -31,7 +31,7 @@ export function mountPreviewTheme(root:HTMLElement):()=>void{
   const change=():void=>setPreviewColorScheme(select.value as PreviewColorScheme);
   const changed=():void=>{render();apply();};
   const chromeObserver=new MutationObserver(()=>{if(!control.isConnected)render();});chromeObserver.observe(chrome,{childList:true});
-  const device=root.querySelector<HTMLElement>('[data-device]');const frameObserver=new MutationObserver(bindFrame);if(device)frameObserver.observe(device,{childList:true});
+  const device=root.querySelector<HTMLElement>('[data-device]');const frameObserver=new MutationObserver(bindFrame);if(device)frameObserver.observe(device,{childList:true,subtree:true});
   const unsubscribe=store.subscribe(()=>{render();bindFrame();syncProject();});select.addEventListener('change',change);window.addEventListener(PREVIEW_THEME_EVENT,changed);bindFrame();render();syncProject();
   return()=>{chromeObserver.disconnect();frameObserver.disconnect();unsubscribe();select.removeEventListener('change',change);window.removeEventListener(PREVIEW_THEME_EVENT,changed);currentFrame?.removeEventListener('load',onFrameLoad);control.remove();};
 }
