@@ -49,7 +49,7 @@ export type EditorCommand =
  | {source:'animator-editor'; type:'PLAY_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'PAUSE_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'RESTART_ANIMATION'; id:string}
- | {source:'animator-editor'; type:'HIGHLIGHT_ANIMATION'; id:string}
+ | {source:'animator-editor'; type:'HIGHLIGHT_ANIMATION'; id:string; reveal?:boolean | undefined}
  | {source:'animator-editor'; type:'SET_SOLO_ANIMATION'; id:string; elementId:string; anchorTime:number}
  | {source:'animator-editor'; type:'CLEAR_SOLO_ANIMATION'}
  | {source:'animator-editor'; type:'SET_FOCUS_ANIMATION'; id:string; enabled:boolean}
