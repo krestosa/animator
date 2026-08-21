@@ -30,7 +30,7 @@ try{
     await waitUntil(async()=>await page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).count()===1,'repeat-pop group missing');
     const group=page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).first();await waitUntil(async()=>/3 components/.test(await group.textContent()??''),'repeat-pop instances not grouped');
     await group.locator('[data-v2-toggle]').click();await waitUntil(async()=>await page.locator('.v2InstanceRow').count()>=3,'instances did not expand');
-    const firstInstance=page.locator('.v2InstanceRow').first();await firstInstance.locator('button[data-v2-instance]').click();await waitUntil(async()=>await firstInstance.evaluate(node=>node.classList.contains('selected')),'instance selection failed');
+    const firstInstance=page.locator('.v2InstanceRow').first();await firstInstance.locator('.v2InstanceLabel button[data-v2-instance]').click();await waitUntil(async()=>await firstInstance.evaluate(node=>node.classList.contains('selected')),'instance selection failed');
 
     const labelWidth=Number.parseFloat(await page.locator('[data-timeline-v2]').evaluate(node=>getComputedStyle(node).getPropertyValue('--timeline-label-width')));assert(labelWidth>=260,`timeline label column stayed too narrow: ${labelWidth}`);
     const badOverflow=await page.locator('.v2GroupRow,.v2InstanceRow').evaluateAll(rows=>rows.some(row=>{const content=row.querySelector('.v2GroupButton,.v2InstanceLabel button[data-v2-instance]');if(!content)return false;const parts=[...content.querySelectorAll('span,small')];const overflow=parts.some(part=>part.scrollWidth>part.clientWidth+1);return overflow&&!row.querySelector('.v2DetailToggle');}));assert.equal(badOverflow,false,'timeline text overflows without an expand disclosure');
