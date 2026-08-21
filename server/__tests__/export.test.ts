@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyCssAnimationEdit, previewCssAnimationEdit } from '../export';
-import type { LoadedProject } from '../project';
+import { applyCssAnimationEdit, previewCssAnimationEdit } from '../export.js';
+import type { LoadedProject } from '../project.js';
 
 const dirs:string[]=[];
 afterEach(()=>{for(const dir of dirs.splice(0))fs.rmSync(dir,{recursive:true,force:true});});
