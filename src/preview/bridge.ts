@@ -22,7 +22,7 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
 }
 type EditorCommandInput = EditorCommand extends infer Command ? Command extends {source:'animator-editor'} ? Omit<Command,'source'> : never : never;
 const timelineCommands=new Set<string>([
-  'SET_ANIMATION_TIME','SCRUB_TIMELINE','PLAY_ALL','PAUSE_ALL','RESTART_ALL','SET_LOOP_ALL',
+  'SET_ANIMATION_TIME','SCRUB_TIMELINE','PLAY_ALL','PAUSE_ALL','RESTART_ALL','RELEASE_TIMELINE','SET_LOOP_ALL',
   'SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION',
   'APPLY_OVERRIDE','HIGHLIGHT_ANIMATION'
 ]);
