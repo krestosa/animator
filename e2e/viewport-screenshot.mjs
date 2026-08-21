@@ -23,12 +23,14 @@ try{
     let clipboard=await readClipboardPixels(page);assertExactViewport(clipboard,{marker:'magenta'});
     await page.locator('[data-viewport-capture-toast="success"]').waitFor({state:'detached',timeout:4000});
 
+    const record=page.locator('[data-action="record"]');await record.click();await waitUntil(async()=>await record.getAttribute('data-recording-state')==='recording','REC did not resume before opening Proxy');
     const loader=page.locator('.webLoader');await loader.locator('summary').click();await loader.locator('[data-web-url]').fill(remoteUrl);await loader.locator('[data-web-engine]').selectOption('proxy');await loader.locator('[data-web-open]').click();
     const proxyFrameElement=page.locator('[data-preview-frame]');await proxyFrameElement.waitFor({state:'attached'});const proxyHandle=await proxyFrameElement.elementHandle(),proxyFrame=await proxyHandle?.contentFrame();assert(proxyFrame,'Proxy frame missing');await proxyFrame.getByText('viewport screenshot fixture').waitFor({state:'visible'});
     await installMarker(proxyFrame,'#00e5ff');
     const proxyRendered=await proxyFrame.evaluate(()=>getComputedStyle(document.querySelector('#exact-frame-marker')).backgroundColor);assert.equal(proxyRendered,'rgb(0, 229, 255)','Proxy visible-frame marker was not applied');
     const visibleProxy=await proxyFrameElement.screenshot({type:'png'}),visibleBackground=await readPngRatio(page,visibleProxy.toString('base64'),.85,.85);
-    await waitUntil(async()=>!(await button.isDisabled()),'Screenshot button never became enabled for Proxy');await button.click();await assertSuccessToast(page);clipboard=await readClipboardPixels(page);assertExactViewport(clipboard,{marker:'cyan',background:visibleBackground});
+    await record.click();await waitUntil(async()=>await record.getAttribute('data-recording-state')==='stopped','Proxy did not enter STOP before screenshot');
+    await waitUntil(async()=>!(await button.isDisabled()),'Screenshot button never became enabled for stopped Proxy');await button.click();await assertSuccessToast(page);clipboard=await readClipboardPixels(page);assertExactViewport(clipboard,{marker:'cyan',background:visibleBackground});
     await page.locator('[data-viewport-capture-toast="success"]').waitFor({state:'detached',timeout:4000});
   } finally {await browser.close();}
 } finally {server.kill('SIGTERM');await closeServer(remote);}
