@@ -21,7 +21,12 @@ export function mountRecordGate(root:HTMLElement):()=>void{
   const releasePendingPreview=():void=>{const preview=frame();if(!preview||!nativeSetSrc)return;const explicitPending=pendingPreviewUrls.get(preview),blocked=preview.dataset.recordBlocked==='true'||preview.getAttribute('src')==='about:blank';if(!blocked&&!explicitPending)return;const pending=projectPreviewUrl()??preview.dataset.previewOrigin??explicitPending;if(!pending||pending==='about:blank')return;pendingPreviewUrls.delete(preview);preview.removeAttribute('data-record-blocked');nativeSetSrc.call(preview,pending);};
   const stopRetry=():void=>{if(retryTimer)clearTimeout(retryTimer);retryTimer=0;retries=0;};
   const transmit=():void=>{if(!pendingId)return;sendCommand(frame(),{type:'SET_RECORDING',enabled:desired,requestId:pendingId});if(retryTimer)clearTimeout(retryTimer);if(retries++<50)retryTimer=window.setTimeout(transmit,120);else{retryTimer=0;store.set({diagnostics:[...store.get().diagnostics,'warn: Preview did not confirm the requested Record state'].slice(-100)});}};
-  const requestState=(enabled:boolean):void=>{desired=enabled;pendingId=`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;retries=0;if(enabled&&!store.get().recording){store.set({recording:true});queueMicrotask(releasePendingPreview);}transmit();};
+  const requestState=(enabled:boolean):void=>{
+    desired=enabled;pendingId=`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;retries=0;
+    if(store.get().recording!==enabled)store.set({recording:enabled});
+    if(enabled)queueMicrotask(releasePendingPreview);
+    transmit();
+  };
   const onAck=(event:Event):void=>{const detail=(event as CustomEvent<Extract<PreviewMessage,{type:'RECORDING_STATE'}>>).detail;if(!detail||!pendingId)return;if(detail.requestId&&detail.requestId!==pendingId)return;if(detail.enabled!==desired){transmit();return;}pendingId='';stopRetry();if(store.get().recording!==detail.enabled)store.set({recording:detail.enabled});if(detail.enabled)releasePendingPreview();};
   const onFrameLoad=():void=>{if(pendingId)transmit();else if(store.get().project&&!store.get().project?.browserSessionId)requestState(store.get().recording);};
   const bindFrame=():void=>{const next=frame();if(next===currentFrame)return;currentFrame?.removeEventListener('load',onFrameLoad);currentFrame=next;currentFrame?.addEventListener('load',onFrameLoad);};
