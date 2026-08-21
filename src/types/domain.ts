@@ -21,6 +21,7 @@ export type PreviewMessage =
  | {source:'animator-preview'; type:'ANIMATION'; animation:DetectedAnimation}
  | {source:'animator-preview'; type:'EVENT'; event:TimelineEvent}
  | {source:'animator-preview'; type:'TIMELINE_STATE'; time:number; frame?:number | undefined; fps?:number | undefined; playing:boolean; controlled:boolean}
+ | {source:'animator-preview'; type:'CAPTURE_REPORT'; reason:string; visibleElements:number; activeAnimations:number; capturedAnimations:number; styleTracks:number; autoCapture:boolean; burstActive:boolean; at:number}
  | {source:'animator-preview'; type:'DIAGNOSTIC'; level:'info'|'warn'|'error'; message:string};
 
 export type EditorCommand =
@@ -37,6 +38,8 @@ export type EditorCommand =
  | {source:'animator-editor'; type:'SET_LOOP_ALL'; enabled:boolean}
  | {source:'animator-editor'; type:'SET_ALL_PLAYBACK_RATE'; rate:number}
  | {source:'animator-editor'; type:'SET_REDUCED_MOTION'; enabled:boolean}
+ | {source:'animator-editor'; type:'SET_AUTO_VIEWPORT_CAPTURE'; enabled:boolean}
+ | {source:'animator-editor'; type:'RECALCULATE_VIEWPORT'}
  | {source:'animator-editor'; type:'SET_PLAYBACK_RATE'; id:string; rate:number}
  | {source:'animator-editor'; type:'PLAY_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'PAUSE_ANIMATION'; id:string}
