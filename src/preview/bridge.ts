@@ -21,4 +21,18 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
   window.addEventListener('message',handler); return()=>window.removeEventListener('message',handler);
 }
 type EditorCommandInput = EditorCommand extends infer Command ? Command extends {source:'animator-editor'} ? Omit<Command,'source'> : never : never;
-export function sendCommand(iframe:HTMLIFrameElement|null, command:EditorCommandInput){ iframe?.contentWindow?.postMessage({source:'animator-editor',...command},'*'); }
+const timelineCommands=new Set<string>([
+  'SET_ANIMATION_TIME','SCRUB_TIMELINE','PLAY_ALL','PAUSE_ALL','RESTART_ALL','SET_LOOP_ALL',
+  'SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION',
+  'APPLY_OVERRIDE','HIGHLIGHT_ANIMATION'
+]);
+export function sendCommand(iframe:HTMLIFrameElement|null, command:EditorCommandInput):void {
+  const target=iframe?.contentWindow;if(!target)return;
+  if(command.type==='CLEAR_OVERRIDES'){
+    target.postMessage({source:'animator-timeline',...command},'*');
+    target.postMessage({source:'animator-editor',...command},'*');
+    return;
+  }
+  const source=timelineCommands.has(command.type)?'animator-timeline':'animator-editor';
+  target.postMessage({source,...command},'*');
+}
