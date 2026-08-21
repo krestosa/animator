@@ -41,6 +41,7 @@ try{
     const pxPerMs=Number(await page.locator('[data-timeline-v2]').getAttribute('data-px-per-ms'));
     assert(Number.isFinite(pxPerMs)&&pxPerMs>0,'timeline scale is invalid');
     const seekOn=async(box,ms)=>{await page.mouse.click(box.x+Math.max(.5,ms*pxPerMs),box.y+box.height/2);await page.waitForTimeout(80);};
+    const playhead=async()=>Number.parseInt(await page.locator('[data-playhead-label]').textContent()??'0',10);
     const style=async selector=>frame.locator(selector).first().evaluate(element=>({opacity:Number(getComputedStyle(element).opacity),transform:getComputedStyle(element).transform}));
 
     await seekOn(motionBox,0);const atStart=await style('.repeat-motion');
@@ -70,12 +71,15 @@ try{
     const jsGroup=page.locator('.v2GroupRow').filter({hasText:'JS style · transform'}).first();
     await jsGroup.waitFor();
     const jsClip=jsGroup.locator('.v2Clip').first();const title=await jsClip.getAttribute('title')??'';const match=title.match(/·\s*(\d+)ms\s*·\s*(\d+)ms/);assert(match,'javascript motion clip did not expose timeline timing');
+    const jsId=await jsClip.getAttribute('data-v2-instance');assert(jsId,'javascript motion clip did not expose its animation id');
     const jsStart=Number(match[1]),jsDuration=Number(match[2]);assert(jsDuration>500,'javascript rAF motion duration was not captured');
+    const frameDebug=await frame.evaluate(id=>{const api=window.__ANIMATOR_MUTATION_REPLAY__;const track=api?.tracks?.get(id);return track?{start:track.start,last:track.last,count:track.events.length,values:[...new Set(track.events.map(event=>event.value))].slice(0,12)}:null;},jsId);
+    assert(frameDebug&&frameDebug.count>5&&frameDebug.values.length>3,`javascript frame snapshots are not distinct: ${JSON.stringify(frameDebug)}`);
     const jsMotionBox=await jsGroup.locator('.v2Motion').boundingBox();assert(jsMotionBox,'javascript motion timeline row has no box');
-    await seekOn(jsMotionBox,jsStart+20);const jsEarly=await style('#box');
-    await seekOn(jsMotionBox,jsStart+jsDuration*.75);const jsLate=await style('#box');
+    await seekOn(jsMotionBox,jsStart+20);const reachedEarly=await playhead();assert(Math.abs(reachedEarly-(jsStart+20))<80,`timeline click missed early JS frame: wanted ${jsStart+20}, got ${reachedEarly}`);const jsEarly=await style('#box');
+    await seekOn(jsMotionBox,jsStart+jsDuration*.75);const reachedLate=await playhead();assert(Math.abs(reachedLate-(jsStart+jsDuration*.75))<80,`timeline click missed late JS frame: wanted ${jsStart+jsDuration*.75}, got ${reachedLate}`);const jsLate=await style('#box');
     await seekOn(jsMotionBox,jsStart+20);const jsBack=await style('#box');
-    assert.notEqual(jsEarly.transform,jsLate.transform,'javascript rAF motion did not advance under timeline control');
+    assert.notEqual(jsEarly.transform,jsLate.transform,`javascript rAF motion did not advance under timeline control; captured ${JSON.stringify(frameDebug)}`);
     assert.equal(jsBack.transform,jsEarly.transform,'javascript rAF motion did not reverse to the captured frame');
   } finally { await browser.close(); }
 } finally {
