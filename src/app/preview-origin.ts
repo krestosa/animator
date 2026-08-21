@@ -8,7 +8,13 @@ export function mountPreviewOrigin(root:HTMLElement):()=>void{
     const entry=project.selectedEntry.split('/').map(encodeURIComponent).join('/');
     const raw=project.previewUrl??`${project.previewOrigin.replace(/\/$/,'')}/${entry}`;
     const url=new URL(raw,location.href),mode=getPreviewColorScheme();
-    url.searchParams.set('__animator_color_scheme',mode);
+    if(mode==='auto'){
+      url.searchParams.delete('__animator_color_scheme');
+      url.searchParams.set('__animator_color_scheme_reset','1');
+    }else{
+      url.searchParams.delete('__animator_color_scheme_reset');
+      url.searchParams.set('__animator_color_scheme',mode);
+    }
     const desired=url.toString();
     if(frame.dataset.previewOrigin===desired)return;
     frame.dataset.previewOrigin=desired;frame.src=desired;frame.referrerPolicy='no-referrer';
