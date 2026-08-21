@@ -78,7 +78,7 @@ async function captureDocument(document:Document):Promise<Blob>{
   if(!view||!document.documentElement)throw new Error('Viewport document is not ready');
   const running:Animation[]=[];
   for(const animation of document.getAnimations?.()??[]){
-    if(animation.playState==='running'||animation.playState==='pending'){
+    if(animation.playState==='running'){
       running.push(animation);
       try{animation.pause();}catch{}
     }
