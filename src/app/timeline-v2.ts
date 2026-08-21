@@ -1,9 +1,10 @@
 import { groupAnimations, type AnimationGroup } from '../editor/grouping';
-import { sendCommand } from '../preview/bridge';
+import { sendCommand, TIMELINE_STATE_EVENT } from '../preview/bridge';
 import { store } from '../state/store';
-import type { DetectedAnimation, RuntimeElement } from '../types/domain';
+import type { DetectedAnimation, PreviewMessage, RuntimeElement } from '../types/domain';
 
 const LABEL_WIDTH=228;
+type TimelineStateMessage=Extract<PreviewMessage,{type:'TIMELINE_STATE'}>;
 
 export function mountTimelineV2(root:HTMLElement):()=>void {
   const timeline=root.querySelector<HTMLElement>('.timeline');
@@ -12,14 +13,14 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
   legacy.classList.add('legacyTimeline');
   const viewport=document.createElement('div');viewport.className='timelineV2Viewport';viewport.dataset.timelineV2='';timeline.append(viewport);
   const expanded=new Set<string>();
-  let structuralSignature='',dragging=false,raf=0;
+  let structuralSignature='',dragging=false,raf=0,livePxPerMs=.1;
 
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(render);};
   const render=():void=>{
     raf=0;const state=store.get(),groups=groupAnimations(state.animations,state.selectedAnimationId);
     const duration=timelineEnd(groups,state.events.map(event=>event.at));
-    const pxPerMs=Math.max(.05,state.zoom/10);
+    const pxPerMs=Math.max(.05,state.zoom/10);livePxPerMs=pxPerMs;
     const canvasWidth=Math.max(720,Math.ceil(duration*pxPerMs+180));
     viewport.style.setProperty('--timeline-label-width',`${LABEL_WIDTH}px`);
     viewport.style.setProperty('--timeline-canvas-width',`${canvasWidth}px`);
@@ -31,6 +32,7 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
     viewport.innerHTML=`<div class="v2Row v2RulerRow"><div class="v2Label v2Corner"><span>Components</span></div><div class="v2Motion v2RulerMotion">${ruler(duration,pxPerMs)}</div></div>${groups.map(group=>groupRows(group,elements,expanded,state.selectedAnimationId,pxPerMs)).join('')}<div class="v2Row v2EventRow"><div class="v2Label"><span class="v2GroupTitle">Events</span><small>${state.events.length}</small></div><div class="v2Motion">${state.events.slice(-400).map(event=>`<i class="v2Event" title="${attr(event.label)}" style="left:${Math.max(0,event.at*pxPerMs)}px"></i>`).join('')}</div></div>`;
   };
 
+  const liveState=(event:Event):void=>{const detail=(event as CustomEvent<TimelineStateMessage>).detail;if(!detail)return;viewport.style.setProperty('--timeline-playhead',`${Math.max(0,detail.time*livePxPerMs)}px`);};
   const click=(event:MouseEvent):void=>{
     const target=(event.target as Element|null)?.closest<HTMLElement>('[data-v2-toggle],[data-v2-instance],[data-v2-group]');if(!target)return;
     if(target.dataset.v2Toggle){const key=target.dataset.v2Toggle;if(expanded.has(key))expanded.delete(key);else expanded.add(key);structuralSignature='';schedule();event.stopPropagation();return;}
@@ -50,9 +52,9 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
   const move=(event:PointerEvent):void=>{if(dragging&&viewport.hasPointerCapture(event.pointerId))scrub(event);};
   const up=(event:PointerEvent):void=>{dragging=false;if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);};
 
-  viewport.addEventListener('click',click);viewport.addEventListener('pointerdown',down);viewport.addEventListener('pointermove',move);viewport.addEventListener('pointerup',up);
+  viewport.addEventListener('click',click);viewport.addEventListener('pointerdown',down);viewport.addEventListener('pointermove',move);viewport.addEventListener('pointerup',up);window.addEventListener(TIMELINE_STATE_EVENT,liveState);
   const unsubscribe=store.subscribe(schedule);render();
-  return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);viewport.removeEventListener('click',click);viewport.removeEventListener('pointerdown',down);viewport.removeEventListener('pointermove',move);viewport.removeEventListener('pointerup',up);viewport.remove();legacy.classList.remove('legacyTimeline');};
+  return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);viewport.removeEventListener('click',click);viewport.removeEventListener('pointerdown',down);viewport.removeEventListener('pointermove',move);viewport.removeEventListener('pointerup',up);window.removeEventListener(TIMELINE_STATE_EVENT,liveState);viewport.remove();legacy.classList.remove('legacyTimeline');};
 }
 
 function groupRows(group:AnimationGroup,elements:Map<string,RuntimeElement>,expanded:Set<string>,selectedId:string|undefined,pxPerMs:number):string {
