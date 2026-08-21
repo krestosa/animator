@@ -9,7 +9,7 @@ describe('preview runtime',()=>{
   });
 
   it('contains deterministic master timeline and replay controls',()=>{
-    expect(runtimeSource).toContain("type:'TIMELINE_STATE'");
+    expect(runtimeSource).toContain("post('TIMELINE_STATE'");
     expect(runtimeSource).toContain('SCRUB_TIMELINE');
     expect(runtimeSource).toContain('applyMasterTime');
     expect(runtimeSource).toContain('replayAttributes');
