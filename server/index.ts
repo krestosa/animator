@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import { analyzeProject } from './analysis.js';
 import { getProject, loadProject, resolveInside } from './project.js';
 import { runtimeSource } from './runtime.js';
-import { writeOverrides } from './export.js';
+import { applyCssAnimationEdit, previewCssAnimationEdit, writeOverrides, type CssAnimationEdit } from './export.js';
 import { FolderSelectionCancelled, pickProjectFolder } from './folder-dialog.js';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
@@ -18,16 +18,15 @@ app.post('/api/projects/pick-folder',async(_req,res)=>{try{const selected=await 
 app.get('/api/projects/:id/analysis',(req,res)=>{const p=getProject(req.params.id);if(!p)return res.status(404).json({error:'Project not loaded'});try{return res.json(analyzeProject(p));}catch(error){return res.status(500).json({error:error instanceof Error?error.message:String(error)});}});
 app.get('/api/projects/:id/source',(req,res)=>{const p=getProject(req.params.id);if(!p)return res.status(404).end();try{const file=resolveInside(p.root,String(req.query.path||''));return res.type('text/plain').send(fs.readFileSync(file,'utf8'));}catch(error){return res.status(400).send(String(error));}});
 app.post('/api/projects/:id/export-overrides',(req,res)=>{const p=getProject(req.params.id);if(!p)return res.status(404).json({error:'Project not loaded'});try{return res.json(writeOverrides(p,String(req.body?.css||''),String(req.body?.ts||'')));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
+app.post('/api/projects/:id/preview-css-apply',(req,res)=>{const p=getProject(req.params.id);if(!p)return res.status(404).json({error:'Project not loaded'});try{return res.json(previewCssAnimationEdit(p,req.body as CssAnimationEdit));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
+app.post('/api/projects/:id/apply-css',(req,res)=>{const p=getProject(req.params.id);if(!p)return res.status(404).json({error:'Project not loaded'});try{return res.json(applyCssAnimationEdit(p,req.body as CssAnimationEdit));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
 app.get('/__animator/runtime.js',(_req,res)=>res.type('application/javascript').send(runtimeSource));
 app.get('/preview/:id/*path',(req,res,next)=>servePreview(req.params.id,String(req.params.path||''),res,next));
 app.get('/preview/:id',(req,res,next)=>{const p=getProject(req.params.id);if(!p)return res.status(404).send('Project not loaded');servePreview(req.params.id,p.selectedEntry,res,next);});
 
 function previewProjectFromReferer(referer:string|undefined):string|undefined {
   if(!referer)return undefined;
-  try {
-    const match=new URL(referer).pathname.match(/^\/preview\/([^/]+)(?:\/|$)/);
-    return match?.[1] ? decodeURIComponent(match[1]) : undefined;
-  } catch { return undefined; }
+  try { const match=new URL(referer).pathname.match(/^\/preview\/([^/]+)(?:\/|$)/); return match?.[1] ? decodeURIComponent(match[1]) : undefined; } catch { return undefined; }
 }
 
 app.use((req,res,next)=>{
