@@ -166,6 +166,7 @@ try{
     assert.equal(jsBack.transform,jsEarly.transform,`javascript rAF motion did not reverse; early=${JSON.stringify(jsEarlyState)} back=${JSON.stringify(jsBackState)}`);
     const htmlAfter=await frame.locator('body').evaluate(element=>({children:element.children.length,className:element.className}));assert.deepEqual(htmlAfter,htmlBefore,'timeline replay changed structural HTML state');
 
+    await page.locator('.toolbarMore').evaluate(element=>{if(element instanceof HTMLDetailsElement)element.open=false;});
     const localPreviewSrc=await frameLocator.getAttribute('src');await page.locator('.webLoader>summary').click();await page.locator('[data-web-url]').fill(remoteUrl);await page.locator('[data-web-open]').click();
     await waitUntil(async()=>{const src=await frameLocator.getAttribute('src');return !!src&&src!==localPreviewSrc&&/^http:\/\/127\.0\.0\.1:\d+\//.test(src);},'remote page was not moved behind an instrumented local proxy');
     frameHandle=await frameLocator.elementHandle();frame=await frameHandle?.contentFrame();assert(frame,'remote preview iframe did not load');
