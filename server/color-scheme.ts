@@ -1,8 +1,10 @@
-export type PreviewColorScheme='system'|'light'|'dark';
+export type PreviewColorScheme='auto'|'system'|'light'|'dark';
 export const PREVIEW_COLOR_SCHEME_PARAM='__animator_color_scheme';
 
-export function parsePreviewColorScheme(value:string|null|undefined,fallback:PreviewColorScheme='system'):PreviewColorScheme{
-  return value==='light'||value==='dark'||value==='system'?value:fallback;
+export function parsePreviewColorScheme(value:string|null|undefined,fallback:PreviewColorScheme='auto'):PreviewColorScheme{
+  if(value==='light'||value==='dark'||value==='auto')return value;
+  if(value==='system')return 'auto';
+  return fallback;
 }
 
 export function stripPreviewColorScheme(url:string):{path:string;mode:PreviewColorScheme|undefined}{
@@ -14,11 +16,12 @@ export function stripPreviewColorScheme(url:string):{path:string;mode:PreviewCol
 }
 
 export function rewriteColorSchemeCss(css:string,mode:PreviewColorScheme):string{
-  if(mode==='system')return css;
+  if(mode==='auto'||mode==='system')return css;
   return css.replace(/\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)/gi,(_match,value:string)=>value.toLowerCase()===mode?'(min-width: 0px)':'(max-width: 0px)');
 }
 
 export function previewColorSchemeBootstrap(mode:PreviewColorScheme):string{
+  if(mode==='auto'||mode==='system')return '';
   const serialized=JSON.stringify(mode);
-  return `<script data-animator-internal>/* animator preview color scheme */(()=>{const mode=${serialized};window.__ANIMATOR_PREVIEW_COLOR_SCHEME__=mode;if(mode==='system')return;const native=window.matchMedia.bind(window);const rewrite=query=>String(query).replace(/\\(\\s*prefers-color-scheme\\s*:\\s*(dark|light)\\s*\\)/gi,(_match,value)=>String(value).toLowerCase()===mode?'(min-width: 0px)':'(max-width: 0px)');window.matchMedia=query=>{const original=String(query),mql=native(rewrite(original));return new Proxy(mql,{get(target,property){if(property==='media')return original;const value=Reflect.get(target,property,target);return typeof value==='function'?value.bind(target):value;}});};document.documentElement.style.colorScheme=mode;})();</script>`;
+  return `<script data-animator-internal>/* animator preview color scheme override */(()=>{const mode=${serialized};window.__ANIMATOR_PREVIEW_COLOR_SCHEME_OVERRIDE__=mode;const native=window.matchMedia.bind(window);const rewrite=query=>String(query).replace(/\\(\\s*prefers-color-scheme\\s*:\\s*(dark|light)\\s*\\)/gi,(_match,value)=>String(value).toLowerCase()===mode?'(min-width: 0px)':'(max-width: 0px)');window.matchMedia=query=>{const original=String(query),mql=native(rewrite(original));return new Proxy(mql,{get(target,property){if(property==='media')return original;const value=Reflect.get(target,property,target);return typeof value==='function'?value.bind(target):value;}});};document.documentElement.style.colorScheme=mode;})();</script>`;
 }
