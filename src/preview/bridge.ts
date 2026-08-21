@@ -38,7 +38,13 @@ type EditorCommandInput=EditorCommand extends infer Command?Command extends{sour
 const timelineCommands=new Set<string>(['SET_ANIMATION_TIME','SCRUB_TIMELINE','SEEK_FRAME','STEP_FRAME','PLAY_ALL','PAUSE_ALL','RESTART_ALL','RELEASE_TIMELINE','SET_LOOP_ALL','SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION','APPLY_OVERRIDE','HIGHLIGHT_ANIMATION','SET_SOLO_ANIMATION','CLEAR_SOLO_ANIMATION','SET_FOCUS_ANIMATION','SET_MAGNIFY_ANIMATION']);
 export function sendCommand(iframe:HTMLIFrameElement|null,command:EditorCommandInput):void{
   const browserSessionId=store.get().project?.browserSessionId;
-  if(browserSessionId){void fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/command`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(command)}).catch(()=>{});return;}
+  if(browserSessionId){
+    void fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/command`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(command)}).then(response=>{
+      if(!response.ok||command.type!=='SET_RECORDING')return;
+      const detail:Extract<PreviewMessage,{type:'RECORDING_STATE'}>={source:'animator-preview',type:'RECORDING_STATE',enabled:command.enabled,requestId:command.requestId};
+      window.dispatchEvent(new CustomEvent(RECORDING_STATE_EVENT,{detail}));
+    }).catch(()=>{});return;
+  }
   const target=iframe?.contentWindow;if(!target)return;
   if(command.type==='SET_RECORDING'){const requestedAt=Date.now();if(command.enabled)target.postMessage({source:'animator-timeline',type:'RELEASE_TIMELINE'},'*');target.postMessage({source:'animator-editor',...command,requestedAt},'*');return;}
   if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){target.postMessage({source:'animator-timeline',...command},'*');target.postMessage({source:'animator-editor',...command},'*');return;}
