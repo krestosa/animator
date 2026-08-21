@@ -10,7 +10,7 @@ const OVERSCAN=7;
 type InspectionDetail={id:string;elementId:string;origin:number};
 
 export function mountMotionCatalog(root:HTMLElement):()=>void{
-  let raf=0,lastDataset='',disposed=false;
+  let raf=0,uiRaf=0,lastDataset='',disposed=false,lastAnimations=store.get().animations,lastSelected=store.get().selectedAnimationId;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const schedule=(reset=false):void=>{if(reset)lastDataset='';if(!raf&&!disposed)raf=requestAnimationFrame(render);};
   const render=():void=>{
@@ -31,7 +31,7 @@ export function mountMotionCatalog(root:HTMLElement):()=>void{
     }).join('')}<div class="motionVirtualSpacer" style="height:${after}px"></div>`;
   };
   const scroll=(event:Event):void=>{if(event.target instanceof Element&&event.target.matches('.motionRows'))schedule();};
-  const uiChange=(event:Event):void=>{const target=event.target as Element|null;if(target?.matches('[data-motion-search],[data-motion-filter],[data-filter]'))requestAnimationFrame(()=>schedule(true));};
+  const uiChange=(event:Event):void=>{const target=event.target as Element|null;if(!target?.matches('[data-motion-search],[data-motion-filter],[data-filter]'))return;if(uiRaf)cancelAnimationFrame(uiRaf);uiRaf=requestAnimationFrame(()=>{uiRaf=0;schedule(true);});};
   const inspect=(event:MouseEvent):void=>{
     const button=(event.target as Element|null)?.closest<HTMLButtonElement>('[data-motion-inspect]');if(!button)return;const id=button.dataset.motionInspect;if(!id)return;
     const animation=store.get().animations.find(item=>item.id===id);if(!animation)return;event.preventDefault();event.stopPropagation();
@@ -41,9 +41,10 @@ export function mountMotionCatalog(root:HTMLElement):()=>void{
     sendCommand(frame(),{type:'HIGHLIGHT_ANIMATION',id:animation.id,reveal:true});
     window.dispatchEvent(new CustomEvent<InspectionDetail>(ANIMATION_INSPECT_EVENT,{detail:{id:animation.id,elementId:animation.elementId,origin}}));
   };
-  const unsubscribe=store.subscribe(()=>schedule());
+  const changed=():void=>{const state=store.get();if(state.animations===lastAnimations&&state.selectedAnimationId===lastSelected)return;lastAnimations=state.animations;lastSelected=state.selectedAnimationId;schedule();};
+  const unsubscribe=store.subscribe(changed);
   root.addEventListener('scroll',scroll,true);root.addEventListener('input',uiChange);root.addEventListener('change',uiChange);root.addEventListener('click',uiChange);root.addEventListener('click',inspect);schedule(true);
-  return()=>{disposed=true;if(raf)cancelAnimationFrame(raf);unsubscribe();root.removeEventListener('scroll',scroll,true);root.removeEventListener('input',uiChange);root.removeEventListener('change',uiChange);root.removeEventListener('click',uiChange);root.removeEventListener('click',inspect);};
+  return()=>{disposed=true;if(raf)cancelAnimationFrame(raf);if(uiRaf)cancelAnimationFrame(uiRaf);unsubscribe();root.removeEventListener('scroll',scroll,true);root.removeEventListener('input',uiChange);root.removeEventListener('change',uiChange);root.removeEventListener('click',uiChange);root.removeEventListener('click',inspect);};
 }
 
 function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
