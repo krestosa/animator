@@ -45,8 +45,8 @@ try{
     await mouseButton.click();await waitUntil(async()=>await frameLocator.evaluate(node=>getComputedStyle(node).pointerEvents)==='auto','mouse interaction did not restore');
     await page.keyboard.press('Escape');await waitUntil(async()=>await frameLocator.getAttribute('data-camera-zoom')!=='on','Escape did not reset camera zoom');
 
-    const timeline=page.locator('[data-timeline-v2]'),ruler=page.locator('.v2RulerMotion');
-    const seekTo=async ms=>{const scale=Number(await timeline.getAttribute('data-px-per-ms')),origin=Number(await timeline.getAttribute('data-origin-ms')??0),box=await ruler.boundingBox();assert(box&&scale>0);await ruler.click({position:{x:Math.max(.5,Math.min(box.width-.5,(ms-origin)*scale)),y:box.height/2},force:true});await page.waitForTimeout(80);};
+    const timeline=page.locator('[data-timeline-v2]');
+    const seekTo=async ms=>{const rail=page.locator('[data-v2-scrub-rail]').first();await rail.waitFor({state:'visible'});const scale=Number(await timeline.getAttribute('data-px-per-ms')),origin=Number(await timeline.getAttribute('data-origin-ms')??0),box=await rail.boundingBox();assert(box&&scale>0);await rail.click({position:{x:Math.max(.5,Math.min(box.width-.5,(ms-origin)*scale)),y:box.height/2},force:true});await page.waitForTimeout(80);};
     const visual=async()=>frame.locator('.repeat-motion').first().evaluate(element=>({opacity:Number(getComputedStyle(element).opacity),transform:getComputedStyle(element).transform}));
     await page.locator('[data-isolate="all"]').click();await seekTo(0);const start=await visual();await seekTo(400);const middle=await visual();await seekTo(0);const back=await visual();assert(middle.opacity>start.opacity+.1,'timeline scrub did not advance animation');assert.equal(back.transform,start.transform,'reverse scrub did not restore the initial frame');
     await page.keyboard.press('Home');await page.locator('[data-preview-step="1"]').click();await waitUntil(async()=>/Frame 1/.test(await page.locator('[data-preview-frame-label]').textContent()??''),'frame stepping failed');
