@@ -11,8 +11,8 @@ export function installPreviewNavigationGate():()=>void{
   if(!descriptor?.get||!descriptor.set)return()=>{};
   const nativeGet=descriptor.get,nativeSet=descriptor.set;nativeSetSrc=nativeSet;
   Object.defineProperty(HTMLIFrameElement.prototype,'src',{
-    configurable:descriptor.configurable,
-    enumerable:descriptor.enumerable,
+    configurable:descriptor.configurable===true,
+    enumerable:descriptor.enumerable===true,
     get(){return nativeGet.call(this);},
     set(value:string){
       const next=String(value);
@@ -37,7 +37,6 @@ export function mountRecordGate(root:HTMLElement):()=>void{
   };
   const setRecording=(enabled:boolean):void=>{
     if(store.get().recording===enabled){if(enabled)releasePendingPreview();return;}
-    // Store is the synchronous authority. The bridge starts rejecting/accepting capture in this same call stack.
     store.set({recording:enabled});
     const preview=frame();
     if(preview)sendCommand(preview,{type:'SET_RECORDING',enabled});
