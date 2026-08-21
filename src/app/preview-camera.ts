@@ -16,7 +16,7 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   mouseButton.type='button';mouseButton.dataset.webInteraction='';mouseButton.className='webMouseToggle active';mouseButton.textContent='↖';mouseButton.setAttribute('aria-pressed','true');mouseButton.title='Mouse interaction with preview: on';
   const reset=focusGroup.querySelector('[data-inspection-clear]');focusGroup.insertBefore(mouseButton,reset);
 
-  let cameraActive=false,mouseEnabled=true,raf=0,lastFrame:HTMLIFrameElement|null=null,cameraElementId:string|undefined,cameraAnimationId:string|undefined;
+  let cameraActive=false,mouseEnabled=true,raf=0,lastFrame:HTMLIFrameElement|null=null,cameraElementId:string|undefined,cameraAnimationId:string|undefined,lastProjectId=store.get().project?.id;
   let dragging=false,dragPointerId=-1,lastDragX=0,lastDragY=0;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const stage=()=>root.querySelector<HTMLElement>('.stage');
@@ -98,7 +98,8 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
     if(target?.closest('[data-inspection-clear]'))setCamera(false);
   };
   const key=(event:KeyboardEvent):void=>{if(event.key==='Escape'&&cameraActive){event.preventDefault();setCamera(false);}};
-  const unsubscribe=store.subscribe(()=>{updateMouse();scheduleCamera();});
+  const stateChanged=():void=>{const projectId=store.get().project?.id;if(projectId!==lastProjectId){lastProjectId=projectId;if(cameraActive)setCamera(false);else{cameraElementId=undefined;cameraAnimationId=undefined;}}updateMouse();scheduleCamera();};
+  const unsubscribe=store.subscribe(stateChanged);
   const frameObserver=new MutationObserver(()=>{updateMouse();scheduleCamera();});frameObserver.observe(previewDevice,{childList:true});
   const resize=new ResizeObserver(scheduleCamera);resize.observe(previewDevice);
 
