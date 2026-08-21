@@ -28,7 +28,12 @@ export function mountRecordGate(root:HTMLElement):()=>void{
     transmit();
   };
   const onAck=(event:Event):void=>{const detail=(event as CustomEvent<Extract<PreviewMessage,{type:'RECORDING_STATE'}>>).detail;if(!detail||!pendingId)return;if(detail.requestId&&detail.requestId!==pendingId)return;if(detail.enabled!==desired){transmit();return;}pendingId='';stopRetry();if(store.get().recording!==detail.enabled)store.set({recording:detail.enabled});if(detail.enabled)releasePendingPreview();};
-  const onFrameLoad=():void=>{if(pendingId)transmit();else if(store.get().project&&!store.get().project?.browserSessionId)requestState(store.get().recording);};
+  const onFrameLoad=():void=>{
+    const preview=frame();if(!preview)return;
+    const blocked=preview.dataset.recordBlocked==='true'||preview.getAttribute('src')==='about:blank';
+    if(blocked&&!store.get().recording)return;
+    if(pendingId)transmit();else if(store.get().project&&!store.get().project?.browserSessionId)requestState(store.get().recording);
+  };
   const bindFrame=():void=>{const next=frame();if(next===currentFrame)return;currentFrame?.removeEventListener('load',onFrameLoad);currentFrame=next;currentFrame?.addEventListener('load',onFrameLoad);};
   const click=(event:MouseEvent):void=>{const button=(event.target as Element|null)?.closest<HTMLElement>('[data-action="record"]');if(!button)return;event.preventDefault();event.stopImmediatePropagation();if(pendingId)return;const project=store.get().project;if(!project){store.set({recording:!store.get().recording});desired=store.get().recording;return;}requestState(!store.get().recording);};
   const changed=():void=>{bindFrame();const projectId=store.get().project?.id;if(projectId===lastProjectId)return;lastProjectId=projectId;desired=store.get().recording;if(desired)queueMicrotask(releasePendingPreview);if(projectId&&store.get().project?.browserSessionId)requestState(desired);};
