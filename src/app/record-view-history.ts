@@ -14,11 +14,11 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
   const detach=controls.querySelector<HTMLButtonElement>('[data-view-history-detach]');
   if(!toggle||!detach){controls.remove();return()=>{};}
 
-  let review=false,detached=false,lastRecording=store.get().recording,lastProjectId=store.get().project?.id,lastFrame:HTMLIFrameElement|null=null,confirmedRecording=true,recordingCycleStarted=!!store.get().project&&store.get().recording,completedRecording=false;
+  let review=false,detached=false,lastRecording=store.get().recording,lastProjectContext=projectContext(),lastFrame:HTMLIFrameElement|null=null,confirmedRecording=true,recordingCycleStarted=!!store.get().project&&store.get().recording,completedRecording=false,disposed=false;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-browser-snapshot-frame],[data-preview-frame]');
   const currentMode=()=>!review?'off':detached?'detached':'attached';
   const sendState=(reset=false):void=>{
-    const recording=store.get().recording;
+    if(disposed)return;const recording=store.get().recording;
     sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:recording,reset});
     sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:recording?'off':currentMode()});
   };
@@ -37,10 +37,10 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
     if(lastFrame)queueMicrotask(()=>sendState(lastRecording));
   };
   const sync=():void=>{
-    const state=store.get(),recording=state.recording,projectId=state.project?.id;bindFrame();
-    if(projectId!==lastProjectId){lastProjectId=projectId;review=false;detached=false;lastRecording=recording;confirmedRecording=true;recordingCycleStarted=!!projectId&&recording;completedRecording=false;sendState(true);render();return;}
-    if(recording!==lastRecording){lastRecording=recording;review=false;detached=false;if(recording){confirmedRecording=true;recordingCycleStarted=!!projectId;completedRecording=false;}sendState(recording);}
-    render();
+    const state=store.get(),recording=state.recording,context=projectContext();
+    if(context!==lastProjectContext){lastProjectContext=context;review=false;detached=false;lastRecording=recording;confirmedRecording=true;recordingCycleStarted=!!state.project&&recording;completedRecording=false;sendState(true);render();return;}
+    if(recording===lastRecording)return;
+    lastRecording=recording;review=false;detached=false;if(recording){confirmedRecording=true;recordingCycleStarted=!!state.project;completedRecording=false;}sendState(recording);render();
   };
   const onRecordingState=(event:Event):void=>{const detail=(event as CustomEvent<Extract<PreviewMessage,{type:'RECORDING_STATE'}>>).detail;if(!detail)return;confirmedRecording=detail.enabled;if(detail.enabled){recordingCycleStarted=!!store.get().project;completedRecording=false;review=false;detached=false;}else if(recordingCycleStarted){completedRecording=true;}render();};
   const click=(event:MouseEvent):void=>{
@@ -53,5 +53,7 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
   };
   const device=root.querySelector<HTMLElement>('[data-device]');const observer=new MutationObserver(bindFrame);if(device)observer.observe(device,{childList:true,subtree:true});
   const unsubscribe=store.subscribe(sync);root.addEventListener('click',click,true);window.addEventListener(RECORDING_STATE_EVENT,onRecordingState);bindFrame();sendState(true);render();
-  return()=>{unsubscribe();sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:false});sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:'off'});lastFrame?.removeEventListener('load',onFrameLoad);observer.disconnect();root.removeEventListener('click',click,true);window.removeEventListener(RECORDING_STATE_EVENT,onRecordingState);controls.remove();};
+  return()=>{disposed=true;unsubscribe();sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:false});sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:'off'});lastFrame?.removeEventListener('load',onFrameLoad);observer.disconnect();root.removeEventListener('click',click,true);window.removeEventListener(RECORDING_STATE_EVENT,onRecordingState);controls.remove();};
+
+  function projectContext():string{const project=store.get().project;return project?`${project.id}:${project.selectedEntry}`:'';}
 }
