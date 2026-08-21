@@ -1,7 +1,7 @@
 export type DetectionConfidence = 'exact' | 'runtime-observed' | 'source-correlated' | 'inferred' | 'unknown';
 export type AnimationType = 'css-animation' | 'css-transition' | 'web-animation' | 'javascript' | 'raf' | 'runtime-style' | 'unknown';
 
-export interface SourceReference { file: string; line?: number | undefined; column?: number | undefined; selector?: string | undefined; snippet?: string | undefined; }
+export interface SourceReference { file: string; line?: number | undefined; column?: number | undefined; selector?: string | undefined; snippet?: string | undefined; media?: string | undefined; }
 export interface AnimatedProperty { name: string; from?: string | undefined; to?: string | undefined; values?: string[] | undefined; }
 export interface DetectedAnimation {
   id: string; elementId: string; type: AnimationType; name?: string | undefined; startTime: number; duration?: number | undefined; delay?: number | undefined;
@@ -13,7 +13,7 @@ export interface RuntimeElement { id: string; tag: string; domId?: string | unde
 export interface TimelineEvent { id: string; at: number; kind: string; elementId?: string | undefined; label: string; data?: Record<string, unknown> | undefined; }
 export interface ProjectFile { path: string; name: string; type: 'file' | 'directory'; children?: ProjectFile[] | undefined; }
 export interface ProjectDescriptor { id: string; root: string; entries: string[]; selectedEntry: string; tree: ProjectFile[]; }
-export interface StaticAnalysis { animations: DetectedAnimation[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; snippet:string}>; reducedMotion: boolean; }
+export interface StaticAnalysis { animations: DetectedAnimation[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
 export type PreviewMessage =
  | {source:'animator-preview'; type:'READY'}
  | {source:'animator-preview'; type:'ELEMENTS'; elements:RuntimeElement[]}
