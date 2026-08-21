@@ -2,11 +2,11 @@ import { store } from '../state/store';
 import type { DetectedAnimation, RuntimeElement } from '../types/domain';
 
 type MotionSnapshot={elements:RuntimeElement[];animations:DetectedAnimation[];active:number;runtimeReady:boolean};
-type BrowserState={url:string;title:string;width:number;height:number;engine:string;profile:string;external:boolean};
+type BrowserState={url:string;title:string;width:number;height:number;engine:string;profile:string;external:boolean;snapshotReady:boolean};
 
 export function mountBrowserPreview(root:HTMLElement):()=>void{
   const device=root.querySelector<HTMLElement>('[data-device]'),stage=device?.parentElement;if(!device||!stage)return()=>{};
-  let sessionId='',surface:HTMLDivElement|null=null,disposed=false,stateTimer=0,motionTimer=0,motionBusy=false,lastWidth=1100,lastHeight=700,runtimeHealthy=false,lastUrl='';
+  let sessionId='',surface:HTMLDivElement|null=null,disposed=false,stateTimer=0,motionTimer=0,motionBusy=false,lastWidth=1100,lastHeight=700,runtimeHealthy=false,lastUrl='',lastState:BrowserState|null=null;
   const motionSignatures=new Map<string,string>(),motionElements=new Set<string>();
   const applyDeviceSize=(width:number,height:number):void=>{
     const safeWidth=Math.max(1,width),safeHeight=Math.max(1,height),availableWidth=Math.max(1,stage.clientWidth),availableHeight=Math.max(1,stage.clientHeight),scale=Math.min(1,availableWidth/safeWidth,availableHeight/safeHeight);
@@ -25,28 +25,34 @@ export function mountBrowserPreview(root:HTMLElement):()=>void{
     if(disposed||!sessionId||motionBusy)return;const requestedSession=sessionId;motionBusy=true;
     try{const response=await fetch(`/api/browser-sessions/${encodeURIComponent(requestedSession)}/motion`,{cache:'no-store'});if(response.ok&&requestedSession===sessionId)applyMotion(await response.json() as MotionSnapshot);}catch{}finally{motionBusy=false;if(!disposed&&requestedSession===sessionId&&store.get().recording)scheduleMotion();}
   };
-  const removeSurface=():void=>{
-    if(stateTimer)clearTimeout(stateTimer);if(motionTimer)clearTimeout(motionTimer);stateTimer=0;motionTimer=0;motionBusy=false;runtimeHealthy=false;lastUrl='';motionSignatures.clear();motionElements.clear();surface?.remove();surface=null;resetDeviceSize();
-  };
-  const removeIframes=():void=>device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());
-  const renderState=(state:BrowserState,target:HTMLDivElement):void=>{
-    const title=target.querySelector<HTMLElement>('[data-browser-session-title]'),meta=target.querySelector<HTMLElement>('[data-browser-session-meta]'),hint=target.querySelector<HTMLElement>('[data-browser-session-hint]');
+  const ensureLiveStatus=(state:BrowserState,target:HTMLDivElement):void=>{
+    if(target.querySelector('[data-browser-snapshot-frame]'))target.innerHTML='';
+    let status=target.querySelector<HTMLElement>('.browserPreviewSession');if(!status){target.innerHTML='<div class="browserPreviewSession"><strong data-browser-session-title></strong><span data-browser-session-meta></span><p data-browser-session-hint></p><small>Press STOP in Animator when the capture is complete.</small></div>';status=target.querySelector<HTMLElement>('.browserPreviewSession');}
+    const title=status?.querySelector<HTMLElement>('[data-browser-session-title]'),meta=status?.querySelector<HTMLElement>('[data-browser-session-meta]'),hint=status?.querySelector<HTMLElement>('[data-browser-session-hint]');
     if(title)title.textContent=state.external?`${browserLabel(state.engine)} open in a separate window`:`${browserLabel(state.engine)} automation session`;
     if(meta)meta.textContent=`${state.profile==='mobile'?'Mobile':'Desktop'} · ${state.width} × ${state.height} viewport${state.title?` · ${state.title}`:''}`;
     if(hint)hint.textContent=state.external?'Interact, scroll and navigate in the browser window. Animator records motion and events without streaming frames.':'CI/headless mode: motion and events are being captured without a video stream.';
+    delete target.dataset.browserSnapshot;
   };
+  const ensureSnapshot=(target:HTMLDivElement):void=>{
+    let frame=target.querySelector<HTMLIFrameElement>('[data-browser-snapshot-frame]');if(frame)return;
+    target.innerHTML='';frame=document.createElement('iframe');frame.dataset.browserSnapshotFrame='';frame.title='Recorded browser document';frame.src=`/api/browser-sessions/${encodeURIComponent(sessionId)}/snapshot?v=${Date.now()}`;target.append(frame);target.dataset.browserSnapshot='true';
+  };
+  const renderState=(state:BrowserState,target:HTMLDivElement):void=>{if(!store.get().recording&&state.snapshotReady)ensureSnapshot(target);else ensureLiveStatus(state,target);};
+  const removeSurface=():void=>{if(stateTimer)clearTimeout(stateTimer);if(motionTimer)clearTimeout(motionTimer);stateTimer=0;motionTimer=0;motionBusy=false;runtimeHealthy=false;lastUrl='';lastState=null;motionSignatures.clear();motionElements.clear();surface?.remove();surface=null;resetDeviceSize();};
+  const removeIframes=():void=>device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());
   const pollState=async():Promise<void>=>{
     if(disposed||!sessionId||!surface)return;const requestedSession=sessionId,requestedSurface=surface;
-    try{const response=await fetch(`/api/browser-sessions/${encodeURIComponent(requestedSession)}/state`,{cache:'no-store'});if(response.ok&&requestedSession===sessionId&&requestedSurface===surface&&requestedSurface.isConnected){const state=await response.json() as BrowserState;if(requestedSession!==sessionId||requestedSurface!==surface||!requestedSurface.isConnected)return;lastWidth=state.width;lastHeight=state.height;applyDeviceSize(lastWidth,lastHeight);if(lastUrl&&state.url!==lastUrl){runtimeHealthy=false;scheduleMotion(40);}lastUrl=state.url;requestedSurface.title=`${state.title||'Browser capture'} — ${state.url}`;requestedSurface.dataset.browserEngineActive=state.engine;requestedSurface.dataset.browserProfileActive=state.profile;requestedSurface.dataset.browserWidth=String(state.width);requestedSurface.dataset.browserHeight=String(state.height);requestedSurface.dataset.browserExternal=String(state.external);renderState(state,requestedSurface);}}
-    catch{}finally{if(!disposed&&requestedSession===sessionId&&requestedSurface===surface&&requestedSurface.isConnected)stateTimer=window.setTimeout(()=>void pollState(),750);}
+    try{const response=await fetch(`/api/browser-sessions/${encodeURIComponent(requestedSession)}/state`,{cache:'no-store'});if(response.ok&&requestedSession===sessionId&&requestedSurface===surface&&requestedSurface.isConnected){const state=await response.json() as BrowserState;if(requestedSession!==sessionId||requestedSurface!==surface||!requestedSurface.isConnected)return;lastState=state;lastWidth=state.width;lastHeight=state.height;applyDeviceSize(lastWidth,lastHeight);if(lastUrl&&state.url!==lastUrl){runtimeHealthy=false;scheduleMotion(40);}lastUrl=state.url;requestedSurface.title=`${state.title||'Browser capture'} — ${state.url}`;requestedSurface.dataset.browserEngineActive=state.engine;requestedSurface.dataset.browserProfileActive=state.profile;requestedSurface.dataset.browserWidth=String(state.width);requestedSurface.dataset.browserHeight=String(state.height);requestedSurface.dataset.browserExternal=String(state.external);renderState(state,requestedSurface);}}
+    catch{}finally{if(!disposed&&requestedSession===sessionId&&requestedSurface===surface&&requestedSurface.isConnected)stateTimer=window.setTimeout(()=>void pollState(),250);}
   };
   const mount=():void=>{
     const project=store.get().project,next=project?.browserSessionId??'';
     if(next)removeIframes();
-    if(next===sessionId&&surface?.isConnected){applyDeviceSize(lastWidth,lastHeight);if(store.get().recording&&!motionTimer&&!motionBusy)scheduleMotion();return;}
+    if(next===sessionId&&surface?.isConnected){applyDeviceSize(lastWidth,lastHeight);if(lastState)renderState(lastState,surface);if(store.get().recording&&!motionTimer&&!motionBusy)scheduleMotion();return;}
     const previous=sessionId;removeSurface();sessionId=next;if(previous&&previous!==next)void fetch(`/api/browser-sessions/${encodeURIComponent(previous)}`,{method:'DELETE'}).catch(()=>{});if(!sessionId)return;
     removeIframes();lastWidth=project?.browserProfile==='mobile'?390:1100;lastHeight=project?.browserProfile==='mobile'?844:700;applyDeviceSize(lastWidth,lastHeight);
-    surface=document.createElement('div');surface.className='browserPreviewSurface';surface.dataset.browserPreview='';surface.dataset.browserSessionId=sessionId;surface.setAttribute('role','status');surface.innerHTML='<div class="browserPreviewSession"><strong data-browser-session-title>Starting browser window…</strong><span data-browser-session-meta></span><p data-browser-session-hint>Animator is connecting to the external browser.</p><small>Press STOP in Animator when the capture is complete.</small></div>';device.append(surface);
+    surface=document.createElement('div');surface.className='browserPreviewSurface';surface.dataset.browserPreview='';surface.dataset.browserSessionId=sessionId;surface.innerHTML='<div class="browserPreviewSession"><strong data-browser-session-title>Starting browser window…</strong><span data-browser-session-meta></span><p data-browser-session-hint>Animator is connecting to the external browser.</p><small>Press STOP in Animator when the capture is complete.</small></div>';device.append(surface);
     void pollState();scheduleMotion(40);
   };
   const observer=new MutationObserver(mount);observer.observe(device,{childList:true});const resizeObserver=new ResizeObserver(()=>{if(sessionId)applyDeviceSize(lastWidth,lastHeight);});resizeObserver.observe(stage);const unsubscribe=store.subscribe(mount);mount();
