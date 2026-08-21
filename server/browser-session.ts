@@ -18,7 +18,7 @@ type BrowserEvent=Record<string,unknown>;
 type BrowserCommand=Record<string,unknown>;
 type FrameListener=(frame:Buffer)=>void;
 type BrowserSession={
-  id:string;browser:Browser;context:BrowserContext;page:Page;events:BrowserEvent[];width:number;height:number;closed:boolean;
+  id:string;browser:Browser;context:BrowserContext;page:Page;events:BrowserEvent[];width:number;height:number;closed:boolean;headless:boolean;
   sticky:Map<string,BrowserCommand>;navigationVersion:number;engine:BrowserEngine;profile:BrowserProfile;
   frameListeners:Set<FrameListener>;latestFrame?:Buffer|undefined;screenshotPumpRunning:boolean;cdp?:CDPSession|undefined;cdpFrameHandler?:((event:{data?:string;sessionId?:number})=>void)|undefined;
 };
@@ -46,19 +46,19 @@ export async function installBrowserRuntimes(values:unknown):Promise<BrowserRunt
   return listBrowserRuntimes();
 }
 
-export async function openBrowserSession(input:string,options:{width?:number;height?:number;engine?:unknown;profile?:unknown}={}):Promise<{id:string;url:string;title:string;engine:BrowserEngine;profile:BrowserProfile;width:number;height:number}>{
+export async function openBrowserSession(input:string,options:{width?:number;height?:number;engine?:unknown;profile?:unknown}={}):Promise<{id:string;url:string;title:string;engine:BrowserEngine;profile:BrowserProfile;width:number;height:number;external:boolean}>{
   const url=parseUrl(input),id='browser-'+randomUUID(),engine=parseEngine(options.engine),profile=parseProfile(options.profile);
-  await ensureBrowserRuntime(engine);
-  const playwright=await getPlaywright(),type=browserType(playwright,engine),executablePath=type.executablePath();
-  const browser=await type.launch({headless:true,executablePath,...(engine==='chromium'?{args:['--disable-dev-shm-usage']}:{})});
   const size=profile==='mobile'?{width:390,height:844}:{width:clamp(Number(options.width)||1100,320,3840),height:clamp(Number(options.height)||700,240,2160)};
+  await ensureBrowserRuntime(engine);
+  const playwright=await getPlaywright(),type=browserType(playwright,engine),executablePath=type.executablePath(),headless=shouldRunHeadless();
+  const browser=await type.launch({headless,executablePath,...(engine==='chromium'?{args:['--disable-dev-shm-usage']}:{})});
   const contextOptions:BrowserContextOptions={viewport:size,ignoreHTTPSErrors:true};
   if(profile==='mobile'){
     contextOptions.deviceScaleFactor=3;contextOptions.hasTouch=true;contextOptions.userAgent=mobileUserAgent(engine);
     if(engine!=='firefox')contextOptions.isMobile=true;
   }
   const context=await browser.newContext(contextOptions),page=await context.newPage();
-  const session:BrowserSession={id,browser,context,page,events:[],width:size.width,height:size.height,closed:false,sticky:new Map(),navigationVersion:0,engine,profile,frameListeners:new Set(),screenshotPumpRunning:false};sessions.set(id,session);
+  const session:BrowserSession={id,browser,context,page,events:[],width:size.width,height:size.height,closed:false,headless,sticky:new Map(),navigationVersion:0,engine,profile,frameListeners:new Set(),screenshotPumpRunning:false};sessions.set(id,session);
   await page.exposeBinding('__animatorEmit',(_source,payload:unknown)=>{if(payload&&typeof payload==='object')pushEvent(session,payload as BrowserEvent);});
   const forwarder=`(()=>{if(window.__ANIMATOR_BROWSER_FORWARDER__)return;window.__ANIMATOR_BROWSER_FORWARDER__=true;const nativePost=window.postMessage.bind(window);window.postMessage=function(value,...args){if(value&&value.source==='animator-preview'&&typeof window.__animatorEmit==='function'){try{void window.__animatorEmit(value);}catch{}}return nativePost(value,...args);};})();`;
   const runtimeBundle=forwarder+gateRuntimeSource+runtimeSource+recordResumeRuntimeSource+seekRuntimeSource+mutationRuntimeSource+auxiliaryRuntimeSource;
@@ -69,8 +69,8 @@ export async function openBrowserSession(input:string,options:{width?:number;hei
     const version=++session.navigationVersion;void reapplySticky(session,version);
   });
   page.on('close',()=>{session.closed=true;void stopFrameSource(session);});
-  try{await page.goto(url.href,{waitUntil:'domcontentloaded',timeout:30000});await forceRuntimeScan(session);}catch(error){pushEvent(session,{source:'animator-preview',type:'DIAGNOSTIC',level:'warn',message:error instanceof Error?error.message:String(error)});}
-  return{id,url:page.url()||url.href,title:await safeTitle(page),engine,profile,width:session.width,height:session.height};
+  try{await page.goto(url.href,{waitUntil:'domcontentloaded',timeout:30000});await forceRuntimeScan(session);if(!headless)await page.bringToFront();}catch(error){pushEvent(session,{source:'animator-preview',type:'DIAGNOSTIC',level:'warn',message:error instanceof Error?error.message:String(error)});}
+  return{id,url:page.url()||url.href,title:await safeTitle(page),engine,profile,width:session.width,height:session.height,external:!headless};
 }
 
 export function getBrowserSession(id:string):BrowserSession|undefined{return sessions.get(id);}
@@ -81,7 +81,7 @@ export async function subscribeBrowserFrames(id:string,listener:FrameListener):P
   let active=true;return()=>{if(!active)return;active=false;session.frameListeners.delete(listener);if(session.frameListeners.size===0)void stopFrameSource(session);};
 }
 export function drainBrowserEvents(id:string):BrowserEvent[]{const session=requireSession(id),events=session.events.splice(0,session.events.length);return events;}
-export async function browserState(id:string):Promise<{url:string;title:string;width:number;height:number;engine:BrowserEngine;profile:BrowserProfile}>{const session=requireSession(id);return{url:session.page.url(),title:await safeTitle(session.page),width:session.width,height:session.height,engine:session.engine,profile:session.profile};}
+export async function browserState(id:string):Promise<{url:string;title:string;width:number;height:number;engine:BrowserEngine;profile:BrowserProfile;external:boolean}>{const session=requireSession(id);return{url:session.page.url(),title:await safeTitle(session.page),width:session.width,height:session.height,engine:session.engine,profile:session.profile,external:!session.headless};}
 export async function sendBrowserCommand(id:string,command:BrowserCommand):Promise<void>{const session=requireSession(id);rememberSticky(session,command);await applyBrowserCommand(session,command);}
 export async function browserInput(id:string,input:Record<string,unknown>):Promise<void>{const session=requireSession(id);await applyBrowserInput(session,input);}
 export async function closeBrowserSession(id:string):Promise<void>{const session=sessions.get(id);if(!session)return;sessions.delete(id);session.closed=true;await stopFrameSource(session);try{await session.context.close();}catch{}try{await session.browser.close();}catch{}}
@@ -186,6 +186,7 @@ function mobileUserAgent(engine:BrowserEngine):string{
   if(engine==='webkit')return'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
   return'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36';
 }
+function shouldRunHeadless():boolean{return process.env.ANIMATOR_BROWSER_HEADLESS==='1'||process.env.CI==='true';}
 function deferRuntimeUntilDocumentRoot(source:string):string{return`(()=>{let booted=false;const boot=()=>{if(booted||!document.documentElement)return false;booted=true;${source};return true;};if(boot())return;const observer=new MutationObserver(()=>{if(boot()){observer.disconnect();}});observer.observe(document,{childList:true,subtree:true});addEventListener('DOMContentLoaded',()=>{boot();observer.disconnect();},{once:true});})();`;}
 function parseUrl(input:string):URL{const raw=input.trim();if(!raw)throw new Error('Enter a web URL');const value=/^https?:\/\//i.test(raw)?raw:'https://'+raw,url=new URL(value);if(!['http:','https:'].includes(url.protocol))throw new Error('Only http and https URLs are supported');return url;}
 function number(value:unknown):number{const parsed=Number(value);return Number.isFinite(parsed)?parsed:0;}
