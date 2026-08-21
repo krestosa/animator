@@ -53,6 +53,7 @@ export type EditorCommand =
  | {source:'animator-editor'; type:'SET_SOLO_ANIMATION'; id:string; elementId:string; anchorTime:number}
  | {source:'animator-editor'; type:'CLEAR_SOLO_ANIMATION'}
  | {source:'animator-editor'; type:'SET_FOCUS_ANIMATION'; id:string; enabled:boolean}
+ | {source:'animator-editor'; type:'SET_MAGNIFY_ANIMATION'; id:string; enabled:boolean}
  | {source:'animator-editor'; type:'APPLY_OVERRIDE'; animationId:string; duration?:number | undefined; delay?:number | undefined; easing?:string | undefined; keyframes?:Array<Record<string, string | number | null>> | undefined}
  | {source:'animator-editor'; type:'CREATE_ANIMATION'; elementId:string; keyframes:Array<Record<string,string|number|null>>; duration:number; delay?:number | undefined; easing:string; iterations?:number | undefined; direction?:string | undefined; fill?:string | undefined}
  | {source:'animator-editor'; type:'CLEAR_OVERRIDES'};
