@@ -14,10 +14,13 @@ describe('preview runtime',()=>{
     expect(()=>new Function(clockWorkerSource)).not.toThrow();
   });
 
-  it('keeps passive instrumentation for DOM diagnostics',()=>{
-    expect(runtimeSource).toContain('replayAttributes');
-    expect(runtimeSource).toContain('replayNodes');
+  it('keeps the discovery runtime passive while the timeline owns playback',()=>{
     expect(runtimeSource).toContain('MutationObserver');
+    expect(runtimeSource).toContain('externalControl');
+    expect(runtimeSource).toContain("message.source!=='animator-timeline'");
+    expect(runtimeSource).not.toContain('replayAttributes');
+    expect(runtimeSource).not.toContain('replayNodes');
+    expect(runtimeSource).not.toContain('masterTime');
   });
 
   it('uses a worker-backed dedicated timeline with exact frame stepping',()=>{
