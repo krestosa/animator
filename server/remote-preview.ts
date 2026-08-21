@@ -24,19 +24,23 @@ function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin
   let colorScheme:PreviewColorScheme='auto';
   return http.createServer(async(req,res)=>{
     if(serveRuntime(req,res))return;
+    const controller=new AbortController();
+    const abortUpstream=()=>{if(!res.writableEnded)controller.abort();};
+    req.once('aborted',abortUpstream);res.once('close',abortUpstream);
     try{
       const reset=stripPreviewThemeReset(req.url??'/'),stripped=stripPreviewColorScheme(reset.path),documentRequest=isDocumentRequest(req),explicit:PreviewColorScheme|undefined=reset.reset?'auto':stripped.mode,requestScheme=resolvePreviewColorScheme(explicit,stringHeader(req.headers.referer),documentRequest,colorScheme);if(documentRequest)colorScheme=requestScheme;
       const local=new URL(stripped.path,'http://preview.local'),target=new URL(local.pathname+local.search,mutable.remoteOrigin+'/'),headers=new Headers();
       for(const [name,value] of Object.entries(req.headers)){if(value==null||['host','content-length','accept-encoding','origin','referer','sec-ch-prefers-color-scheme'].includes(name.toLowerCase()))continue;headers.set(name,Array.isArray(value)?value.join(', '):value);}
       headers.set('accept-encoding','identity');headers.set('origin',mutable.remoteOrigin);headers.set('referer',target.href);if(requestScheme==='light'||requestScheme==='dark')headers.set('sec-ch-prefers-color-scheme',requestScheme);
       const rawBody=req.method==='GET'||req.method==='HEAD'?undefined:await readBody(req),body=rawBody?rawBody.buffer.slice(rawBody.byteOffset,rawBody.byteOffset+rawBody.byteLength) as ArrayBuffer:undefined;
-      const upstream=await fetch(target,{method:req.method??'GET',headers,body,redirect:'manual'}),responseHeaders=proxyHeaders(upstream.headers),location=upstream.headers.get('location');
+      const upstream=await fetch(target,{method:req.method??'GET',headers,body,redirect:'manual',signal:controller.signal}),responseHeaders=proxyHeaders(upstream.headers),location=upstream.headers.get('location');
       if(location&&upstream.status>=300&&upstream.status<400){const redirect=mapRemoteRedirect(location,target,localOrigin());mutable.remoteOrigin=redirect.remote.origin;responseHeaders.location=appendTheme(redirect.local,requestScheme);res.writeHead(upstream.status,responseHeaders);res.end();return;}
       const finalUrl=new URL(upstream.url||target.href);if(upstream.headers.get('content-type')?.includes('text/html'))mutable.remoteOrigin=finalUrl.origin;
-      const type=String(upstream.headers.get('content-type')??'application/octet-stream'),textual=/text\/html|text\/css|javascript|ecmascript|application\/json|image\/svg\+xml/.test(type);if(!textual){const buffer=Buffer.from(await upstream.arrayBuffer());res.writeHead(upstream.status,responseHeaders);res.end(buffer);return;}
+      const type=String(upstream.headers.get('content-type')??'application/octet-stream'),textual=/text\/html|text\/css|javascript|ecmascript|application\/json|image\/svg\+xml/.test(type);if(!textual){const buffer=Buffer.from(await upstream.arrayBuffer());if(!res.writableEnded){res.writeHead(upstream.status,responseHeaders);res.end(buffer);}return;}
       let text=await upstream.text();const localBase=localOrigin();if(type.includes('text/html')){text=rewriteSameOrigin(text,finalUrl.origin,localBase).replace(/\s+integrity=(['"])[\s\S]*?\1/gi,'');text=injectHtml(text,requestScheme);}else if(type.includes('text/css'))text=rewriteColorSchemeCss(rewriteSameOrigin(text,finalUrl.origin,localBase),requestScheme);else if(type.includes('javascript')||type.includes('ecmascript')||type.includes('json')||type.includes('svg'))text=rewriteSameOrigin(text,finalUrl.origin,localBase);
-      const output=Buffer.from(text);responseHeaders['content-length']=String(output.length);res.writeHead(upstream.status,responseHeaders);res.end(output);
-    }catch(error){sendText(res,502,error instanceof Error?`Remote preview failed: ${error.message}`:'Remote preview failed');}
+      const output=Buffer.from(text);responseHeaders['content-length']=String(output.length);if(!res.writableEnded){res.writeHead(upstream.status,responseHeaders);res.end(output);}
+    }catch(error){if(!controller.signal.aborted&&!res.writableEnded)sendText(res,502,error instanceof Error?`Remote preview failed: ${error.message}`:'Remote preview failed');}
+    finally{req.off('aborted',abortUpstream);res.off('close',abortUpstream);}
   });
 }
 function proxyHeaders(headers:Headers):Record<string,string>{const output:Record<string,string>={};headers.forEach((value,name)=>{if(!blockedResponseHeaders.has(name.toLowerCase())&&name.toLowerCase()!=='location')output[name]=value;});output['cache-control']='no-store';output['access-control-allow-origin']='*';return output;}
