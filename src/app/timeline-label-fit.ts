@@ -1,10 +1,13 @@
+import { store } from '../state/store';
+
 export function mountTimelineLabelFit(root:HTMLElement):()=>void{
-  let raf=0,stableWidth=260;
+  let raf=0,stableWidth=260,lastProjectContext=projectContext();
   const viewport=root.querySelector<HTMLElement>('[data-timeline-v2]');
   if(!viewport)return()=>{};
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(measure);};
   const measure=():void=>{
     raf=0;
+    const context=projectContext();if(context!==lastProjectContext){lastProjectContext=context;stableWidth=260;}
     let desired=260,seen=0;
     for(const label of viewport.querySelectorAll<HTMLElement>('.v2GroupRow .v2Label,.v2InstanceRow .v2Label')){
       if(seen++>500)break;
@@ -42,6 +45,8 @@ export function mountTimelineLabelFit(root:HTMLElement):()=>void{
     const title=expanded?'Collapse details':'Expand full label';if(toggle.title!==title)toggle.title=title;
   };
   const mutation=new MutationObserver(schedule);mutation.observe(viewport,{subtree:true,childList:true});
-  const resize=new ResizeObserver(schedule);resize.observe(viewport);schedule();
-  return()=>{if(raf)cancelAnimationFrame(raf);mutation.disconnect();resize.disconnect();};
+  const resize=new ResizeObserver(schedule);resize.observe(viewport);const unsubscribe=store.subscribe(schedule);schedule();
+  return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);mutation.disconnect();resize.disconnect();};
+
+  function projectContext():string{const project=store.get().project;return project?`${project.id}:${project.selectedEntry}`:'';}
 }
