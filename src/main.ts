@@ -21,11 +21,14 @@ import { mountRemoteOpen } from './app/remote-open';
 import { mountTimelineTools } from './app/timeline-tools';
 import { mountLoadTimeline } from './app/load-timeline';
 import { mountDomLoadTree } from './app/dom-load-tree';
+import { installPreviewNavigationGate, mountRecordGate } from './app/record-gate';
 
 const root = document.querySelector<HTMLElement>('#root');
 if (!root) throw new Error('Animator root element not found');
 
+const cleanupNavigationGate=installPreviewNavigationGate();
 const cleanupApp = mountApp(root);
+const cleanupRecordGate = mountRecordGate(root);
 const cleanupExtras = mountEditorExtras(root);
 const cleanupPolish = mountUiPolish(root);
 const cleanupTimeline = mountTimelineV2(root);
@@ -39,6 +42,6 @@ const cleanupPreviewCamera = mountPreviewCamera(root);
 const cleanupPreviewTheme = mountPreviewTheme(root);
 const cleanupLoadTimeline = mountLoadTimeline(root);
 const cleanupDomLoadTree = mountDomLoadTree(root);
-const cleanup = (): void => { cleanupDomLoadTree(); cleanupLoadTimeline(); cleanupPreviewTheme(); cleanupPreviewCamera(); cleanupTimelineTools(); cleanupRemoteOpen(); cleanupMotionCatalog(); cleanupPreviewEditor(); cleanupPreviewOrigin(); cleanupTimelineLabels(); cleanupTimeline(); cleanupPolish(); cleanupExtras(); cleanupApp(); };
+const cleanup = (): void => { cleanupDomLoadTree(); cleanupLoadTimeline(); cleanupPreviewTheme(); cleanupPreviewCamera(); cleanupTimelineTools(); cleanupRemoteOpen(); cleanupMotionCatalog(); cleanupPreviewEditor(); cleanupPreviewOrigin(); cleanupTimelineLabels(); cleanupTimeline(); cleanupPolish(); cleanupExtras(); cleanupRecordGate(); cleanupApp(); cleanupNavigationGate(); };
 
 if (import.meta.hot) import.meta.hot.dispose(cleanup);
