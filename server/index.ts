@@ -10,6 +10,7 @@ import { runtimeSource } from './runtime.js';
 import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
 import { mutationRuntimeSource } from './mutation-runtime.js';
+import { clockWorkerSource } from './clock-worker.js';
 import { ensurePreviewOrigin } from './preview-host.js';
 import { applyCssAnimationEdit, previewCssAnimationEdit, writeOverrides, type CssAnimationEdit } from './export.js';
 import { FolderSelectionCancelled, pickProjectFolder } from './folder-dialog.js';
@@ -29,6 +30,7 @@ app.get('/__animator/runtime.js',(_req,res)=>res.type('application/javascript').
 app.get('/__animator/aux-runtime.js',(_req,res)=>res.type('application/javascript').send(auxiliaryRuntimeSource));
 app.get('/__animator/seek-runtime.js',(_req,res)=>res.type('application/javascript').send(seekRuntimeSource));
 app.get('/__animator/mutation-runtime.js',(_req,res)=>res.type('application/javascript').send(mutationRuntimeSource));
+app.get('/__animator/clock-worker.js',(_req,res)=>res.type('application/javascript').send(clockWorkerSource));
 
 app.get('/preview/:id/*path',(req,res,next)=>serveLegacyPreview(req.params.id,String(req.params.path||''),res,next));
 app.get('/preview/:id',(req,res,next)=>{const p=getProject(req.params.id);if(!p)return res.status(404).send('Project not loaded');serveLegacyPreview(req.params.id,p.selectedEntry,res,next);});
