@@ -33,13 +33,15 @@ export function connectPreview(iframe:HTMLIFrameElement|null):()=>void {
     window.addEventListener('message',snapshotHandler);
     const poll=async():Promise<void>=>{
       if(!ownsSession())return;
+      let delay=store.get().recording?120:450;
       try{
         const response=await fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/events`,{cache:'no-store',signal:controller.signal});
         if(!response.ok||!ownsSession())return;
         const values=await response.json() as unknown[];
         if(!ownsSession())return;
+        if(values.length)delay=55;
         for(const value of values){if(!ownsSession())break;if(isPreviewMessage(value))handle(value);}
-      }catch{}finally{if(ownsSession())pollTimer=window.setTimeout(()=>void poll(),45);}
+      }catch{}finally{if(ownsSession())pollTimer=window.setTimeout(()=>void poll(),delay);}
     };
     void poll();return()=>{disposed=true;controller.abort();if(pollTimer)clearTimeout(pollTimer);window.removeEventListener('message',snapshotHandler);};
   }
