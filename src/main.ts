@@ -32,13 +32,13 @@ const cleanupTimeline = mountTimelineV2(root);
 const cleanupTimelineLabels = mountTimelineLabelFit(root);
 const cleanupPreviewOrigin = mountPreviewOrigin(root);
 const cleanupPreviewEditor = mountPreviewEditor(root);
-const cleanupPreviewCamera = mountPreviewCamera(root);
-const cleanupPreviewTheme = mountPreviewTheme(root);
 const cleanupMotionCatalog = mountMotionCatalog(root);
 const cleanupRemoteOpen = mountRemoteOpen(root);
 const cleanupTimelineTools = mountTimelineTools(root);
+const cleanupPreviewCamera = mountPreviewCamera(root);
+const cleanupPreviewTheme = mountPreviewTheme(root);
 const cleanupLoadTimeline = mountLoadTimeline(root);
 const cleanupDomLoadTree = mountDomLoadTree(root);
-const cleanup = (): void => { cleanupDomLoadTree(); cleanupLoadTimeline(); cleanupTimelineTools(); cleanupRemoteOpen(); cleanupMotionCatalog(); cleanupPreviewTheme(); cleanupPreviewCamera(); cleanupPreviewEditor(); cleanupPreviewOrigin(); cleanupTimelineLabels(); cleanupTimeline(); cleanupPolish(); cleanupExtras(); cleanupApp(); };
+const cleanup = (): void => { cleanupDomLoadTree(); cleanupLoadTimeline(); cleanupPreviewTheme(); cleanupPreviewCamera(); cleanupTimelineTools(); cleanupRemoteOpen(); cleanupMotionCatalog(); cleanupPreviewEditor(); cleanupPreviewOrigin(); cleanupTimelineLabels(); cleanupTimeline(); cleanupPolish(); cleanupExtras(); cleanupApp(); };
 
 if (import.meta.hot) import.meta.hot.dispose(cleanup);
