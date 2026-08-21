@@ -1,5 +1,7 @@
 export type DetectionConfidence = 'exact' | 'runtime-observed' | 'source-correlated' | 'inferred' | 'unknown';
 export type AnimationType = 'css-animation' | 'css-transition' | 'web-animation' | 'javascript' | 'raf' | 'runtime-style' | 'unknown';
+export type BrowserEngine = 'chromium' | 'firefox' | 'webkit';
+export type BrowserProfile = 'desktop' | 'mobile';
 
 export interface SourceReference { file: string; line?: number | undefined; column?: number | undefined; selector?: string | undefined; snippet?: string | undefined; media?: string | undefined; }
 export interface AnimatedProperty { name: string; from?: string | undefined; to?: string | undefined; values?: string[] | undefined; }
@@ -15,7 +17,7 @@ export interface ProjectFile { path: string; name: string; type: 'file' | 'direc
 export interface ProjectDescriptor {
   id: string; root: string; entries: string[]; selectedEntry: string; tree: ProjectFile[];
   previewOrigin?: string | undefined; previewUrl?: string | undefined; sourceUrl?: string | undefined; kind?: 'local' | 'remote' | undefined;
-  browserSessionId?: string | undefined;
+  browserSessionId?: string | undefined; browserEngine?: BrowserEngine | undefined; browserProfile?: BrowserProfile | undefined;
 }
 export interface StaticAnalysis { animations: DetectedAnimation[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
 export type PreviewMessage =
