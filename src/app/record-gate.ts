@@ -29,9 +29,16 @@ export function installPreviewNavigationGate():()=>void{
 export function mountRecordGate(root:HTMLElement):()=>void{
   let lastProjectId=store.get().project?.id;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
+  const projectPreviewUrl=():string|undefined=>{
+    const project=store.get().project;if(!project)return undefined;
+    if(project.previewUrl)return project.previewUrl;
+    if(!project.previewOrigin)return undefined;
+    const entry=project.selectedEntry.split('/').map(encodeURIComponent).join('/');
+    return `${project.previewOrigin.replace(/\/$/,'')}/${entry}`;
+  };
   const releasePendingPreview=():void=>{
     const preview=frame();if(!preview||!nativeSetSrc)return;
-    const pending=pendingPreviewUrls.get(preview)??preview.dataset.previewOrigin;
+    const pending=projectPreviewUrl()??preview.dataset.previewOrigin??pendingPreviewUrls.get(preview);
     if(!pending||pending==='about:blank')return;
     pendingPreviewUrls.delete(preview);preview.removeAttribute('data-record-blocked');nativeSetSrc.call(preview,pending);
   };
