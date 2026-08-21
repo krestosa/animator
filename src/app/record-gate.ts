@@ -31,7 +31,17 @@ export function mountRecordGate(root:HTMLElement):()=>void{
     if(detail.requestId&&detail.requestId!==pendingId)return;
     if(detail.enabled!==desired){transmit();return;}pendingId='';stopRetry();if(store.get().recording!==detail.enabled)store.set({recording:detail.enabled});if(detail.enabled)releasePendingPreview();
   };
-  const onFrameLoad=():void=>{const preview=frame();if(!preview)return;const src=preview.getAttribute('src')??'';if(src&&src!=='about:blank')armedPreviewFrames.add(preview);const blocked=preview.dataset.recordBlocked==='true'||src==='about:blank';if(blocked&&!store.get().recording)return;if(pendingId)transmit();else if(store.get().project&&!store.get().project?.browserSessionId)requestState(store.get().recording);};
+  const onFrameLoad=():void=>{
+    const preview=frame();if(!preview)return;
+    const src=preview.getAttribute('src')??'',desiredUrl=preview.dataset.previewOrigin;
+    const currentUrl=src&&src!=='about:blank'?new URL(src,location.href).toString():'';
+    const definitive=!!desiredUrl&&currentUrl===desiredUrl;
+    if(definitive)armedPreviewFrames.add(preview);
+    const blocked=preview.dataset.recordBlocked==='true'||src==='about:blank';
+    if(blocked&&!store.get().recording)return;
+    if(!definitive)return;
+    if(pendingId)transmit();else if(store.get().project&&!store.get().project?.browserSessionId)requestState(store.get().recording);
+  };
   const bindFrame=():void=>{const next=frame();if(next===currentFrame)return;currentFrame?.removeEventListener('load',onFrameLoad);currentFrame=next;currentFrame?.addEventListener('load',onFrameLoad);};
   const click=(event:MouseEvent):void=>{const button=(event.target as Element|null)?.closest<HTMLElement>('[data-action="record"]');if(!button)return;event.preventDefault();event.stopImmediatePropagation();const project=store.get().project;if(!project){store.set({recording:!store.get().recording});desired=store.get().recording;return;}requestState(!store.get().recording);};
   const changed=():void=>{bindFrame();const projectId=store.get().project?.id;if(projectId===lastProjectId)return;lastProjectId=projectId;desired=store.get().recording;if(desired)queueMicrotask(releasePendingPreview);if(projectId&&store.get().project?.browserSessionId)requestState(desired);};
