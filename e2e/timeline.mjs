@@ -81,11 +81,12 @@ try{
     const frameDebug=await frame.evaluate(id=>{const api=window.__ANIMATOR_MUTATION_REPLAY__;const track=api?.tracks?.get(id);return track?{start:track.start,last:track.last,count:track.events.length,values:[...new Set(track.events.map(event=>event.value))].slice(0,12)}:null;},jsId);
     assert(frameDebug&&frameDebug.count>5&&frameDebug.values.length>3,`javascript frame snapshots are not distinct: ${JSON.stringify(frameDebug)}`);
     const jsMotionBox=await jsGroup.locator('.v2Motion').boundingBox();assert(jsMotionBox,'javascript motion timeline row has no box');
-    await seekOn(jsMotionBox,jsStart+20);const jsEarly=await style('#box');
-    await seekOn(jsMotionBox,jsStart+jsDuration*.75);const jsLate=await style('#box');
-    await seekOn(jsMotionBox,jsStart+20);const jsBack=await style('#box');
-    assert.notEqual(jsEarly.transform,jsLate.transform,`javascript rAF motion did not advance under timeline control; captured ${JSON.stringify(frameDebug)}`);
-    assert.equal(jsBack.transform,jsEarly.transform,'javascript rAF motion did not reverse to the captured frame');
+    const jsState=async()=>frame.evaluate(id=>{const track=window.__ANIMATOR_MUTATION_REPLAY__?.tracks?.get(id);if(!track)return null;return{inline:track.el.getAttribute('style'),computed:getComputedStyle(track.el).transform,mirrorTime:Number(track.mirror?.currentTime),mirrorState:track.mirror?.playState,mirrorFrames:track.mirror?.effect?.getKeyframes?.().slice(0,3),animations:track.el.getAnimations().map(animation=>({state:animation.playState,currentTime:Number(animation.currentTime),mutation:!!animation.__animatorMutationMirror,animator:!!animation.__animatorMirror}))};},jsId);
+    await seekOn(jsMotionBox,jsStart+20);const reachedEarly=await playhead(),jsEarly=await style('#box'),jsEarlyState=await jsState();assert(Math.abs(reachedEarly-(jsStart+20))<80,`timeline missed JS early time: wanted ${jsStart+20}, got ${reachedEarly}; state=${JSON.stringify(jsEarlyState)}`);
+    await seekOn(jsMotionBox,jsStart+jsDuration*.75);const reachedLate=await playhead(),jsLate=await style('#box'),jsLateState=await jsState();assert(Math.abs(reachedLate-(jsStart+jsDuration*.75))<80,`timeline missed JS late time: wanted ${jsStart+jsDuration*.75}, got ${reachedLate}; state=${JSON.stringify(jsLateState)}`);
+    await seekOn(jsMotionBox,jsStart+20);const jsBack=await style('#box'),jsBackState=await jsState();
+    assert.notEqual(jsEarly.transform,jsLate.transform,`javascript rAF motion did not advance; capture=${JSON.stringify(frameDebug)} early=${JSON.stringify(jsEarlyState)} late=${JSON.stringify(jsLateState)} back=${JSON.stringify(jsBackState)}`);
+    assert.equal(jsBack.transform,jsEarly.transform,`javascript rAF motion did not reverse; early=${JSON.stringify(jsEarlyState)} back=${JSON.stringify(jsBackState)}`);
     const htmlAfter=await frame.locator('body').evaluate(element=>({children:element.children.length,className:element.className}));assert.deepEqual(htmlAfter,htmlBefore,'timeline replay changed structural HTML state');
   } finally { await browser.close(); }
 } finally {server.kill('SIGTERM');}
