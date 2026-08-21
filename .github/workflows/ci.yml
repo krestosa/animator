@@ -31,6 +31,8 @@ jobs:
       - name: Build
         run: npm run build
       - name: Install Chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: .animator-browsers
         run: npx playwright install --with-deps chromium
       - name: Timeline E2E
         run: node e2e/timeline.mjs
