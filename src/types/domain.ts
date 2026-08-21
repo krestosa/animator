@@ -38,6 +38,7 @@ export type EditorCommand =
  | {source:'animator-editor'; type:'PLAY_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'PAUSE_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'RESTART_ANIMATION'; id:string}
+ | {source:'animator-editor'; type:'HIGHLIGHT_ANIMATION'; id:string}
  | {source:'animator-editor'; type:'APPLY_OVERRIDE'; animationId:string; duration?:number | undefined; delay?:number | undefined; easing?:string | undefined; keyframes?:Array<Record<string, string | number | null>> | undefined}
  | {source:'animator-editor'; type:'CREATE_ANIMATION'; elementId:string; keyframes:Array<Record<string,string|number|null>>; duration:number; delay?:number | undefined; easing:string; iterations?:number | undefined; direction?:string | undefined; fill?:string | undefined}
  | {source:'animator-editor'; type:'CLEAR_OVERRIDES'};
