@@ -29,6 +29,8 @@ export function connectPreview(iframe:HTMLIFrameElement|null):()=>void {
   if(browserSessionId){
     const controller=new AbortController();
     const ownsSession=():boolean=>!disposed&&store.get().project?.browserSessionId===browserSessionId;
+    const snapshotHandler=(event:MessageEvent<unknown>):void=>{const frame=document.querySelector<HTMLIFrameElement>('[data-browser-snapshot-frame]');if(event.source!==frame?.contentWindow||!isPreviewMessage(event.data))return;handle(event.data);};
+    window.addEventListener('message',snapshotHandler);
     const poll=async():Promise<void>=>{
       if(!ownsSession())return;
       try{
@@ -39,7 +41,7 @@ export function connectPreview(iframe:HTMLIFrameElement|null):()=>void {
         for(const value of values){if(!ownsSession())break;if(isPreviewMessage(value))handle(value);}
       }catch{}finally{if(ownsSession())pollTimer=window.setTimeout(()=>void poll(),45);}
     };
-    void poll();return()=>{disposed=true;controller.abort();if(pollTimer)clearTimeout(pollTimer);};
+    void poll();return()=>{disposed=true;controller.abort();if(pollTimer)clearTimeout(pollTimer);window.removeEventListener('message',snapshotHandler);};
   }
   if(!iframe)return()=>{disposed=true;};
   const handler=(event:MessageEvent<unknown>)=>{if(event.source!==iframe.contentWindow||!isPreviewMessage(event.data))return;handle(event.data);};
@@ -47,17 +49,25 @@ export function connectPreview(iframe:HTMLIFrameElement|null):()=>void {
 }
 type EditorCommandInput=EditorCommand extends infer Command?Command extends{source:'animator-editor'}?Omit<Command,'source'>:never:never;
 const timelineCommands=new Set<string>(['SET_ANIMATION_TIME','SCRUB_TIMELINE','SEEK_FRAME','STEP_FRAME','PLAY_ALL','PAUSE_ALL','RESTART_ALL','RELEASE_TIMELINE','SET_LOOP_ALL','SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION','APPLY_OVERRIDE','HIGHLIGHT_ANIMATION','SET_SOLO_ANIMATION','CLEAR_SOLO_ANIMATION','SET_FOCUS_ANIMATION','SET_MAGNIFY_ANIMATION']);
+const stickyBrowserCommands=new Set<string>(['SET_COLOR_SCHEME','SET_REDUCED_MOTION']);
 export function sendCommand(iframe:HTMLIFrameElement|null,command:EditorCommandInput):void{
-  const browserSessionId=store.get().project?.browserSessionId;
+  const browserSessionId=store.get().project?.browserSessionId,replayFrame=document.querySelector<HTMLIFrameElement>('[data-browser-snapshot-frame]');
+  if(browserSessionId&&!store.get().recording&&command.type!=='SET_RECORDING'&&replayFrame?.contentWindow){
+    postFrameCommand(replayFrame,command);if(stickyBrowserCommands.has(command.type))void postBrowserCommand(browserSessionId,command);return;
+  }
   if(browserSessionId){
     const requestedSessionId=browserSessionId;
-    void fetch(`/api/browser-sessions/${encodeURIComponent(requestedSessionId)}/command`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(command)}).then(response=>{
+    void postBrowserCommand(requestedSessionId,command).then(response=>{
       if(store.get().project?.browserSessionId!==requestedSessionId||!response.ok||command.type!=='SET_RECORDING')return;
       const detail:Extract<PreviewMessage,{type:'RECORDING_STATE'}>={source:'animator-preview',type:'RECORDING_STATE',enabled:command.enabled,requestId:command.requestId};
       window.dispatchEvent(new CustomEvent(RECORDING_STATE_EVENT,{detail}));
     }).catch(()=>{});return;
   }
-  const target=iframe?.contentWindow;if(!target)return;
+  if(iframe)postFrameCommand(iframe,command);
+}
+function postBrowserCommand(sessionId:string,command:EditorCommandInput):Promise<Response>{return fetch(`/api/browser-sessions/${encodeURIComponent(sessionId)}/command`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(command)});}
+function postFrameCommand(iframe:HTMLIFrameElement,command:EditorCommandInput):void{
+  const target=iframe.contentWindow;if(!target)return;
   if(command.type==='SET_RECORDING'){const requestedAt=Date.now();if(command.enabled)target.postMessage({source:'animator-timeline',type:'RELEASE_TIMELINE'},'*');target.postMessage({source:'animator-editor',...command,requestedAt},'*');return;}
   if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){target.postMessage({source:'animator-timeline',...command},'*');target.postMessage({source:'animator-editor',...command},'*');return;}
   const source=timelineCommands.has(command.type)?'animator-timeline':'animator-editor';target.postMessage({source,...command},'*');
