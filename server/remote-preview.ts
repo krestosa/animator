@@ -66,7 +66,8 @@ function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin
       headers.set('accept-encoding','identity');
       headers.set('origin',mutable.remoteOrigin);
       headers.set('referer',source.href);
-      const body=req.method==='GET'||req.method==='HEAD'?undefined:await readBody(req);
+      const rawBody=req.method==='GET'||req.method==='HEAD'?undefined:await readBody(req);
+      const body=rawBody?rawBody.buffer.slice(rawBody.byteOffset,rawBody.byteOffset+rawBody.byteLength) as ArrayBuffer:undefined;
       const upstream=await fetch(target,{method:req.method??'GET',headers,body,redirect:'follow'});
       const finalUrl=new URL(upstream.url||target.href);if(upstream.headers.get('content-type')?.includes('text/html'))mutable.remoteOrigin=finalUrl.origin;
       const responseHeaders:Record<string,string>={};
