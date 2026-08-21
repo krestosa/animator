@@ -38,7 +38,10 @@ export function mountRecordGate(root:HTMLElement):()=>void{
   };
   const releasePendingPreview=():void=>{
     const preview=frame();if(!preview||!nativeSetSrc)return;
-    const pending=projectPreviewUrl()??preview.dataset.previewOrigin??pendingPreviewUrls.get(preview);
+    const explicitPending=pendingPreviewUrls.get(preview),blocked=preview.dataset.recordBlocked==='true'||preview.getAttribute('src')==='about:blank';
+    // REC must never reload an already-live document. Navigation is released only when STOP actually blocked one.
+    if(!blocked&&!explicitPending)return;
+    const pending=projectPreviewUrl()??preview.dataset.previewOrigin??explicitPending;
     if(!pending||pending==='about:blank')return;
     pendingPreviewUrls.delete(preview);preview.removeAttribute('data-record-blocked');nativeSetSrc.call(preview,pending);
   };
