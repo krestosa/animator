@@ -3,6 +3,7 @@ import { store } from '../state/store';
 import type { PreviewMessage } from '../types/domain';
 
 const pendingPreviewUrls=new WeakMap<HTMLIFrameElement,string>();
+const armedPreviewFrames=new WeakSet<HTMLIFrameElement>();
 let restoreSrcDescriptor:(()=>void)|undefined;
 let nativeSetSrc:((this:HTMLIFrameElement,value:string)=>void)|undefined;
 
@@ -10,7 +11,7 @@ export function installPreviewNavigationGate():()=>void{
   if(restoreSrcDescriptor)return restoreSrcDescriptor;
   const descriptor=Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype,'src');if(!descriptor?.get||!descriptor.set)return()=>{};
   const nativeGet=descriptor.get,nativeSet=descriptor.set;nativeSetSrc=nativeSet;
-  Object.defineProperty(HTMLIFrameElement.prototype,'src',{configurable:descriptor.configurable===true,enumerable:descriptor.enumerable===true,get(){return nativeGet.call(this);},set(value:string){const next=String(value);if(this instanceof HTMLIFrameElement&&this.hasAttribute('data-preview-frame')&&!store.get().recording&&next!=='about:blank'){pendingPreviewUrls.set(this,next);this.dataset.recordBlocked='true';nativeSet.call(this,'about:blank');return;}pendingPreviewUrls.delete(this);this.removeAttribute('data-record-blocked');nativeSet.call(this,next);}});
+  Object.defineProperty(HTMLIFrameElement.prototype,'src',{configurable:descriptor.configurable===true,enumerable:descriptor.enumerable===true,get(){return nativeGet.call(this);},set(value:string){const next=String(value);if(this instanceof HTMLIFrameElement&&this.hasAttribute('data-preview-frame')&&armedPreviewFrames.has(this)&&!store.get().recording&&next!=='about:blank'){pendingPreviewUrls.set(this,next);this.dataset.recordBlocked='true';nativeSet.call(this,'about:blank');return;}pendingPreviewUrls.delete(this);this.removeAttribute('data-record-blocked');nativeSet.call(this,next);}});
   restoreSrcDescriptor=()=>{Object.defineProperty(HTMLIFrameElement.prototype,'src',descriptor);restoreSrcDescriptor=undefined;nativeSetSrc=undefined;};return restoreSrcDescriptor;
 }
 
@@ -30,7 +31,7 @@ export function mountRecordGate(root:HTMLElement):()=>void{
     if(detail.requestId&&detail.requestId!==pendingId)return;
     if(detail.enabled!==desired){transmit();return;}pendingId='';stopRetry();if(store.get().recording!==detail.enabled)store.set({recording:detail.enabled});if(detail.enabled)releasePendingPreview();
   };
-  const onFrameLoad=():void=>{const preview=frame();if(!preview)return;const blocked=preview.dataset.recordBlocked==='true'||preview.getAttribute('src')==='about:blank';if(blocked&&!store.get().recording)return;if(pendingId)transmit();else if(store.get().project&&!store.get().project?.browserSessionId)requestState(store.get().recording);};
+  const onFrameLoad=():void=>{const preview=frame();if(!preview)return;const src=preview.getAttribute('src')??'';if(src&&src!=='about:blank')armedPreviewFrames.add(preview);const blocked=preview.dataset.recordBlocked==='true'||src==='about:blank';if(blocked&&!store.get().recording)return;if(pendingId)transmit();else if(store.get().project&&!store.get().project?.browserSessionId)requestState(store.get().recording);};
   const bindFrame=():void=>{const next=frame();if(next===currentFrame)return;currentFrame?.removeEventListener('load',onFrameLoad);currentFrame=next;currentFrame?.addEventListener('load',onFrameLoad);};
   const click=(event:MouseEvent):void=>{const button=(event.target as Element|null)?.closest<HTMLElement>('[data-action="record"]');if(!button)return;event.preventDefault();event.stopImmediatePropagation();const project=store.get().project;if(!project){store.set({recording:!store.get().recording});desired=store.get().recording;return;}requestState(!store.get().recording);};
   const changed=():void=>{bindFrame();const projectId=store.get().project?.id;if(projectId===lastProjectId)return;lastProjectId=projectId;desired=store.get().recording;if(desired)queueMicrotask(releasePendingPreview);if(projectId&&store.get().project?.browserSessionId)requestState(desired);};
