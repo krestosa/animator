@@ -1,3 +1,4 @@
+import html2canvas from 'html2canvas';
 import { store } from '../state/store';
 
 const TOAST_LIFETIME=2100;
@@ -62,25 +63,57 @@ async function captureViewport(root:HTMLElement):Promise<Blob>{
   }
 
   const frame=snapshotFrame??previewFrame;
-  if(!frame?.src)throw new Error('Viewport is not ready');
-  const size=viewportSize(root,browserSurface,frame);
-  const scroll=frameScroll(frame);
-  const response=await fetch('/api/viewport-screenshot',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:frame.src,width:size.width,height:size.height,scrollX:scroll.x,scrollY:scroll.y})});
-  if(!response.ok)throw new Error(await response.text()||'Could not capture viewport');
-  return response.blob();
+  if(!frame?.contentWindow)throw new Error('Viewport is not ready');
+  const document=currentFrameDocument(frame);
+  if(document)return captureDocument(document);
+  return captureFrameRuntime(frame);
 }
 
-function viewportSize(root:HTMLElement,browserSurface:HTMLElement|null,frame:HTMLIFrameElement):{width:number;height:number}{
-  const browserWidth=Number(browserSurface?.dataset.browserWidth),browserHeight=Number(browserSurface?.dataset.browserHeight);
-  if(browserWidth>0&&browserHeight>0)return{width:browserWidth,height:browserHeight};
-  const device=root.querySelector<HTMLElement>('[data-device]');
-  const width=Math.round(Number.parseFloat(device?.style.width||'')||frame.clientWidth||1100);
-  const height=Math.round(Number.parseFloat(device?.style.height||'')||frame.clientHeight||700);
-  return{width:Math.max(1,width),height:Math.max(1,height)};
+function currentFrameDocument(frame:HTMLIFrameElement):Document|null{
+  try{return frame.contentDocument?.documentElement?frame.contentDocument:null;}catch{return null;}
 }
 
-function frameScroll(frame:HTMLIFrameElement):{x:number;y:number}{
-  try{return{x:Math.max(0,Math.round(frame.contentWindow?.scrollX??0)),y:Math.max(0,Math.round(frame.contentWindow?.scrollY??0))};}catch{return{x:0,y:0};}
+async function captureDocument(document:Document):Promise<Blob>{
+  const view=document.defaultView;
+  if(!view||!document.documentElement)throw new Error('Viewport document is not ready');
+  const running:Animation[]=[];
+  for(const animation of document.getAnimations?.()??[]){
+    if(animation.playState==='running'||animation.playState==='pending'){
+      running.push(animation);
+      try{animation.pause();}catch{}
+    }
+  }
+  try{
+    await Promise.resolve();
+    const canvas=await html2canvas(document.documentElement,{backgroundColor:null,logging:false,useCORS:true,allowTaint:false,scale:1,width:view.innerWidth,height:view.innerHeight,x:view.scrollX,y:view.scrollY,scrollX:view.scrollX,scrollY:view.scrollY,windowWidth:view.innerWidth,windowHeight:view.innerHeight,removeContainer:true});
+    return await canvasBlob(canvas);
+  } finally {
+    for(const animation of running)try{animation.play();}catch{}
+  }
 }
 
+function captureFrameRuntime(frame:HTMLIFrameElement):Promise<Blob>{
+  const target=frame.contentWindow;
+  if(!target)return Promise.reject(new Error('Viewport is not ready'));
+  const requestId=`viewport-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const finish=(error?:Error,blob?:Blob):void=>{
+      if(settled)return;settled=true;clearTimeout(timer);window.removeEventListener('message',onMessage);if(error)reject(error);else if(blob)resolve(blob);else reject(new Error('Viewport capture failed'));
+    };
+    const onMessage=(event:MessageEvent):void=>{
+      if(event.source!==target)return;
+      const message=event.data as {source?:string;type?:string;requestId?:string;dataUrl?:string;error?:string}|null;
+      if(!message||message.source!=='animator-preview'||message.type!=='VIEWPORT_CAPTURE_RESULT'||message.requestId!==requestId)return;
+      if(message.error){finish(new Error(message.error));return;}
+      if(!message.dataUrl){finish(new Error('Viewport did not return image data'));return;}
+      void fetch(message.dataUrl).then(response=>response.blob()).then(blob=>finish(undefined,blob),error=>finish(error instanceof Error?error:new Error(String(error))));
+    };
+    const timer=window.setTimeout(()=>finish(new Error('Exact viewport capture timed out')),12000);
+    window.addEventListener('message',onMessage);
+    target.postMessage({source:'animator-editor',type:'CAPTURE_VIEWPORT_PNG',requestId},'*');
+  });
+}
+
+function canvasBlob(canvas:HTMLCanvasElement):Promise<Blob>{return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Could not encode viewport PNG')),'image/png'));}
 function escapeHtml(value:string):string{return value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
