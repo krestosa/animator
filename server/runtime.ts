@@ -1,6 +1,6 @@
 export const runtimeSource = String.raw`(()=>{
   if(window.__ANIMATOR_RUNTIME__) return; window.__ANIMATOR_RUNTIME__=true;
-  const SOURCE='animator-preview', ids=new WeakMap(), byId=new Map(), animations=new Map(), animationMeta=new Map(), originals=new Map(), created=new Set(); let seq=0, picker=false, recording=true, hover=null, started=performance.now();
+  const SOURCE='animator-preview', ids=new WeakMap(), byId=new Map(), animations=new Map(), animationMeta=new Map(), originals=new Map(), created=new Set(); let seq=0, picker=false, recording=true, hover=null, started=performance.now(), reducedStyle=null;
   const post=(type,payload={})=>parent.postMessage({source:SOURCE,type,...payload},'*'); const now=()=>performance.now()-started;
   const idFor=(el)=>{let id=ids.get(el);if(!id){id='el-'+(++seq);ids.set(el,id);byId.set(id,el);}return id;};
   const meta=(el)=>{const r=el.getBoundingClientRect();return{id:idFor(el),tag:el.tagName.toLowerCase(),domId:el.id||undefined,classes:[...el.classList],text:(el.textContent||'').trim().slice(0,80)||undefined,rect:{x:r.x,y:r.y,width:r.width,height:r.height},alive:el.isConnected};};
@@ -20,11 +20,13 @@ export const runtimeSource = String.raw`(()=>{
   document.addEventListener('click',e=>{if(!picker||!(e.target instanceof Element))return;e.preventDefault();e.stopPropagation();picker=false;outline.style.display='none';post('SELECT_ELEMENT',{element:meta(e.target)});},true);
 
   const clampLocalTime=(a,globalTime,startTime)=>{let end=Infinity;try{const timing=a.effect?.getComputedTiming?.();const active=Number(timing?.activeDuration);const delay=Number(timing?.delay)||0;if(Number.isFinite(active))end=Math.max(0,delay+active);}catch{}const local=globalTime-startTime;if(local<0)return local;if(Number.isFinite(end))return Math.min(local,end);return local;};
-  const forceVisualSample=()=>{void document.documentElement.getBoundingClientRect();for(const a of animations.values()){const target=a.effect?.target;if(target instanceof Element)void getComputedStyle(target).transform;}};
+  const forceVisualSample=()=>{void document.documentElement.getBoundingClientRect();for(const a of animations.values()){const target=a.effect?.target;if(target instanceof Element){void getComputedStyle(target).transform;void getComputedStyle(target).opacity;}}};
   const scrubAll=(globalTime)=>{for(const [id,a] of animations){const info=animationMeta.get(id);if(!info)continue;try{a.pause();a.currentTime=clampLocalTime(a,globalTime,info.startTime);}catch{}}forceVisualSample();};
   const playAll=()=>{for(const a of animations.values())try{a.play();}catch{}};
   const pauseAll=()=>{for(const a of animations.values())try{a.pause();}catch{}};
   const restartAll=()=>{for(const a of animations.values())try{a.currentTime=0;a.play();}catch{}};
+  const setRateAll=(rate)=>{for(const [id,a] of animations){if(!Number.isFinite(rate)||rate<=0)continue;try{snapshot(id,a);a.playbackRate=rate;}catch{}}};
+  const setReduced=(enabled)=>{if(enabled&&!reducedStyle){reducedStyle=document.createElement('style');reducedStyle.dataset.animatorReducedMotion='';reducedStyle.textContent='*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;transition-delay:0ms!important}';document.head.appendChild(reducedStyle);}else if(!enabled&&reducedStyle){reducedStyle.remove();reducedStyle=null;}post('DIAGNOSTIC',{level:'info',message:enabled?'Reduced-motion emulation enabled':'Reduced-motion emulation disabled'});};
 
   const commands={
     SET_PICKER:m=>{picker=!!m.enabled;outline.style.display='none';},
@@ -34,13 +36,15 @@ export const runtimeSource = String.raw`(()=>{
     PLAY_ALL:()=>playAll(),
     PAUSE_ALL:()=>pauseAll(),
     RESTART_ALL:()=>restartAll(),
+    SET_ALL_PLAYBACK_RATE:m=>setRateAll(Number(m.rate)),
+    SET_REDUCED_MOTION:m=>setReduced(!!m.enabled),
     SET_PLAYBACK_RATE:m=>{const a=animations.get(m.id);if(a&&Number.isFinite(m.rate)&&m.rate>0){snapshot(m.id,a);a.playbackRate=m.rate;reportAnimation(a,'web-animation');}},
     PLAY_ANIMATION:m=>animations.get(m.id)?.play(),
     PAUSE_ANIMATION:m=>animations.get(m.id)?.pause(),
     RESTART_ANIMATION:m=>{const a=animations.get(m.id);if(a){a.currentTime=0;a.play();}},
-    APPLY_OVERRIDE:m=>{const a=animations.get(m.animationId);if(!a)return;snapshot(m.animationId,a);if(a.effect&&m.duration!=null)a.effect.updateTiming({duration:m.duration,easing:m.easing||undefined});if(a.effect&&m.keyframes)a.effect.setKeyframes(m.keyframes);reportAnimation(a,'web-animation');},
-    CREATE_ANIMATION:m=>{const el=byId.get(m.elementId);if(el){const a=el.animate(m.keyframes,{duration:m.duration,easing:m.easing,fill:'both'});const id=a.__animatorId||(a.__animatorId='anim-'+Math.random().toString(36).slice(2));created.add(id);reportAnimation(a,'web-animation','Created animation');}},
-    CLEAR_OVERRIDES:()=>{for(const [id,original] of originals){const a=animations.get(id);if(!a)continue;try{if(a.effect&&original.timing)a.effect.updateTiming(original.timing);if(a.effect&&original.frames)a.effect.setKeyframes(original.frames);a.playbackRate=original.playbackRate;}catch{}}for(const id of created){try{animations.get(id)?.cancel();}catch{}animations.delete(id);animationMeta.delete(id);}originals.clear();created.clear();post('DIAGNOSTIC',{level:'info',message:'Temporary animation overrides cleared'});}
+    APPLY_OVERRIDE:m=>{const a=animations.get(m.animationId);if(!a)return;snapshot(m.animationId,a);if(a.effect){const timing={};if(m.duration!=null)timing.duration=m.duration;if(m.delay!=null)timing.delay=m.delay;if(m.easing)timing.easing=m.easing;if(Object.keys(timing).length)a.effect.updateTiming(timing);}if(a.effect&&m.keyframes)a.effect.setKeyframes(m.keyframes);reportAnimation(a,'web-animation');forceVisualSample();},
+    CREATE_ANIMATION:m=>{const el=byId.get(m.elementId);if(el){const a=el.animate(m.keyframes,{duration:m.duration,delay:m.delay||0,easing:m.easing,iterations:m.iterations||1,direction:m.direction||'normal',fill:m.fill||'both'});const id=a.__animatorId||(a.__animatorId='anim-'+Math.random().toString(36).slice(2));created.add(id);reportAnimation(a,'web-animation','Created animation');}},
+    CLEAR_OVERRIDES:()=>{for(const [id,original] of originals){const a=animations.get(id);if(!a)continue;try{if(a.effect&&original.timing)a.effect.updateTiming(original.timing);if(a.effect&&original.frames)a.effect.setKeyframes(original.frames);a.playbackRate=original.playbackRate;}catch{}}for(const id of created){try{animations.get(id)?.cancel();}catch{}animations.delete(id);animationMeta.delete(id);}originals.clear();created.clear();setReduced(false);post('DIAGNOSTIC',{level:'info',message:'Temporary animation overrides cleared'});}
   };
   addEventListener('message',e=>{const m=e.data;if(!m||m.source!=='animator-editor'||typeof m.type!=='string')return;commands[m.type]?.(m);});
   const discover=()=>post('ELEMENTS',{elements:Array.from(document.querySelectorAll('body *')).slice(0,1200).map(meta)});
