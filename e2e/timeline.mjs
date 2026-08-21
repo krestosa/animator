@@ -39,6 +39,8 @@ try{
     await waitUntil(async()=>Number(await page.locator('[data-dom-count]').textContent()??0)>5,'DOM load tree did not capture parser-built elements');
     await waitUntil(async()=>await page.locator('.v2LoadRow').count()>=2,'loading timeline rows were not rendered');
     assert(await page.locator('.domTreeRow').count()>0,'compact DOM load tree did not render visible rows');
+    const startupGroup=page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).first();await startupGroup.waitFor();
+    await waitUntil(async()=>/3 components/.test(await startupGroup.textContent()??''),'startup capture did not finish the 3 repeat-pop component instances');
 
     await page.keyboard.press('Home');
     await waitUntil(async()=>Number((await page.locator('[data-preview-frame-label]').textContent()??'').match(/Frame\s+(\d+)/)?.[1]??-1)===0,'Home did not enter frame 0 for load replay');
