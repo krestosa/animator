@@ -44,5 +44,7 @@ jobs:
         run: node e2e/browser-preview.mjs
       - name: Control API and CLI E2E
         run: node e2e/control-plane.mjs
+      - name: Viewport screenshot E2E
+        run: node e2e/viewport-screenshot.mjs
       - name: Theme override E2E
         run: node e2e/theme-live.mjs
