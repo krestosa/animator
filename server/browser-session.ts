@@ -10,6 +10,7 @@ import { runtimeSource } from './runtime.js';
 import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
 import { mutationRuntimeSource } from './mutation-runtime.js';
+import { browserSnapshotRuntimeSource } from './browser-snapshot-runtime.js';
 
 export type BrowserEngine='chromium'|'firefox'|'webkit';
 export type BrowserProfile='desktop'|'mobile';
@@ -79,7 +80,7 @@ async function captureBrowserSnapshot(session:BrowserSession):Promise<void>{
     clone.querySelectorAll('script,[data-animator-internal],[data-animator-picker-outline],[data-animator-recorded-viewport],[data-animator-recorded-cursor]').forEach(node=>node.remove());clone.querySelectorAll('meta[http-equiv]').forEach(node=>{if((node.getAttribute('http-equiv')||'').toLowerCase()==='content-security-policy')node.remove();});clone.querySelectorAll('base').forEach(node=>node.remove());
     return{html:'<!doctype html>'+clone.outerHTML,url:location.href,scrollX,scrollY,history:host.__ANIMATOR_VIEW_HISTORY__?.snapshot?.()??[],animations};
   });
-  const base=`<base href="${escapeHtml(payload.url)}">`,freeze='<style data-animator-snapshot-freeze>*,*::before,*::after{animation:none!important;transition:none!important}</style>',seed=`<script>window.__ANIMATOR_VIEW_HISTORY_SEED__=${safeJson(payload.history)};window.__ANIMATOR_SNAPSHOT_STATE__=${safeJson({scrollX:payload.scrollX,scrollY:payload.scrollY})};window.__ANIMATOR_SNAPSHOT_ANIMATIONS__=${safeJson(payload.animations)};</script>`,runtimes='<script src="/__animator/browser-snapshot-runtime.js"></script><script src="/__animator/record-resume-runtime.js"></script><script src="/__animator/seek-runtime.js"></script>';
+  const base=`<base href="${escapeHtml(payload.url)}">`,freeze='<style data-animator-snapshot-freeze>*,*::before,*::after{animation:none!important;transition:none!important}</style>',seed=`<script>window.__ANIMATOR_VIEW_HISTORY_SEED__=${safeJson(payload.history)};window.__ANIMATOR_SNAPSHOT_STATE__=${safeJson({scrollX:payload.scrollX,scrollY:payload.scrollY})};window.__ANIMATOR_SNAPSHOT_ANIMATIONS__=${safeJson(payload.animations)};</script>`,runtimes=inlineScript(browserSnapshotRuntimeSource)+inlineScript(recordResumeRuntimeSource)+inlineScript(seekRuntimeSource);
   let html=payload.html.replace(/<head([^>]*)>/i,match=>match+base+freeze);if(!/<head[\s>]/i.test(html))html=html.replace(/<html([^>]*)>/i,match=>match+'<head>'+base+freeze+'</head>');html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,seed+runtimes+'</body>'):html.replace(/<\/html>/i,seed+runtimes+'</html>');session.snapshotHtml=html;
 }
 async function reapplySticky(session:BrowserSession,version:number):Promise<void>{try{await session.page.waitForLoadState('domcontentloaded',{timeout:5000});}catch{}if(session.closed||version!==session.navigationVersion)return;for(const command of session.sticky.values()){try{await applyBrowserCommand(session,command);}catch{}}await forceRuntimeScan(session);}
@@ -101,6 +102,7 @@ function shouldRunHeadless():boolean{return process.env.ANIMATOR_BROWSER_HEADLES
 function deferRuntimeUntilDocumentRoot(source:string):string{return`(()=>{let booted=false;const boot=()=>{if(booted||!document.documentElement)return false;booted=true;${source};return true;};if(boot())return;const observer=new MutationObserver(()=>{if(boot()){observer.disconnect();}});observer.observe(document,{childList:true,subtree:true});addEventListener('DOMContentLoaded',()=>{boot();observer.disconnect();},{once:true});})();`;}
 function parseUrl(input:string):URL{const raw=input.trim();if(!raw)throw new Error('Enter a web URL');const value=/^https?:\/\//i.test(raw)?raw:'https://'+raw,url=new URL(value);if(!['http:','https:'].includes(url.protocol))throw new Error('Only http and https URLs are supported');return url;}
 function safeJson(value:unknown):string{return JSON.stringify(value).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026');}
+function inlineScript(source:string):string{return`<script>${source.replace(/<\/script/gi,'<\\/script')}</script>`;}
 function escapeHtml(value:string):string{return value.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function clamp(value:number,min:number,max:number):number{return Math.max(min,Math.min(max,Math.round(value||min)));}
 async function safeTitle(page:Page):Promise<string>{try{return await page.title();}catch{return'';}}
