@@ -8,7 +8,7 @@ export const RECORDING_STATE_EVENT='animator:recording-state';
 export function isPreviewMessage(value:unknown): value is PreviewMessage {
   return !!value && typeof value==='object' && (value as {source?:unknown}).source==='animator-preview' && typeof (value as {type?:unknown}).type==='string';
 }
-export function connectPreview(iframe:HTMLIFrameElement):()=>void {
+export function connectPreview(iframe:HTMLIFrameElement|null):()=>void {
   let lastPlayheadStoreSync=0,disposed=false,pollTimer=0;
   const handle=(msg:PreviewMessage):void=>{
     if(msg.type==='ELEMENTS') store.upsertElements(msg.elements);
@@ -30,6 +30,7 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
     const poll=async():Promise<void>=>{if(disposed)return;try{const response=await fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/events`,{cache:'no-store'});if(response.ok){const values=await response.json() as unknown[];for(const value of values)if(isPreviewMessage(value))handle(value);}}catch{}finally{if(!disposed)pollTimer=window.setTimeout(()=>void poll(),45);}};
     void poll();return()=>{disposed=true;if(pollTimer)clearTimeout(pollTimer);};
   }
+  if(!iframe)return()=>{disposed=true;};
   const handler=(event:MessageEvent<unknown>)=>{if(event.source!==iframe.contentWindow||!isPreviewMessage(event.data))return;handle(event.data);};
   window.addEventListener('message',handler);return()=>{disposed=true;window.removeEventListener('message',handler);};
 }
