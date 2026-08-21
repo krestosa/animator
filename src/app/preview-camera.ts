@@ -21,16 +21,17 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   const stage=()=>root.querySelector<HTMLElement>('.stage');
   const selectedAnimation=()=>{const state=store.get();return state.selectedAnimationId?state.animations.find(item=>item.id===state.selectedAnimationId):undefined;};
   const cameraElement=()=>cameraElementId?store.get().elements.find(element=>element.id===cameraElementId):undefined;
+  const postInput=(message:Record<string,unknown>):void=>{frame()?.contentWindow?.postMessage({source:'animator-editor',...message},'*');};
 
   const updateMouse=():void=>{
     const preview=frame();
-    if(preview&&preview!==lastFrame){lastFrame=preview;preview.style.pointerEvents=mouseEnabled?'auto':'none';}
+    if(preview&&preview!==lastFrame){lastFrame=preview;preview.style.pointerEvents=mouseEnabled?'auto':'none';postInput({type:'SET_INPUT_LOCK',enabled:!mouseEnabled});}
     else if(preview&&preview.style.pointerEvents!==(mouseEnabled?'auto':'none'))preview.style.pointerEvents=mouseEnabled?'auto':'none';
     const locked=!mouseEnabled;const previewStage=stage();if(previewStage?.classList.contains('webMouseLocked')!==locked)previewStage?.classList.toggle('webMouseLocked',locked);
     if(mouseButton.classList.contains('active')!==mouseEnabled)mouseButton.classList.toggle('active',mouseEnabled);
     const pressed=String(mouseEnabled);if(mouseButton.getAttribute('aria-pressed')!==pressed)mouseButton.setAttribute('aria-pressed',pressed);
     const text=mouseEnabled?'↖':'⊘';if(mouseButton.textContent!==text)mouseButton.textContent=text;
-    const title=`Mouse interaction with preview: ${mouseEnabled?'on':'off'}`;if(mouseButton.title!==title)mouseButton.title=title;
+    const title=mouseEnabled?'Mouse interaction with preview: on':'Preview passive · wheel/trackpad pans without sending input to the web';if(mouseButton.title!==title)mouseButton.title=title;
   };
   const resetCamera=():void=>{
     const preview=frame();if(preview){preview.style.removeProperty('transform');preview.style.removeProperty('transform-origin');preview.style.removeProperty('will-change');preview.dataset.cameraZoom='off';preview.removeAttribute('data-camera-scale');}
@@ -61,7 +62,15 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
     cameraActive=enabled;zoomButton.classList.toggle('active',enabled);zoomButton.setAttribute('aria-pressed',String(enabled));
     if(!enabled){resetCamera();return;}refreshTarget();
   };
-  const setMouse=(enabled:boolean):void=>{mouseEnabled=enabled;updateMouse();};
+  const setMouse=(enabled:boolean):void=>{mouseEnabled=enabled;postInput({type:'SET_INPUT_LOCK',enabled:!enabled});updateMouse();};
+  const wheel=(event:WheelEvent):void=>{
+    if(mouseEnabled)return;
+    const previewStage=stage();if(!previewStage||!previewStage.contains(event.target as Node))return;
+    event.preventDefault();event.stopImmediatePropagation();
+    const dx=event.shiftKey&&Math.abs(event.deltaX)<Math.abs(event.deltaY)?event.deltaY:event.deltaX;
+    const dy=event.shiftKey&&Math.abs(event.deltaX)<Math.abs(event.deltaY)?0:event.deltaY;
+    postInput({type:'PAN_VIEWPORT',dx,dy});
+  };
 
   const intercept=(event:MouseEvent):void=>{
     const target=event.target as Element|null;
@@ -74,6 +83,6 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   const frameObserver=new MutationObserver(()=>{updateMouse();scheduleCamera();});frameObserver.observe(previewDevice,{childList:true});
   const resize=new ResizeObserver(scheduleCamera);resize.observe(previewDevice);
 
-  tools.addEventListener('click',intercept,true);window.addEventListener('keydown',key);updateMouse();
-  return()=>{if(raf)cancelAnimationFrame(raf);setCamera(false);unsubscribe();frameObserver.disconnect();resize.disconnect();tools.removeEventListener('click',intercept,true);window.removeEventListener('keydown',key);mouseButton.remove();};
+  tools.addEventListener('click',intercept,true);root.addEventListener('wheel',wheel,{capture:true,passive:false});window.addEventListener('keydown',key);updateMouse();
+  return()=>{if(raf)cancelAnimationFrame(raf);postInput({type:'SET_INPUT_LOCK',enabled:false});setCamera(false);unsubscribe();frameObserver.disconnect();resize.disconnect();tools.removeEventListener('click',intercept,true);root.removeEventListener('wheel',wheel,true);window.removeEventListener('keydown',key);mouseButton.remove();};
 }
