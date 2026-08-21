@@ -27,7 +27,10 @@ try{
     }
     const surface=page.locator('[data-browser-preview]');assert.equal(await surface.isVisible(),true,'Browser capture status disappeared');
     const record=page.locator('[data-action="record"]');await record.click();await waitUntil(async()=>await record.getAttribute('data-recording-state')==='stopped','Browser preview did not confirm STOP');
-    await waitUntil(async()=>await page.locator('[data-view-history-toggle]').isVisible(),'Browser history was not exposed after STOP');
+    const snapshot=page.locator('[data-browser-snapshot-frame]');await snapshot.waitFor({state:'attached'});await waitUntil(async()=>await surface.getAttribute('data-browser-snapshot')==='true','Browser capture did not switch to reconstructed document');
+    const handle=await snapshot.elementHandle(),frame=await handle?.contentFrame();assert(frame,'Reconstructed browser frame missing');await frame.locator('#button').waitFor();assert.equal(await frame.locator('#button').textContent(),'click me','Reconstructed DOM did not preserve page content');
+    const reconstruction=await frame.evaluate(()=>({runtime:!!window.__ANIMATOR_BROWSER_SNAPSHOT_RUNTIME__,animations:document.getAnimations().length,originalScriptRan:'clicks'in window,history:window.__ANIMATOR_VIEW_HISTORY__?.stats?.().samples??0}));assert.equal(reconstruction.runtime,true,'Reconstruction runtime did not boot');assert(reconstruction.animations>0,'Captured animations were not recreated');assert.equal(reconstruction.originalScriptRan,false,'Original page scripts re-executed inside reconstructed preview');assert(reconstruction.history>0,'Recorded viewport history was not seeded into reconstruction');
+    const history=page.locator('[data-view-history-toggle]');await waitUntil(async()=>await history.isVisible(),'Browser history was not exposed after STOP');await history.click();await waitUntil(async()=>await frame.evaluate(()=>window.__ANIMATOR_VIEW_HISTORY__?.stats?.().mode==='attached'),'View history commands did not reach reconstructed document');
   } finally {await browser.close();}
 } finally {server.kill('SIGTERM');await closeServer(remote);}
 
