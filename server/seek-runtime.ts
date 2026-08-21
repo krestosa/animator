@@ -56,6 +56,7 @@ export const seekRuntimeSource = String.raw`(()=>{
     for(const animation of items){if(groupKey(animation)!==key)continue;snapshot(animation);const controllers=[animation,mirrors.get(animation)].filter(Boolean);for(const controller of controllers){try{if(controller.effect){const timing={};if(m.duration!=null)timing.duration=m.duration;if(m.delay!=null)timing.delay=m.delay;if(m.easing)timing.easing=m.easing;if(Object.keys(timing).length)controller.effect.updateTiming(timing);if(m.keyframes)controller.effect.setKeyframes(m.keyframes);}}catch{}}}
     if(controlled)seekAll(masterTime);
   };
+  const resumeSuspendedRafs=()=>{const callbacks=[...suspendedRafs.values()];suspendedRafs.clear();for(const callback of callbacks)nativeRAF(callback);};
   const enter=time=>{capture();controlled=true;playing=false;masterTime=Math.max(0,Number(time)||0);for(const animation of all())ensureMirror(animation);seekAll(masterTime);post('TIMELINE_STATE',{time:masterTime,playing,controlled});post('DIAGNOSTIC',{level:'info',message:'Timeline controls '+all().length+' animation instance(s) and '+attrTracks.length+' mutation track(s)'});};
   const scrub=time=>{if(!controlled)enter(time);else{playing=false;masterTime=Math.max(0,Number(time)||0);seekAll(masterTime);post('TIMELINE_STATE',{time:masterTime,playing,controlled});}};
   const schedule=()=>{if(!raf)raf=nativeRAF(tick);};
@@ -63,14 +64,23 @@ export const seekRuntimeSource = String.raw`(()=>{
   const play=()=>{if(!controlled)enter(masterTime);playing=true;lastPerf=performance.now();post('TIMELINE_STATE',{time:masterTime,playing,controlled});schedule();};
   const pause=()=>{if(!controlled)enter(masterTime);playing=false;if(raf){nativeCancelRAF(raf);raf=0;}seekAll(masterTime);post('TIMELINE_STATE',{time:masterTime,playing,controlled});};
   const restart=()=>{if(!controlled)enter(0);masterTime=0;playing=true;lastPerf=performance.now();seekAll(0);post('TIMELINE_STATE',{time:0,playing,controlled});schedule();};
+  const release=()=>{
+    playing=false;if(raf){nativeCancelRAF(raf);raf=0;}
+    for(const animation of all()){
+      const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}mirrors.delete(animation);
+      const info=remember(animation),local=masterTime-info.start;
+      try{animation.pause();const end=endOf(animation);animation.currentTime=Number.isFinite(end)?Math.min(local,end):local;animation.play();}catch{}
+    }
+    controlled=false;resumeSuspendedRafs();post('TIMELINE_STATE',{time:masterTime,playing:false,controlled:false});post('DIAGNOSTIC',{level:'info',message:'Live capture resumed'});
+  };
   const restore=()=>{
     playing=false;if(raf){nativeCancelRAF(raf);raf=0;}
     for(const animation of all()){
-      const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}
+      const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}mirrors.delete(animation);
       const original=snapshots.get(animation);if(!original)continue;
       try{if(animation.effect&&original.timing)animation.effect.updateTiming(original.timing);if(animation.effect&&original.frames)animation.effect.setKeyframes(original.frames);animation.playbackRate=original.rate;animation.currentTime=original.currentTime;if(original.playState==='running')animation.play();else if(original.playState==='paused')animation.pause();}catch{}
     }
-    controlled=false;const callbacks=[...suspendedRafs.values()];suspendedRafs.clear();for(const callback of callbacks)nativeRAF(callback);post('TIMELINE_STATE',{time:masterTime,playing:false,controlled:false});
+    controlled=false;resumeSuspendedRafs();post('TIMELINE_STATE',{time:masterTime,playing:false,controlled:false});
   };
   const highlightAnimation=id=>{
     const animation=all().find(item=>item.__animatorId===id);const target=animation?.effect?.target;if(!(target instanceof Element))return;
@@ -82,6 +92,7 @@ export const seekRuntimeSource = String.raw`(()=>{
     if(m.type==='PLAY_ALL'||m.type==='PLAY_ANIMATION'){play();return;}
     if(m.type==='PAUSE_ALL'||m.type==='PAUSE_ANIMATION'){pause();return;}
     if(m.type==='RESTART_ALL'){restart();return;}
+    if(m.type==='RELEASE_TIMELINE'){release();return;}
     if(m.type==='RESTART_ANIMATION'){const selected=all().find(animation=>animation.__animatorId===m.id);scrub(selected?remember(selected).start:0);play();return;}
     if(m.type==='SET_ALL_PLAYBACK_RATE'||m.type==='SET_PLAYBACK_RATE'){const next=Number(m.rate);if(Number.isFinite(next)&&next>0)rate=next;return;}
     if(m.type==='SET_LOOP_ALL'){loop=!!m.enabled;return;}
