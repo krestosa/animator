@@ -3,18 +3,18 @@ export const viewportCaptureRuntimeSource=String.raw`(()=>{
   const post=(type,payload={})=>{try{parent.postMessage({source:'animator-preview',type,...payload},'*');}catch{}};
   const reply=(requestId,payload)=>post('VIEWPORT_CAPTURE_RESULT',{requestId,...payload});
   const ready=requestId=>post('VIEWPORT_CAPTURE_READY',{requestId});
-  const capture=async requestId=>{
+  const capture=async (requestId,backgroundColor)=>{
     const renderer=window.html2canvas;
     if(typeof renderer!=='function'){reply(requestId,{error:'Viewport renderer is not available'});return;}
     const animations=Array.from(document.getAnimations?.()??[]),running=[];
     for(const animation of animations){if(animation.playState==='running'||animation.playState==='pending'){running.push(animation);try{animation.pause();}catch{}}}
     try{
       await Promise.resolve();
-      const canvas=await renderer(document.documentElement,{backgroundColor:null,logging:false,useCORS:true,allowTaint:false,scale:1,width:innerWidth,height:innerHeight,x:scrollX,y:scrollY,scrollX,scrollY,windowWidth:innerWidth,windowHeight:innerHeight,removeContainer:true});
+      const canvas=await renderer(document.documentElement,{backgroundColor:typeof backgroundColor==='string'&&backgroundColor?backgroundColor:null,logging:false,useCORS:true,allowTaint:false,scale:1,width:innerWidth,height:innerHeight,x:scrollX,y:scrollY,scrollX,scrollY,windowWidth:innerWidth,windowHeight:innerHeight,removeContainer:true});
       reply(requestId,{dataUrl:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height});
     }catch(error){reply(requestId,{error:error instanceof Error?error.message:String(error)});}
     finally{for(const animation of running)try{animation.play();}catch{}}
   };
-  addEventListener('message',event=>{const message=event.data;if(!message||message.source!=='animator-editor'||typeof message.requestId!=='string')return;if(message.type==='CAPTURE_VIEWPORT_PING'){ready(message.requestId);return;}if(message.type==='CAPTURE_VIEWPORT_PNG')void capture(message.requestId);});
+  addEventListener('message',event=>{const message=event.data;if(!message||message.source!=='animator-editor'||typeof message.requestId!=='string')return;if(message.type==='CAPTURE_VIEWPORT_PING'){ready(message.requestId);return;}if(message.type==='CAPTURE_VIEWPORT_PNG')void capture(message.requestId,message.backgroundColor);});
   post('VIEWPORT_CAPTURE_READY');
 })();`;
