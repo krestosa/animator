@@ -70,6 +70,11 @@ try{
     await firstInstance.locator('.v2InstanceLabel button[data-v2-instance]').click();
     await waitUntil(async()=>await firstInstance.evaluate(node=>node.classList.contains('selected')),'component instance was not individually selectable');
     await waitUntil(async()=>await page.locator('.elementList .row.selected').count()>=1,'selecting a timeline instance must select its DOM component');
+    await waitUntil(async()=>!await page.locator('[data-action="record"]').evaluate(node=>node.classList.contains('active')),'selecting an animation did not pause recording');
+    const clipsWhilePaused=await page.locator('.v2Clip[data-v2-instance]').count();
+    await frame.evaluate(()=>{const target=document.querySelector('.repeat-motion');if(!(target instanceof Element))return;const animation=target.animate([{opacity:.93},{opacity:1}],{duration:90});animation.finished.finally(()=>animation.cancel());});
+    await page.waitForTimeout(220);
+    assert.equal(await page.locator('.v2Clip[data-v2-instance]').count(),clipsWhilePaused,'paused recording still added a newly triggered animation');
 
     const ruler=page.locator('.v2RulerMotion');
     const rulerBefore=await ruler.boundingBox();assert(rulerBefore,'timeline ruler has no bounds');
@@ -98,14 +103,22 @@ try{
     const focusedClipLeft=Number.parseFloat(await visibleFocusedClip.evaluate(element=>element.style.left)||'0');assert(focusedClipLeft<2,'focused animation was not moved to local timeline zero');
 
     await page.locator('[data-focus-mode]').click();
-    await waitUntil(async()=>await page.locator('.app').evaluate(node=>node.classList.contains('animationFocusMode')),'Focus mode did not hide editor chrome');
-    assert.equal(await page.locator('.toolbar').evaluate(node=>getComputedStyle(node).display),'none','toolbar remained visible in Focus mode');
-    assert.equal(await page.locator('.timeline').evaluate(node=>getComputedStyle(node).display),'none','timeline remained visible in Focus mode');
+    await waitUntil(async()=>await frame.locator('[data-animator-focus-overlay]').count()===1,'Focus spotlight overlay was not created');
+    assert.notEqual(await page.locator('.toolbar').evaluate(node=>getComputedStyle(node).display),'none','toolbar was hidden by Focus mode');
+    assert.notEqual(await page.locator('.timeline').evaluate(node=>getComputedStyle(node).display),'none','timeline was hidden by Focus mode');
+    assert.equal(await page.locator('.app').evaluate(node=>node.classList.contains('animationFocusMode')),false,'Focus mode still rewrote the editor layout');
     await waitUntil(async()=>await frame.locator('[data-animator-focus-target]').count()===1,'focused element was not marked inside preview');
     assert.equal(await frame.locator('[data-animator-focus-target]').evaluate(node=>getComputedStyle(node).visibility),'visible','focused element is not visible');
-    const hiddenSiblings=await frame.locator('.repeat-motion:not([data-animator-focus-target])').evaluateAll(nodes=>nodes.filter(node=>getComputedStyle(node).visibility==='hidden').length);assert(hiddenSiblings>=1,'Focus mode did not hide unrelated animated elements');
+    const visibleSiblings=await frame.locator('.repeat-motion:not([data-animator-focus-target])').evaluateAll(nodes=>nodes.filter(node=>getComputedStyle(node).visibility!=='hidden').length);assert(visibleSiblings>=1,'Focus mode still hides unrelated page elements instead of dimming them');
+    const focusShadow=await frame.locator('[data-animator-focus-overlay]').evaluate(node=>getComputedStyle(node).boxShadow);assert(/rgba\(0, 0, 0/.test(focusShadow),'Focus mode does not darken the surrounding page');
+
+    await page.locator('[data-magnify-mode]').click();
+    await waitUntil(async()=>await frame.locator('[data-animator-magnify-host]').count()===1,'inspect zoom did not create its render surface');
+    await waitUntil(async()=>await frame.locator('[data-animator-magnify-clone]').count()===1,'inspect zoom did not render a cloned element');
+    const magnifyTransform=await frame.locator('[data-animator-magnify-lens]').evaluate(node=>getComputedStyle(node).transform);assert.notEqual(magnifyTransform,'none','inspect zoom did not enlarge the rendered element');
+    assert.equal(await frame.locator('[data-animator-magnify-clone]').evaluate(node=>node.tagName),await frame.locator('[data-animator-focus-target]').evaluate(node=>node.tagName),'inspect zoom changed the selected element type');
     await page.keyboard.press('Escape');
-    await waitUntil(async()=>!await page.locator('.app').evaluate(node=>node.classList.contains('animationFocusMode')),'Escape did not exit Focus mode');
+    await waitUntil(async()=>await frame.locator('[data-animator-focus-overlay]').count()===0&&await frame.locator('[data-animator-magnify-host]').count()===0,'Escape did not exit Focus and Zoom overlays');
 
     await page.locator('[data-isolate="element"]').click();
     await waitUntil(async()=>await page.locator('[data-isolate="element"]').evaluate(node=>node.classList.contains('active')),'element isolation did not activate');
@@ -148,6 +161,8 @@ try{
     assert(await playhead()>100,'playhead did not advance during playback');
     const clipAfterPlayback=await stableClip.boundingBox();assert(clipAfterPlayback&&clipAfterPlayback.width>=5,'animation duration bar disappeared during playback');
 
+    await page.locator('[data-action="record"]').click();
+    await waitUntil(async()=>await page.locator('[data-action="record"]').evaluate(node=>node.classList.contains('active')),'recording could not be resumed after inspection');
     await page.locator('[data-preview-live]').click();
     const htmlBefore=await frame.locator('body').evaluate(element=>({children:element.children.length,className:element.className}));
     await frame.locator('#raf').click();await page.waitForTimeout(950);
