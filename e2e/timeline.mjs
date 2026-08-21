@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
 
 const port=4173,base=`http://127.0.0.1:${port}`;
+const remoteFixture=createServer((req,res)=>{
+  if(req.url==='/remote/style.css'){res.writeHead(200,{'content-type':'text/css'});res.end('#remote-card{opacity:0;animation:remote-in .42s ease-out both}@keyframes remote-in{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}');return;}
+  if(req.url==='/remote/app.js'){res.writeHead(200,{'content-type':'application/javascript'});res.end('window.__remoteLoaded=true;document.documentElement.dataset.remoteScript="ok";');return;}
+  if(req.url==='/remote/'||req.url==='/remote'){res.writeHead(200,{'content-type':'text/html','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'",'x-frame-options':'DENY'});res.end('<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/remote/style.css"><title>Remote fixture</title></head><body><main><h1 id="remote-card">Remote instrumented page</h1></main><script src="/remote/app.js"></script></body></html>');return;}
+  res.writeHead(404);res.end('not found');
+});
+const remotePort=await listen(remoteFixture);const remoteUrl=`http://127.0.0.1:${remotePort}/remote/`;
 const server=spawn(process.execPath,['server-dist/server/index.js','--production'],{cwd:process.cwd(),env:{...process.env,PORT:String(port),NODE_ENV:'production'},stdio:['ignore','pipe','pipe']});
 let serverLog='';server.stdout.on('data',chunk=>serverLog+=chunk);server.stderr.on('data',chunk=>serverLog+=chunk);
 
@@ -13,16 +21,30 @@ try{
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     await page.goto(base,{waitUntil:'networkidle'});
+    assert.equal(await page.locator('.app').evaluate(element=>getComputedStyle(element).backgroundColor),'rgb(10, 10, 10)','editor background is not #0a0a0a');
+    assert.equal(await page.locator('.toolbar').evaluate(element=>getComputedStyle(element).userSelect),'none','editor chrome still allows text selection');
     await page.locator('.toolbarMore summary').click();
     await page.locator('[data-path-input]').fill(path.join(process.cwd(),'fixture'));
     await page.locator('[data-action="open-project"]').click();
     const frameLocator=page.locator('[data-preview-frame]');await frameLocator.waitFor({state:'attached'});
     await waitUntil(async()=>/^http:\/\/127\.0\.0\.1:\d+\//.test(await frameLocator.getAttribute('src')??''),'preview was not moved to a dedicated local origin');
-    const frameHandle=await frameLocator.elementHandle();const frame=await frameHandle?.contentFrame();assert(frame,'preview iframe did not load');
+    let frameHandle=await frameLocator.elementHandle();let frame=await frameHandle?.contentFrame();assert(frame,'preview iframe did not load');
     await frame.locator('.repeat-motion').first().waitFor();
     assert(await frame.locator('#root-asset').evaluate(image=>image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0),'root-relative preview asset did not load');
     assert.equal(await frame.evaluate(async()=>{const response=await fetch('/__animator/clock-worker.js');return response.status;}),200,'worker-backed playback clock was not served by preview origin');
     await waitUntil(async()=>await page.locator('[data-preview-live]').evaluate(element=>element.classList.contains('active')),'preview did not remain in Live mode after startup capture');
+
+    const stageBox=await page.locator('.stage').boundingBox(),deviceBox=await page.locator('[data-device]').boundingBox();assert(stageBox&&deviceBox,'preview workspace has no bounds');
+    assert(Math.abs(stageBox.x-deviceBox.x)<2&&Math.abs(stageBox.y-deviceBox.y)<2&&Math.abs(stageBox.width-deviceBox.width)<2&&Math.abs(stageBox.height-deviceBox.height)<2,'preview does not fill the complete center workspace');
+    await waitUntil(async()=>Number(await page.locator('[data-dom-count]').textContent()??0)>5,'DOM load tree did not capture parser-built elements');
+    await waitUntil(async()=>await page.locator('.v2LoadRow').count()>=2,'loading timeline rows were not rendered');
+    assert(await page.locator('.domTreeRow').count()>0,'compact DOM load tree did not render visible rows');
+
+    await page.keyboard.press('Home');
+    await waitUntil(async()=>Number((await page.locator('[data-preview-frame-label]').textContent()??'').match(/Frame\s+(\d+)/)?.[1]??-1)===0,'Home did not enter frame 0 for load replay');
+    assert.equal(await frame.locator('main').evaluate(element=>getComputedStyle(element).visibility),'hidden','frame 0 is not visually empty');
+    await page.locator('[data-preview-live]').click();
+    await waitUntil(async()=>await frame.locator('main').evaluate(element=>getComputedStyle(element).visibility)!=='hidden','Live did not restore the fully loaded DOM');
 
     const previewSrcBeforeRecalculate=await frameLocator.getAttribute('src');
     await frame.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
@@ -46,6 +68,20 @@ try{
     await firstInstance.locator('.v2InstanceLabel button[data-v2-instance]').click();
     await waitUntil(async()=>await firstInstance.evaluate(node=>node.classList.contains('selected')),'component instance was not individually selectable');
     await waitUntil(async()=>await page.locator('.elementList .row.selected').count()>=1,'selecting a timeline instance must select its DOM component');
+
+    const zoomBefore=Number(await timeline.getAttribute('data-px-per-ms'));await page.locator('[data-timeline-zoom="in"]').click();
+    await waitUntil(async()=>Number(await timeline.getAttribute('data-px-per-ms'))>zoomBefore,'timeline zoom-in control did not increase frame scale');
+    await page.locator('[data-timeline-zoom="frame"]').click();
+    await waitUntil(async()=>Math.abs(Number(await timeline.getAttribute('data-px-per-ms'))*(1000/60)-24)<1.5,'1f zoom did not target a readable per-frame scale');
+    await page.locator('[data-timeline-zoom="fit"]').click();await page.waitForTimeout(120);
+    await page.locator('[data-isolate="animation"]').click();
+    await waitUntil(async()=>await page.locator('.v2GroupRow').evaluateAll(nodes=>nodes.filter(node=>!node.hidden).length)===1,'animation isolation did not hide unrelated timeline groups');
+    assert.equal(await page.locator('.v2LoadRow').evaluateAll(nodes=>nodes.filter(node=>!node.hidden).length),0,'load tracks remained visible while a motion was isolated');
+    await page.locator('[data-isolate="element"]').click();
+    await waitUntil(async()=>await page.locator('[data-isolate="element"]').evaluate(node=>node.classList.contains('active')),'element isolation did not activate');
+    assert(await page.locator('.v2GroupRow').evaluateAll(nodes=>nodes.filter(node=>!node.hidden).length)>=1,'element isolation hid the selected element motion');
+    await page.locator('[data-isolate="all"]').click();
+    await waitUntil(async()=>await page.locator('.v2GroupRow').evaluateAll(nodes=>nodes.filter(node=>!node.hidden).length)>1,'All did not restore complete timeline');
 
     const motion=group.locator('.v2Motion');assert(await motion.boundingBox(),'timeline motion surface has no box');
     const seekOn=async(locator,ms)=>{const scale=Number(await timeline.getAttribute('data-px-per-ms'));assert(Number.isFinite(scale)&&scale>0,'timeline scale is invalid');const box=await locator.boundingBox();assert(box,'timeline motion surface has no box');const x=Math.max(.5,Math.min(box.width-.5,ms*scale));await locator.click({position:{x,y:box.height/2},force:true});await page.waitForTimeout(80);};
@@ -98,8 +134,19 @@ try{
     assert.notEqual(jsEarly.transform,jsLate.transform,`javascript rAF motion did not advance; capture=${JSON.stringify(frameDebug)} early=${JSON.stringify(jsEarlyState)} late=${JSON.stringify(jsLateState)} back=${JSON.stringify(jsBackState)}`);
     assert.equal(jsBack.transform,jsEarly.transform,`javascript rAF motion did not reverse; early=${JSON.stringify(jsEarlyState)} back=${JSON.stringify(jsBackState)}`);
     const htmlAfter=await frame.locator('body').evaluate(element=>({children:element.children.length,className:element.className}));assert.deepEqual(htmlAfter,htmlBefore,'timeline replay changed structural HTML state');
-  } finally { await browser.close(); }
-} finally {server.kill('SIGTERM');}
 
+    const localPreviewSrc=await frameLocator.getAttribute('src');await page.locator('.webLoader>summary').click();await page.locator('[data-web-url]').fill(remoteUrl);await page.locator('[data-web-open]').click();
+    await waitUntil(async()=>{const src=await frameLocator.getAttribute('src');return !!src&&src!==localPreviewSrc&&/^http:\/\/127\.0\.0\.1:\d+\//.test(src);},'remote page was not moved behind an instrumented local proxy');
+    frameHandle=await frameLocator.elementHandle();frame=await frameHandle?.contentFrame();assert(frame,'remote preview iframe did not load');
+    await frame.locator('#remote-card').waitFor();
+    assert(await frame.evaluate(()=>window.__remoteLoaded===true&&window.__ANIMATOR_AUX_RUNTIME__===true&&document.documentElement.dataset.remoteScript==='ok'),'remote page scripts or early Animator instrumentation did not run');
+    const remoteGroup=page.locator('.v2GroupRow').filter({hasText:'remote-in'}).first();await remoteGroup.waitFor();
+    await waitUntil(async()=>{const ids=await remoteGroup.locator('.v2Clip').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-v2-instance')));return ids.some(id=>!!id&&!id.startsWith('static:'));},'remote CSS animation was not captured as runtime motion');
+    await waitUntil(async()=>Number(await page.locator('[data-dom-count]').textContent()??0)>0,'remote DOM construction was not captured');
+  } finally { await browser.close(); }
+} finally {server.kill('SIGTERM');await closeServer(remoteFixture);}
+
+async function listen(server){return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.off('error',reject);const address=server.address();if(!address||typeof address==='string')return reject(new Error('fixture server has no port'));resolve(address.port);});});}
+async function closeServer(server){return new Promise(resolve=>server.close(()=>resolve()));}
 async function waitForServer(url){for(let attempt=0;attempt<80;attempt++){try{const response=await fetch(url);if(response.ok)return;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}throw new Error(`server did not start\n${serverLog}`);}
-async function waitUntil(check,message){for(let attempt=0;attempt<120;attempt++){if(await check())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error(message);}
+async function waitUntil(check,message){for(let attempt=0;attempt<140;attempt++){if(await check())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error(message);}
