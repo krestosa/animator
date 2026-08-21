@@ -24,8 +24,12 @@ function collectEntries(root:string):string[] {
   const scan=(dir:string)=>{for(const e of fs.readdirSync(dir,{withFileTypes:true})){if(ignored.has(e.name))continue;const full=path.join(dir,e.name);if(e.isDirectory())scan(full);else if(/\.html?$/i.test(e.name))out.push(path.relative(root,full).split(path.sep).join('/'));}};
   scan(root); return out.sort((a,b)=>(a==='index.html'?-1:0)-(b==='index.html'?-1:0)||a.localeCompare(b));
 }
+function supportsFrameworkEntrypoint(root:string):boolean{
+  const packagePath=path.join(root,'package.json');if(!fs.existsSync(packagePath))return false;
+  try{const pkg=JSON.parse(fs.readFileSync(packagePath,'utf8')) as {scripts?:Record<string,string>|undefined};const dev=pkg.scripts?.dev??'';return /\b(vite|next|astro|parcel|react-scripts)\b/.test(dev);}catch{return false;}
+}
 export function loadProject(input:string):LoadedProject {
-  const root=validateRoot(input === '__fixture__' ? path.resolve('fixture') : input); const entries=collectEntries(root); if(!entries.length)throw new Error('Project entrypoint not found: no HTML files detected');
+  const root=validateRoot(input === '__fixture__' ? path.resolve('fixture') : input); const discovered=collectEntries(root);const entries=discovered.length?discovered:supportsFrameworkEntrypoint(root)?['']:[]; if(!entries.length)throw new Error('Project entrypoint not found: no HTML file or supported dev server detected');
   const id=crypto.createHash('sha1').update(root).digest('hex').slice(0,12); const project={id,root,entries,selectedEntry:entries[0]!,tree:walk(root)}; projects.set(id,project); return project;
 }
 export function getProject(id:string):LoadedProject|undefined{return projects.get(id);}
