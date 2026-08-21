@@ -1,37 +1,17 @@
+import { sendCommand } from '../preview/bridge';
 import { store } from '../state/store';
-import type { ProjectDescriptor } from '../types/domain';
 
 export type PreviewColorScheme='auto'|'light'|'dark';
 export const PREVIEW_THEME_EVENT='animator:preview-theme-change';
 
-let activeParent:string|undefined;
 let activeMode:PreviewColorScheme='auto';
 
-function projectParent(project:ProjectDescriptor|undefined):string|undefined{
-  if(!project)return undefined;
-  if(project.kind==='remote'&&project.sourceUrl){
-    try{
-      const url=new URL(project.sourceUrl);const first=url.pathname.split('/').filter(Boolean)[0];
-      return first?`${url.origin}/${first}/`:url.origin+'/';
-    }catch{}
-  }
-  return `local:${project.root}`;
-}
-
-function syncParent():string|undefined{
-  const parent=projectParent(store.get().project);
-  if(parent!==activeParent){activeParent=parent;activeMode='auto';}
-  return parent;
-}
-
-export function getPreviewColorScheme():PreviewColorScheme{
-  syncParent();return activeMode;
-}
+export function getPreviewColorScheme():PreviewColorScheme{return activeMode;}
 
 export function setPreviewColorScheme(mode:PreviewColorScheme):void{
-  const parent=syncParent();if(!parent)return;
+  if(activeMode===mode)return;
   activeMode=mode;
-  window.dispatchEvent(new CustomEvent(PREVIEW_THEME_EVENT,{detail:{mode,parent}}));
+  window.dispatchEvent(new CustomEvent(PREVIEW_THEME_EVENT,{detail:{mode}}));
 }
 
 export function mountPreviewTheme(root:HTMLElement):()=>void{
@@ -39,11 +19,18 @@ export function mountPreviewTheme(root:HTMLElement):()=>void{
   const control=document.createElement('label');control.className='previewThemeControl';control.dataset.previewThemeControl='';
   control.innerHTML='<span>Theme</span><select data-preview-theme aria-label="Preview theme"><option value="auto">Auto</option><option value="light">Light override</option><option value="dark">Dark override</option></select>';
   const select=control.querySelector<HTMLSelectElement>('[data-preview-theme]');if(!select)return()=>{};
-  control.title='Auto preserves the website default. Overrides last only while this parent site/project remains loaded.';
+  control.title='Theme is shared by every preview opened during this Animator session. Restarting Animator resets it to Auto.';
+  let currentFrame:HTMLIFrameElement|null=null;
+  const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const ensureMounted=():void=>{if(!control.isConnected)chrome.insertBefore(control,chrome.firstChild);};
-  const render=():void=>{ensureMounted();const project=store.get().project,mode=getPreviewColorScheme();select.disabled=!project;if(select.value!==mode)select.value=mode;control.dataset.mode=mode;};
-  const change=():void=>{setPreviewColorScheme(select.value as PreviewColorScheme);render();};
-  const observer=new MutationObserver(()=>{if(!control.isConnected)render();});observer.observe(chrome,{childList:true});
-  const unsubscribe=store.subscribe(render);select.addEventListener('change',change);window.addEventListener(PREVIEW_THEME_EVENT,render);render();
-  return()=>{observer.disconnect();unsubscribe();select.removeEventListener('change',change);window.removeEventListener(PREVIEW_THEME_EVENT,render);control.remove();};
+  const render=():void=>{ensureMounted();select.disabled=!store.get().project;if(select.value!==activeMode)select.value=activeMode;control.dataset.mode=activeMode;};
+  const apply=():void=>sendCommand(frame(),{type:'SET_COLOR_SCHEME',mode:activeMode});
+  const onFrameLoad=():void=>apply();
+  const bindFrame=():void=>{const next=frame();if(next===currentFrame)return;currentFrame?.removeEventListener('load',onFrameLoad);currentFrame=next;currentFrame?.addEventListener('load',onFrameLoad);if(currentFrame)queueMicrotask(apply);};
+  const change=():void=>setPreviewColorScheme(select.value as PreviewColorScheme);
+  const changed=():void=>{render();apply();};
+  const chromeObserver=new MutationObserver(()=>{if(!control.isConnected)render();});chromeObserver.observe(chrome,{childList:true});
+  const device=root.querySelector<HTMLElement>('[data-device]');const frameObserver=new MutationObserver(bindFrame);if(device)frameObserver.observe(device,{childList:true});
+  const unsubscribe=store.subscribe(()=>{render();bindFrame();});select.addEventListener('change',change);window.addEventListener(PREVIEW_THEME_EVENT,changed);bindFrame();render();
+  return()=>{chromeObserver.disconnect();frameObserver.disconnect();unsubscribe();select.removeEventListener('change',change);window.removeEventListener(PREVIEW_THEME_EVENT,changed);currentFrame?.removeEventListener('load',onFrameLoad);control.remove();};
 }

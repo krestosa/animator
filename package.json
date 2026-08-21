@@ -9,7 +9,7 @@
     "start": "node server-dist/server/index.js --production",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "node e2e/timeline.mjs && node e2e/record-gate.mjs && node e2e/theme-live.mjs"
+    "test:e2e": "node e2e/timeline.mjs && node e2e/record-gate.mjs && node e2e/view-history.mjs && node e2e/theme-live.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

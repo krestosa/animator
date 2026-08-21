@@ -33,5 +33,7 @@ jobs:
         run: node e2e/timeline.mjs
       - name: Record and input gate E2E
         run: node e2e/record-gate.mjs
+      - name: Recorded viewport E2E
+        run: node e2e/view-history.mjs
       - name: Theme override E2E
         run: node e2e/theme-live.mjs

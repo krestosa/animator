@@ -19,6 +19,7 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
     else if(msg.type==='EVENTS') { if(store.get().recording) store.addEvents(msg.events); }
     else if(msg.type==='TIMELINE_STATE') {
       window.dispatchEvent(new CustomEvent(TIMELINE_STATE_EVENT,{detail:msg}));
+      iframe.contentWindow?.postMessage({source:'animator-editor',type:'APPLY_VIEW_HISTORY_TIME',time:msg.time,controlled:msg.controlled},'*');
       const stamp=performance.now();
       if(!msg.playing||stamp-lastPlayheadStoreSync>=250){
         lastPlayheadStoreSync=stamp;const current=store.get().playhead;

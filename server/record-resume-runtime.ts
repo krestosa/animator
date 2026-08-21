@@ -1,4 +1,7 @@
-export const recordResumeRuntimeSource=String.raw`(()=>{
+import { themeLiveRuntimeSource } from './theme-live-runtime.js';
+import { viewHistoryRuntimeSource } from './view-history-runtime.js';
+
+export const recordResumeRuntimeSource=themeLiveRuntimeSource+viewHistoryRuntimeSource+String.raw`(()=>{
   if(window.__ANIMATOR_RECORD_RESUME_RUNTIME__)return;window.__ANIMATOR_RECORD_RESUME_RUNTIME__=true;
   const SOURCE='animator-preview';
   const internal=el=>el instanceof Element&&(el.hasAttribute('data-animator-internal')||el.hasAttribute('data-animator-focus-overlay')||el.hasAttribute('data-animator-selection-highlight')||el.hasAttribute('data-animator-dom-highlight')||el.hasAttribute('data-animator-picker-outline'));

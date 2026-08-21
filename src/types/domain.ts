@@ -31,6 +31,10 @@ export type PreviewMessage =
 export type EditorCommand =
  | {source:'animator-editor'; type:'SET_PICKER'; enabled:boolean}
  | {source:'animator-editor'; type:'SET_RECORDING'; enabled:boolean}
+ | {source:'animator-editor'; type:'SET_COLOR_SCHEME'; mode:'auto'|'light'|'dark'}
+ | {source:'animator-editor'; type:'SET_VIEW_HISTORY_CAPTURE'; enabled:boolean}
+ | {source:'animator-editor'; type:'SET_VIEW_HISTORY_MODE'; mode:'off'|'attached'|'detached'}
+ | {source:'animator-editor'; type:'APPLY_VIEW_HISTORY_TIME'; time:number; controlled:boolean}
  | {source:'animator-editor'; type:'SET_ANIMATION_TIME'; id:string; time:number}
  | {source:'animator-editor'; type:'SCRUB_TIMELINE'; time:number}
  | {source:'animator-editor'; type:'SEEK_FRAME'; frame:number}
