@@ -7,7 +7,7 @@ export const gateRuntimeSource=String.raw`(()=>{
   const nativeFetch=window.fetch?.bind(window),NativeXHR=window.XMLHttpRequest,NativeWebSocket=window.WebSocket,NativeEventSource=window.EventSource,nativeBeacon=navigator.sendBeacon?.bind(navigator),NativeIntersectionObserver=window.IntersectionObserver,nativeAnimate=Element.prototype.animate;
   const abortError=()=>new DOMException('Animator recording is stopped','AbortError');
   const remember=value=>{try{sessionStorage.setItem(SESSION_KEY,value?'1':'0');}catch{}};
-  const focusStyle=document.createElement('style');focusStyle.dataset.animatorInternal='';focusStyle.textContent='[data-animator-focus-overlay]{border:0!important;border-radius:0!important;outline:0!important;box-shadow:0 0 0 9999px rgba(0,0,0,.68)!important;}';document.documentElement.appendChild(focusStyle);
+  const focusStyle=document.createElement('style');focusStyle.dataset.animatorInternal='';focusStyle.textContent='[data-animator-focus-overlay]{border:0!important;border-radius:0!important;outline:0!important;box-shadow:0 0 0 9999px rgba(0,0,0,.68)!important;}html:has([data-animator-focus-overlay]) [data-animator-selection-highlight]{display:none!important;}';document.documentElement.appendChild(focusStyle);
   const blockInput=event=>{if(!inputLocked)return;event.preventDefault?.();event.stopImmediatePropagation?.();};
   for(const type of ['pointerdown','pointerup','pointermove','mousedown','mouseup','mousemove','click','dblclick','contextmenu','wheel','touchstart','touchmove','touchend','keydown','keyup','input','change','submit'])window.addEventListener(type,blockInput,{capture:true,passive:false});
   window.addEventListener('scroll',event=>{if(inputLocked)event.stopImmediatePropagation();},true);
