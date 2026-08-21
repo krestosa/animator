@@ -22,7 +22,7 @@ export function mountRecordGate(root:HTMLElement):()=>void{
   const stopRetry=():void=>{if(retryTimer)clearTimeout(retryTimer);retryTimer=0;retries=0;};
   const transmit=():void=>{if(!pendingId)return;sendCommand(frame(),{type:'SET_RECORDING',enabled:desired,requestId:pendingId});if(retryTimer)clearTimeout(retryTimer);if(retries++<50)retryTimer=window.setTimeout(transmit,120);else{retryTimer=0;store.set({diagnostics:[...store.get().diagnostics,'warn: Preview did not confirm the requested Record state'].slice(-100)});}};
   const requestState=(enabled:boolean):void=>{
-    desired=enabled;pendingId=`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;retries=0;
+    stopRetry();desired=enabled;pendingId=`rec-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
     if(store.get().recording!==enabled)store.set({recording:enabled});
     if(enabled)queueMicrotask(releasePendingPreview);
     transmit();
@@ -35,7 +35,7 @@ export function mountRecordGate(root:HTMLElement):()=>void{
     if(pendingId)transmit();else if(store.get().project&&!store.get().project?.browserSessionId)requestState(store.get().recording);
   };
   const bindFrame=():void=>{const next=frame();if(next===currentFrame)return;currentFrame?.removeEventListener('load',onFrameLoad);currentFrame=next;currentFrame?.addEventListener('load',onFrameLoad);};
-  const click=(event:MouseEvent):void=>{const button=(event.target as Element|null)?.closest<HTMLElement>('[data-action="record"]');if(!button)return;event.preventDefault();event.stopImmediatePropagation();if(pendingId)return;const project=store.get().project;if(!project){store.set({recording:!store.get().recording});desired=store.get().recording;return;}requestState(!store.get().recording);};
+  const click=(event:MouseEvent):void=>{const button=(event.target as Element|null)?.closest<HTMLElement>('[data-action="record"]');if(!button)return;event.preventDefault();event.stopImmediatePropagation();const project=store.get().project;if(!project){store.set({recording:!store.get().recording});desired=store.get().recording;return;}requestState(!store.get().recording);};
   const changed=():void=>{bindFrame();const projectId=store.get().project?.id;if(projectId===lastProjectId)return;lastProjectId=projectId;desired=store.get().recording;if(desired)queueMicrotask(releasePendingPreview);if(projectId&&store.get().project?.browserSessionId)requestState(desired);};
   const observer=new MutationObserver(bindFrame);const device=root.querySelector<HTMLElement>('[data-device]');if(device)observer.observe(device,{childList:true});
   root.addEventListener('click',click,true);window.addEventListener(RECORDING_STATE_EVENT,onAck);const unsubscribe=store.subscribe(changed);bindFrame();
