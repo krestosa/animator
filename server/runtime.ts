@@ -5,7 +5,7 @@ export const runtimeSource = String.raw`(()=>{
   const idFor=(el)=>{let id=ids.get(el);if(!id){id='el-'+(++seq);ids.set(el,id);byId.set(id,el);}return id;};
   const meta=(el)=>{const r=el.getBoundingClientRect();return{id:idFor(el),tag:el.tagName.toLowerCase(),domId:el.id||undefined,classes:[...el.classList],text:(el.textContent||'').trim().slice(0,80)||undefined,rect:{x:r.x,y:r.y,width:r.width,height:r.height},alive:el.isConnected};};
   const event=(kind,el,label,data={})=>{if(!recording)return;post('EVENT',{event:{id:'ev-'+Math.random().toString(36).slice(2),at:now(),kind,elementId:el?idFor(el):undefined,label,data}});};
-  const normalize=(anim,el,type,name)=>{const effect=anim.effect;let timing={};let frames=[];try{timing=effect?.getComputedTiming?.()||{};frames=effect?.getKeyframes?.()||[];}catch{} const id=anim.__animatorId||(anim.__animatorId='anim-'+Math.random().toString(36).slice(2));let metaInfo=animationMeta.get(id);if(!metaInfo){metaInfo={startTime:now(),type,name};animationMeta.set(id,metaInfo);}else{if(type&&metaInfo.type==='unknown')metaInfo.type=type;if(name&&!metaInfo.name)metaInfo.name=name;}const props=[...new Set(frames.flatMap(f=>Object.keys(f).filter(k=>!['offset','easing','composite','computedOffset'].includes(k))))].map(name=>({name,values:frames.map(f=>f[name]).filter(v=>v!=null).map(String)})); return{id,elementId:idFor(el),type:metaInfo.type||type,name:metaInfo.name||name,startTime:metaInfo.startTime,duration:Number(timing.duration)||undefined,delay:Number(timing.delay)||undefined,iterations:Number(timing.iterations)||undefined,direction:timing.direction,easing:timing.easing,fill:timing.fill,properties:props,confidence:'runtime-observed',runtimeState:anim.playState==='finished'?'finished':anim.playState==='paused'?'paused':'running',keyframes:frames};};
+  const normalize=(anim,el,type,name)=>{const effect=anim.effect;let timing={};let frames=[];try{timing=effect?.getComputedTiming?.()||{};frames=effect?.getKeyframes?.()||[];}catch{} const id=anim.__animatorId||(anim.__animatorId='anim-'+Math.random().toString(36).slice(2));let info=animationMeta.get(id);if(!info){info={startTime:now(),type,name};animationMeta.set(id,info);}else{if(type&&info.type==='unknown')info.type=type;if(name&&!info.name)info.name=name;}const props=[...new Set(frames.flatMap(f=>Object.keys(f).filter(k=>!['offset','easing','composite','computedOffset'].includes(k))))].map(name=>({name,values:frames.map(f=>f[name]).filter(v=>v!=null).map(String)})); return{id,elementId:idFor(el),type:info.type||type,name:info.name||name,startTime:info.startTime,duration:Number(timing.duration)||undefined,delay:Number(timing.delay)||undefined,iterations:Number(timing.iterations)||undefined,direction:timing.direction,easing:timing.easing,fill:timing.fill,properties:props,confidence:'runtime-observed',runtimeState:anim.playState==='finished'?'finished':anim.playState==='paused'?'paused':'running',keyframes:frames};};
   const reportAnimation=(anim,type,name)=>{const el=anim.effect?.target;if(!(el instanceof Element))return;const n=normalize(anim,el,type,name);animations.set(n.id,anim);post('ANIMATION',{animation:n});};
   const snapshot=(id,a)=>{if(originals.has(id)||!a.effect)return;let timing=null,frames=null;try{timing=a.effect.getTiming();frames=a.effect.getKeyframes();}catch{} originals.set(id,{timing,frames,playbackRate:a.playbackRate});};
   const nativeAnimate=Element.prototype.animate; Element.prototype.animate=function(k,o){const a=nativeAnimate.call(this,k,o);queueMicrotask(()=>reportAnimation(a,'web-animation'));return a;};
@@ -18,11 +18,22 @@ export const runtimeSource = String.raw`(()=>{
   const outline=document.createElement('div');Object.assign(outline.style,{position:'fixed',pointerEvents:'none',zIndex:'2147483647',border:'1px solid #58a6ff',background:'rgba(88,166,255,.08)',display:'none'});document.documentElement.appendChild(outline);
   document.addEventListener('mousemove',e=>{if(!picker)return;const el=document.elementFromPoint(e.clientX,e.clientY);if(!(el instanceof Element)||el===outline)return;hover=el;const r=el.getBoundingClientRect();Object.assign(outline.style,{display:'block',left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px'});},true);
   document.addEventListener('click',e=>{if(!picker||!(e.target instanceof Element))return;e.preventDefault();e.stopPropagation();picker=false;outline.style.display='none';post('SELECT_ELEMENT',{element:meta(e.target)});},true);
-  const scrubAll=(globalTime)=>{for(const [id,a] of animations){const info=animationMeta.get(id);if(!info)continue;try{a.pause();a.currentTime=globalTime-info.startTime;}catch{}}};
+
+  const clampLocalTime=(a,globalTime,startTime)=>{let end=Infinity;try{const timing=a.effect?.getComputedTiming?.();const active=Number(timing?.activeDuration);const delay=Number(timing?.delay)||0;if(Number.isFinite(active))end=Math.max(0,delay+active);}catch{}const local=globalTime-startTime;if(local<0)return 0;if(Number.isFinite(end))return Math.min(local,end);return local;};
+  const forceVisualSample=()=>{void document.documentElement.getBoundingClientRect();for(const a of animations.values()){const target=a.effect?.target;if(target instanceof Element)void getComputedStyle(target).transform;}};
+  const scrubAll=(globalTime)=>{for(const [id,a] of animations){const info=animationMeta.get(id);if(!info)continue;try{a.pause();a.currentTime=clampLocalTime(a,globalTime,info.startTime);}catch{}}forceVisualSample();};
+  const playAll=()=>{for(const a of animations.values())try{a.play();}catch{}};
+  const pauseAll=()=>{for(const a of animations.values())try{a.pause();}catch{}};
+  const restartAll=()=>{for(const a of animations.values())try{a.currentTime=0;a.play();}catch{}};
+
   const commands={
     SET_PICKER:m=>{picker=!!m.enabled;outline.style.display='none';},
     SET_RECORDING:m=>{recording=!!m.enabled;},
     SET_ANIMATION_TIME:m=>{const selectedStart=animationMeta.get(m.id)?.startTime??0;scrubAll(selectedStart+m.time);},
+    SCRUB_TIMELINE:m=>{if(Number.isFinite(m.time))scrubAll(Math.max(0,m.time));},
+    PLAY_ALL:()=>playAll(),
+    PAUSE_ALL:()=>pauseAll(),
+    RESTART_ALL:()=>restartAll(),
     SET_PLAYBACK_RATE:m=>{const a=animations.get(m.id);if(a&&Number.isFinite(m.rate)&&m.rate>0){snapshot(m.id,a);a.playbackRate=m.rate;reportAnimation(a,'web-animation');}},
     PLAY_ANIMATION:m=>animations.get(m.id)?.play(),
     PAUSE_ANIMATION:m=>animations.get(m.id)?.pause(),
