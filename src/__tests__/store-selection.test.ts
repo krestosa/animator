@@ -43,4 +43,16 @@ describe('motion selection invariants',()=>{
     store.set({project:{...project('one','/index.html'),selectedEntry:'/details.html'}});
     expect(store.get().history).toHaveLength(0);
   });
+
+  it('does not record no-op edits or discard a valid redo',()=>{
+    store.addAnimation(motion('shared','el-a'));
+    store.updateAnimation('shared',{duration:600});
+    store.undo();
+    expect(store.get().future).toHaveLength(1);
+    store.updateAnimation('shared',{duration:300});
+    expect(store.get().history).toHaveLength(0);
+    expect(store.get().future).toHaveLength(1);
+    store.redo();
+    expect(store.get().animations[0]?.duration).toBe(600);
+  });
 });
