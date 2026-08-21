@@ -1,6 +1,8 @@
 export const viewportCaptureRuntimeSource=String.raw`(()=>{
   if(window.__ANIMATOR_VIEWPORT_CAPTURE_RUNTIME__)return;window.__ANIMATOR_VIEWPORT_CAPTURE_RUNTIME__=true;
-  const reply=(requestId,payload)=>{try{parent.postMessage({source:'animator-preview',type:'VIEWPORT_CAPTURE_RESULT',requestId,...payload},'*');}catch{}};
+  const post=(type,payload={})=>{try{parent.postMessage({source:'animator-preview',type,...payload},'*');}catch{}};
+  const reply=(requestId,payload)=>post('VIEWPORT_CAPTURE_RESULT',{requestId,...payload});
+  const ready=requestId=>post('VIEWPORT_CAPTURE_READY',{requestId});
   const capture=async requestId=>{
     const renderer=window.html2canvas;
     if(typeof renderer!=='function'){reply(requestId,{error:'Viewport renderer is not available'});return;}
@@ -13,5 +15,6 @@ export const viewportCaptureRuntimeSource=String.raw`(()=>{
     }catch(error){reply(requestId,{error:error instanceof Error?error.message:String(error)});}
     finally{for(const animation of running)try{animation.play();}catch{}}
   };
-  addEventListener('message',event=>{const message=event.data;if(!message||message.source!=='animator-editor'||message.type!=='CAPTURE_VIEWPORT_PNG'||typeof message.requestId!=='string')return;void capture(message.requestId);});
+  addEventListener('message',event=>{const message=event.data;if(!message||message.source!=='animator-editor'||typeof message.requestId!=='string')return;if(message.type==='CAPTURE_VIEWPORT_PING'){ready(message.requestId);return;}if(message.type==='CAPTURE_VIEWPORT_PNG')void capture(message.requestId);});
+  post('VIEWPORT_CAPTURE_READY');
 })();`;
