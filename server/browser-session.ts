@@ -60,7 +60,7 @@ export async function openBrowserSession(input:string,options:{width?:number;hei
   const context=await browser.newContext(contextOptions),page=await context.newPage();
   const session:BrowserSession={id,browser,context,page,events:[],width:size.width,height:size.height,closed:false,sticky:new Map(),navigationVersion:0,engine,profile,frameListeners:new Set(),screenshotPumpRunning:false};sessions.set(id,session);
   await page.exposeBinding('__animatorEmit',(_source,payload:unknown)=>{if(payload&&typeof payload==='object')pushEvent(session,payload as BrowserEvent);});
-  const forwarder=`(()=>{if(window.__ANIMATOR_BROWSER_FORWARDER__)return;window.__ANIMATOR_BROWSER_FORWARDER__=true;addEventListener('message',event=>{const value=event.data;if(value&&value.source==='animator-preview'&&typeof window.__animatorEmit==='function'){try{window.__animatorEmit(value);}catch{}}});})();`;
+  const forwarder=`(()=>{if(window.__ANIMATOR_BROWSER_FORWARDER__)return;window.__ANIMATOR_BROWSER_FORWARDER__=true;const nativePost=window.postMessage.bind(window);window.postMessage=function(value,...args){if(value&&value.source==='animator-preview'&&typeof window.__animatorEmit==='function'){try{void window.__animatorEmit(value);}catch{}}return nativePost(value,...args);};})();`;
   await page.addInitScript({content:forwarder+gateRuntimeSource+runtimeSource+recordResumeRuntimeSource+seekRuntimeSource+mutationRuntimeSource+auxiliaryRuntimeSource});
   page.on('framenavigated',frame=>{
     if(frame!==page.mainFrame())return;
@@ -73,7 +73,7 @@ export async function openBrowserSession(input:string,options:{width?:number;hei
 }
 
 export function getBrowserSession(id:string):BrowserSession|undefined{return sessions.get(id);}
-export async function browserFrame(id:string):Promise<Buffer>{const session=requireSession(id);if(session.latestFrame)return session.latestFrame;return Buffer.from(await session.page.screenshot({type:'jpeg',quality:58,animations:'allow',caret:'hide'}));}
+export async function browserFrame(id:string):Promise<Buffer>{const session=requireSession(id);if(session.latestFrame)return session.latestFrame;return Buffer.from(await session.page.screenshot({type:'jpeg',quality:54,animations:'allow',caret:'hide',scale:'css'}));}
 export async function subscribeBrowserFrames(id:string,listener:FrameListener):Promise<()=>void>{
   const session=requireSession(id);session.frameListeners.add(listener);if(session.latestFrame)queueMicrotask(()=>{if(session.frameListeners.has(listener)&&session.latestFrame)listener(session.latestFrame);});
   await ensureFrameSource(session);
@@ -140,14 +140,14 @@ async function ensureFrameSource(session:BrowserSession):Promise<void>{
   if(session.engine==='chromium'){
     try{
       const cdp=await session.context.newCDPSession(session.page),handler=(event:{data?:string;sessionId?:number})=>{if(event.data)publishFrame(session,Buffer.from(event.data,'base64'));if(typeof event.sessionId==='number')void cdp.send('Page.screencastFrameAck',{sessionId:event.sessionId}).catch(()=>{});};
-      session.cdp=cdp;session.cdpFrameHandler=handler;cdp.on('Page.screencastFrame',handler);await cdp.send('Page.startScreencast',{format:'jpeg',quality:62,everyNthFrame:1});return;
+      session.cdp=cdp;session.cdpFrameHandler=handler;cdp.on('Page.screencastFrame',handler);await cdp.send('Page.startScreencast',{format:'jpeg',quality:58,everyNthFrame:2,maxWidth:session.width,maxHeight:session.height});return;
     }catch{await stopFrameSource(session);}
   }
   session.screenshotPumpRunning=true;void screenshotPump(session);
 }
 async function screenshotPump(session:BrowserSession):Promise<void>{
   try{
-    while(!session.closed&&session.frameListeners.size>0){const started=Date.now();try{publishFrame(session,Buffer.from(await session.page.screenshot({type:'jpeg',quality:56,animations:'allow',caret:'hide'})));}catch{}const wait=Math.max(0,45-(Date.now()-started));if(wait)await delay(wait);}
+    while(!session.closed&&session.frameListeners.size>0){const started=Date.now();try{publishFrame(session,Buffer.from(await session.page.screenshot({type:'jpeg',quality:52,animations:'allow',caret:'hide',scale:'css'})));}catch{}const wait=Math.max(0,60-(Date.now()-started));if(wait)await delay(wait);}
   }finally{session.screenshotPumpRunning=false;if(!session.closed&&session.frameListeners.size>0)void ensureFrameSource(session);}
 }
 function publishFrame(session:BrowserSession,frame:Buffer):void{session.latestFrame=frame;for(const listener of session.frameListeners){try{listener(frame);}catch{}}}
