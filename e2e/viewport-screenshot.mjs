@@ -3,19 +3,25 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { chromium } from '@playwright/test';
 
-const remote=createServer((_req,res)=>{res.writeHead(200,{'content-type':'text/html'});res.end('<!doctype html><html><body style="margin:0;background:#1737a5;color:white;font:700 42px sans-serif;display:grid;place-items:center;min-height:100vh">viewport screenshot fixture</body></html>');});
+const remote=createServer((_req,res)=>{res.writeHead(200,{'content-type':'text/html'});res.end('<!doctype html><html><head><style>html,body{margin:0;min-height:100vh;background:#f5f5f5;color:#111}@media (prefers-color-scheme:dark){html,body{background:#101820;color:#fff}}</style></head><body><div style="padding:160px;font:700 42px sans-serif">viewport screenshot fixture</div></body></html>');});
 const remotePort=await listen(remote),remoteUrl=`http://127.0.0.1:${remotePort}/`,port=4197,base=`http://127.0.0.1:${port}`;
 const server=spawn(process.execPath,['server-dist/server/index.js','--production'],{cwd:process.cwd(),env:{...process.env,PORT:String(port),NODE_ENV:'production',ANIMATOR_BROWSER_HEADLESS:'1'},stdio:['ignore','pipe','pipe']});let serverLog='';server.stdout.on('data',chunk=>serverLog+=chunk);server.stderr.on('data',chunk=>serverLog+=chunk);
 try{
   await waitForServer(`${base}/api/health`);
   const browser=await chromium.launch({headless:true});
   try{
-    const context=await browser.newContext();await context.grantPermissions(['clipboard-read','clipboard-write'],{origin:base});const page=await context.newPage();await page.goto(base,{waitUntil:'networkidle'});
+    const context=await browser.newContext({colorScheme:'dark'});await context.grantPermissions(['clipboard-read','clipboard-write'],{origin:base});const page=await context.newPage();await page.goto(base,{waitUntil:'networkidle'});
     const open=await fetch(`${base}/api/control/open`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:remoteUrl,engine:'chromium',profile:'desktop'})});assert.equal(open.ok,true,`Could not open browser capture: ${await open.text()}`);
-    const button=page.locator('[data-viewport-screenshot]');await button.waitFor({state:'visible'});await waitUntil(async()=>!(await button.isDisabled()),'Screenshot button never became enabled');
-    await button.click();
+    const surface=page.locator('[data-browser-preview]');await surface.waitFor({state:'visible'});await waitUntil(async()=>await surface.getAttribute('data-browser-reconstruction-ready')==='true','Browser reconstruction never became ready');
+    const stop=await fetch(`${base}/api/control/stop`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});assert.equal(stop.ok,true,`Could not stop browser capture: ${await stop.text()}`);
+    const snapshot=page.locator('[data-browser-snapshot-frame]');await snapshot.waitFor({state:'attached'});const handle=await snapshot.elementHandle(),frame=await handle?.contentFrame();assert(frame,'Reconstructed frame missing');await frame.locator('body').waitFor();
+    await frame.evaluate(()=>{const marker=document.createElement('div');marker.id='exact-frame-marker';Object.assign(marker.style,{position:'fixed',left:'20px',top:'20px',width:'90px',height:'90px',background:'#ff00aa',zIndex:'2147483646'});document.body.append(marker);});
+    const rendered=await frame.evaluate(()=>({dark:getComputedStyle(document.body).backgroundColor,marker:getComputedStyle(document.querySelector('#exact-frame-marker')).backgroundColor}));assert.equal(rendered.dark,'rgb(16, 24, 32)','Auto theme in visible viewport was not dark');assert.equal(rendered.marker,'rgb(255, 0, 170)','Visible frame marker was not applied');
+
+    const button=page.locator('[data-viewport-screenshot]');await waitUntil(async()=>!(await button.isDisabled()),'Screenshot button never became enabled');await button.click();
     const toast=page.locator('[data-viewport-capture-toast="success"]');await toast.waitFor({state:'visible'});assert.equal(await toast.textContent(),'Screenshot copied','Success toast copy mismatch');
-    const clipboard=await page.evaluate(async()=>{const items=await navigator.clipboard.read();return items.map(item=>item.types).flat();});assert(clipboard.includes('image/png'),`Clipboard did not contain image/png: ${clipboard.join(', ')}`);
+    const clipboard=await page.evaluate(async()=>{const items=await navigator.clipboard.read(),blob=await items[0].getType('image/png'),bitmap=await createImageBitmap(blob),canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;const context=canvas.getContext('2d');context.drawImage(bitmap,0,0);const marker=Array.from(context.getImageData(30,30,1,1).data),background=Array.from(context.getImageData(Math.min(500,bitmap.width-1),Math.min(500,bitmap.height-1),1,1).data);return{types:items.flatMap(item=>item.types),width:bitmap.width,height:bitmap.height,marker,background};});
+    assert(clipboard.types.includes('image/png'),`Clipboard did not contain image/png: ${clipboard.types.join(', ')}`);assert.equal(clipboard.width,1100,'Screenshot width did not match visible viewport');assert.equal(clipboard.height,700,'Screenshot height did not match visible viewport');assert(clipboard.marker[0]>240&&clipboard.marker[1]<20&&clipboard.marker[2]>150,`Screenshot did not contain current-frame marker: ${clipboard.marker.join(',')}`);assert(clipboard.background[0]<40&&clipboard.background[1]<50&&clipboard.background[2]<60,`Screenshot lost Auto dark theme: ${clipboard.background.join(',')}`);
     await toast.waitFor({state:'detached',timeout:4000});
   } finally {await browser.close();}
 } finally {server.kill('SIGTERM');await closeServer(remote);}
