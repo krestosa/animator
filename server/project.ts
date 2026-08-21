@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 export interface TreeNode { path:string; name:string; type:'file'|'directory'; children?:TreeNode[]; }
-export interface LoadedProject { id:string; root:string; entries:string[]; selectedEntry:string; tree:TreeNode[]; }
+export interface LoadedProject { id:string; root:string; entries:string[]; selectedEntry:string; tree:TreeNode[]; previewOrigin?:string|undefined; }
 const ignored = new Set(['node_modules','.git','dist','build','coverage','.cache','server-dist']);
 const projects = new Map<string,LoadedProject>();
 
@@ -29,6 +29,7 @@ export function loadProject(input:string):LoadedProject {
   const id=crypto.createHash('sha1').update(root).digest('hex').slice(0,12); const project={id,root,entries,selectedEntry:entries[0]!,tree:walk(root)}; projects.set(id,project); return project;
 }
 export function getProject(id:string):LoadedProject|undefined{return projects.get(id);}
+export function setProjectPreviewOrigin(id:string,previewOrigin:string):LoadedProject|undefined{const project=projects.get(id);if(!project)return undefined;project.previewOrigin=previewOrigin;return project;}
 export function resolveInside(root:string, requested:string):string {
   const clean=decodeURIComponent(requested).replace(/^\/+/, ''); const resolved=path.resolve(root,clean); const relative=path.relative(root,resolved);
   if(relative.startsWith('..')||path.isAbsolute(relative))throw new Error('Path escapes selected project root'); return resolved;
