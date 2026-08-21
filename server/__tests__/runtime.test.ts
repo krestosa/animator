@@ -4,25 +4,26 @@ import { runtimeSource } from '../runtime.js';
 import { seekRuntimeSource } from '../seek-runtime.js';
 
 describe('preview runtime',()=>{
-  it('parses the injected runtime sources as JavaScript',()=>{
+  it('parses every injected runtime source as JavaScript',()=>{
     expect(()=>new Function(runtimeSource)).not.toThrow();
     expect(()=>new Function(seekRuntimeSource)).not.toThrow();
     expect(()=>new Function(auxiliaryRuntimeSource)).not.toThrow();
   });
 
-  it('contains deterministic master timeline and replay controls',()=>{
-    expect(runtimeSource).toContain("post('TIMELINE_STATE'");
-    expect(runtimeSource).toContain('SCRUB_TIMELINE');
-    expect(runtimeSource).toContain('applyMasterTime');
+  it('keeps instrumentation and DOM replay capabilities',()=>{
     expect(runtimeSource).toContain('replayAttributes');
     expect(runtimeSource).toContain('replayNodes');
-    expect(runtimeSource).toContain('suspendedRafs');
+    expect(runtimeSource).toContain('MutationObserver');
   });
 
-  it('keeps a second direct animation seeker as a browser playback fallback',()=>{
+  it('uses one dedicated timeline source with persistent mirrored animations',()=>{
+    expect(seekRuntimeSource).toContain("IN='animator-timeline'");
+    expect(seekRuntimeSource).toContain("post('TIMELINE_STATE'");
+    expect(seekRuntimeSource).toContain('registry=new Set()');
+    expect(seekRuntimeSource).toContain('ensureMirror');
+    expect(seekRuntimeSource).toContain('new KeyframeEffect');
     expect(seekRuntimeSource).toContain('SCRUB_TIMELINE');
-    expect(seekRuntimeSource).toContain('seekAll');
-    expect(seekRuntimeSource).toContain('currentTime');
+    expect(seekRuntimeSource).toContain('HIGHLIGHT_ANIMATION');
     expect(seekRuntimeSource).toContain('applyGroup');
   });
 });
