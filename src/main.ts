@@ -10,6 +10,7 @@ import './app/browser-preview.css';
 import './app/browser-runtime.css';
 import './app/motion-catalog.css';
 import './app/editor-pro.css';
+import './app/viewport-screenshot.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
@@ -27,6 +28,7 @@ import { mountTimelineTools } from './app/timeline-tools';
 import { mountLoadTimeline } from './app/load-timeline';
 import { mountDomLoadTree } from './app/dom-load-tree';
 import { mountControlSync } from './app/control-sync';
+import { mountViewportScreenshot } from './app/viewport-screenshot';
 import { installPreviewNavigationGate, mountRecordGate } from './app/record-gate';
 
 const root=document.querySelector<HTMLElement>('#root');
@@ -51,6 +53,7 @@ const cleanupPreviewCamera=mountPreviewCamera(root);
 const cleanupPreviewTheme=mountPreviewTheme(root);
 const cleanupLoadTimeline=mountLoadTimeline(root);
 const cleanupDomLoadTree=mountDomLoadTree(root);
-const cleanup=():void=>{cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
+const cleanupViewportScreenshot=mountViewportScreenshot(root);
+const cleanup=():void=>{cleanupViewportScreenshot();cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
 
 if(import.meta.hot)import.meta.hot.dispose(cleanup);
