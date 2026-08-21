@@ -8,6 +8,7 @@ export const seekRuntimeSource = String.raw`(()=>{
   const suspendedRafs=new Map();
   const post=(type,payload={})=>parent.postMessage({source:OUT,type,...payload},'*');
   const now=()=>performance.now()-started;
+  const mutationReplay=()=>window.__ANIMATOR_MUTATION_REPLAY__;
   const documentAnimations=()=>{try{return document.getAnimations({subtree:true});}catch{return document.getAnimations();}};
   const captureAnimation=a=>{if(!a||a.__animatorMirror)return a;registry.add(a);remember(a);return a;};
   const capture=()=>{for(const animation of documentAnimations())captureAnimation(animation);};
@@ -44,7 +45,7 @@ export const seekRuntimeSource = String.raw`(()=>{
   const replayAttributes=time=>{for(const track of attrTracks){let value=track.baseline;for(const change of track.events){if(change.at>time)break;value=change.value;}try{if(value==null)track.el.removeAttribute(track.name);else track.el.setAttribute(track.name,value);}catch{}}};
   const seekAll=time=>{
     const generation=++replayGeneration;applyingReplay=true;
-    try{replayAttributes(time);for(const animation of all())seekOne(animation,time);void document.documentElement.getBoundingClientRect();for(const animation of all()){const target=animation.effect?.target;if(target instanceof Element){void getComputedStyle(target).transform;void getComputedStyle(target).opacity;}}}
+    try{replayAttributes(time);for(const animation of all())seekOne(animation,time);mutationReplay()?.seek?.(time);void document.documentElement.getBoundingClientRect();for(const animation of all()){const target=animation.effect?.target;if(target instanceof Element){void getComputedStyle(target).transform;void getComputedStyle(target).opacity;}}}
     finally{queueMicrotask(()=>{if(generation===replayGeneration)applyingReplay=false;});}
   };
   const totalEnd=()=>{let end=0;for(const animation of all()){const info=remember(animation),duration=endOf(animation);if(Number.isFinite(duration))end=Math.max(end,info.start+duration);}for(const track of attrTracks)for(const change of track.events)end=Math.max(end,change.at);return end;};
@@ -71,7 +72,7 @@ export const seekRuntimeSource = String.raw`(()=>{
       const info=remember(animation),local=masterTime-info.start;
       try{animation.pause();const end=endOf(animation);animation.currentTime=Number.isFinite(end)?Math.min(local,end):local;animation.play();}catch{}
     }
-    controlled=false;resumeSuspendedRafs();post('TIMELINE_STATE',{time:masterTime,playing:false,controlled:false});post('DIAGNOSTIC',{level:'info',message:'Live capture resumed'});
+    controlled=false;mutationReplay()?.release?.();resumeSuspendedRafs();post('TIMELINE_STATE',{time:masterTime,playing:false,controlled:false});post('DIAGNOSTIC',{level:'info',message:'Live capture resumed'});
   };
   const restore=()=>{
     playing=false;if(raf){nativeCancelRAF(raf);raf=0;}
@@ -80,7 +81,7 @@ export const seekRuntimeSource = String.raw`(()=>{
       const original=snapshots.get(animation);if(!original)continue;
       try{if(animation.effect&&original.timing)animation.effect.updateTiming(original.timing);if(animation.effect&&original.frames)animation.effect.setKeyframes(original.frames);animation.playbackRate=original.rate;animation.currentTime=original.currentTime;if(original.playState==='running')animation.play();else if(original.playState==='paused')animation.pause();}catch{}
     }
-    controlled=false;resumeSuspendedRafs();post('TIMELINE_STATE',{time:masterTime,playing:false,controlled:false});
+    controlled=false;mutationReplay()?.release?.();resumeSuspendedRafs();post('TIMELINE_STATE',{time:masterTime,playing:false,controlled:false});
   };
   const highlightAnimation=id=>{
     const animation=all().find(item=>item.__animatorId===id);const target=animation?.effect?.target;if(!(target instanceof Element))return;
