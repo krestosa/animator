@@ -1,6 +1,7 @@
 export const mutationRuntimeSource = String.raw`(()=>{
   if(window.__ANIMATOR_MUTATION_RUNTIME__)return;window.__ANIMATOR_MUTATION_RUNTIME__=true;
-  const OUT='animator-preview',IN='animator-timeline',started=performance.now(),ids=new WeakMap(),tracksByElement=new WeakMap(),tracksById=new Map();
+  const OUT='animator-preview',IN='animator-timeline',started=performance.now(),ids=new WeakMap(),tracksByElement=new WeakMap(),tracksById=new Map(),lastSample=new WeakMap();
+  const upstreamRAF=window.requestAnimationFrame.bind(window),upstreamCancelRAF=window.cancelAnimationFrame.bind(window);
   let seq=0,controlled=false,applying=false,highlight=null;
   const post=(type,payload={})=>parent.postMessage({source:OUT,type,...payload},'*');
   const now=()=>performance.now()-started;
@@ -10,7 +11,18 @@ export const mutationRuntimeSource = String.raw`(()=>{
   const changedProperties=(before,after)=>{const a=parseStyle(before),b=parseStyle(after),keys=new Set([...a.keys(),...b.keys()]);return[...keys].filter(key=>a.get(key)!==b.get(key));};
   const getTrack=(el,baseline)=>{let track=tracksByElement.get(el);if(track)return track;track={id:'runtime-style-'+Math.random().toString(36).slice(2),el,elementId:idFor(el),start:null,last:null,baseline,previous:baseline,properties:new Set(),events:[]};tracksByElement.set(el,track);tracksById.set(track.id,track);return track;};
   const report=track=>{if(track.start==null||track.last==null)return;const props=[...track.properties];post('ELEMENTS',{elements:[elementMeta(track.el)]});post('ANIMATION',{animation:{id:track.id,elementId:track.elementId,type:'runtime-style',name:props.length?'JS style · '+props.join(', '):'JS style mutation',startTime:track.start,duration:Math.max(1,track.last-track.start),properties:props.map(name=>({name})),confidence:'runtime-observed',runtimeState:controlled?'paused':'running'}});};
-  const observer=new MutationObserver(records=>{if(controlled||applying)return;for(const record of records){if(record.type!=='attributes'||record.attributeName!=='style'||!(record.target instanceof Element))continue;const value=record.target.getAttribute('style'),track=getTrack(record.target,record.oldValue),at=now(),previous=track.previous;for(const prop of changedProperties(previous,value))track.properties.add(prop);track.previous=value;if(track.start==null)track.start=at;track.last=at;track.events.push({at,value});report(track);}});
+  const appendFrame=(track,value,at)=>{if(value===track.previous)return false;for(const prop of changedProperties(track.previous,value))track.properties.add(prop);track.previous=value;if(track.start==null)track.start=at;track.last=at;track.events.push({at,value});lastSample.set(track.el,{value,at});report(track);return true;};
+  const sampleKnownTracks=at=>{if(controlled||applying)return;for(const track of tracksById.values())appendFrame(track,track.el.getAttribute('style'),at);};
+  window.requestAnimationFrame=function(callback){return upstreamRAF(timestamp=>{callback(timestamp);sampleKnownTracks(now());});};
+  window.cancelAnimationFrame=function(id){upstreamCancelRAF(id);};
+  const observer=new MutationObserver(records=>{if(controlled||applying)return;for(let index=0;index<records.length;index++){
+    const record=records[index];if(record.type!=='attributes'||record.attributeName!=='style'||!(record.target instanceof Element))continue;
+    const track=getTrack(record.target,record.oldValue),sample=lastSample.get(record.target),current=record.target.getAttribute('style');
+    const next=records.slice(index+1).find(item=>item.type==='attributes'&&item.attributeName==='style'&&item.target===record.target);
+    const value=next?.oldValue??current;
+    if(sample&&sample.value===value&&now()-sample.at<40){for(const prop of changedProperties(record.oldValue,value))track.properties.add(prop);continue;}
+    appendFrame(track,value,now());
+  }});
   observer.observe(document.documentElement,{subtree:true,attributes:true,attributeOldValue:true,attributeFilter:['style']});
   const replay=time=>{controlled=true;applying=true;try{for(const track of tracksById.values()){let value=track.baseline;for(const frame of track.events){if(frame.at>time)break;value=frame.value;}if(value==null)track.el.removeAttribute('style');else track.el.setAttribute('style',value);}}finally{queueMicrotask(()=>{applying=false;});}};
   const release=()=>{controlled=false;applying=false;};
