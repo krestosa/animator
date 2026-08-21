@@ -17,36 +17,37 @@ export function mountViewportScreenshot(root:HTMLElement):()=>void{
   button.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.4 4.25 7.55 2.7h4.9l1.15 1.55h2.15A2.25 2.25 0 0 1 18 6.5v8A2.25 2.25 0 0 1 15.75 16.75H4.25A2.25 2.25 0 0 1 2 14.5v-8a2.25 2.25 0 0 1 2.25-2.25H6.4Zm3.6 2.1a3.95 3.95 0 1 0 0 7.9 3.95 3.95 0 0 0 0-7.9Zm0 1.55a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8Z"/></svg>';
   label.insertAdjacentElement('afterend',button);
 
-  let busy=false,toast:HTMLDivElement|null=null,toastTimer=0;
-  const update=():void=>{button.disabled=busy||!store.get().project;button.classList.toggle('busy',busy);button.setAttribute('aria-busy',String(busy));};
+  let busy=false,toast:HTMLDivElement|null=null,toastTimer=0,disposed=false,lastHasProject=!!store.get().project;
+  const update=():void=>{if(disposed)return;button.disabled=busy||!store.get().project;button.classList.toggle('busy',busy);button.setAttribute('aria-busy',String(busy));};
   const removeToast=():void=>{if(toastTimer)clearTimeout(toastTimer);toastTimer=0;toast?.remove();toast=null;};
   const showToast=(message:string,kind:'loading'|'success'|'error'):void=>{
-    removeToast();
+    if(disposed)return;removeToast();
     toast=document.createElement('div');
     toast.className=`viewportCaptureToast ${kind}`;
     toast.dataset.viewportCaptureToast=kind;
     toast.setAttribute('role','status');
     toast.innerHTML=`<span class="viewportCaptureToastIcon" aria-hidden="true"></span><span>${escapeHtml(message)}</span>`;
     document.body.append(toast);
-    requestAnimationFrame(()=>toast?.classList.add('visible'));
-    if(kind!=='loading')toastTimer=window.setTimeout(()=>{toast?.classList.add('leaving');toastTimer=window.setTimeout(removeToast,260);},TOAST_LIFETIME);
+    requestAnimationFrame(()=>{if(!disposed)toast?.classList.add('visible');});
+    if(kind!=='loading')toastTimer=window.setTimeout(()=>{if(disposed)return;toast?.classList.add('leaving');toastTimer=window.setTimeout(removeToast,260);},TOAST_LIFETIME);
   };
   const onClick=async():Promise<void>=>{
-    if(busy||!store.get().project)return;
-    busy=true;update();showToast('Capturing viewport…','loading');
+    if(disposed||busy||!store.get().project)return;
+    const startedContext=projectContext();busy=true;update();showToast('Capturing viewport…','loading');
     try{
-      const blob=await captureViewport(root);
+      const blob=await captureViewport(root);if(disposed)return;if(projectContext()!==startedContext)throw new Error('Preview changed during capture; try again');
       if(!('ClipboardItem'in window)||!navigator.clipboard?.write)throw new Error('Image clipboard is not supported by this browser');
-      const png=blob.type==='image/png'?blob:new Blob([await blob.arrayBuffer()],{type:'image/png'});
-      await navigator.clipboard.write([new ClipboardItem({'image/png':png})]);
-      showToast('Screenshot copied','success');
-    }catch(error){showToast(error instanceof Error?error.message:'Could not copy screenshot','error');}
-    finally{busy=false;update();}
+      const png=blob.type==='image/png'?blob:new Blob([await blob.arrayBuffer()],{type:'image/png'});if(disposed||projectContext()!==startedContext)return;
+      await navigator.clipboard.write([new ClipboardItem({'image/png':png})]);if(!disposed&&projectContext()===startedContext)showToast('Screenshot copied','success');
+    }catch(error){if(!disposed)showToast(error instanceof Error?error.message:'Could not copy screenshot','error');}
+    finally{busy=false;if(!disposed)update();}
   };
   const click=():void=>{void onClick();};
   button.addEventListener('click',click);
-  const unsubscribe=store.subscribe(update);update();
-  return()=>{unsubscribe();button.removeEventListener('click',click);button.remove();removeToast();};
+  const unsubscribe=store.subscribe(()=>{const next=!!store.get().project;if(next===lastHasProject)return;lastHasProject=next;update();});update();
+  return()=>{disposed=true;unsubscribe();button.removeEventListener('click',click);button.remove();removeToast();};
+
+  function projectContext():string{const project=store.get().project;return project?`${project.id}:${project.selectedEntry}:${project.browserSessionId??''}`:'';}
 }
 
 async function captureViewport(root:HTMLElement):Promise<Blob>{
