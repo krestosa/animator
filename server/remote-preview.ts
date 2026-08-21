@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import { gateRuntimeSource } from './gate-runtime.js';
 import { runtimeSource } from './runtime.js';
 import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
@@ -11,8 +12,8 @@ import { stripPreviewThemeReset } from './theme-request.js';
 export interface RemoteProjectDescriptor {id:string;root:string;entries:string[];selectedEntry:string;tree:[];previewOrigin:string;previewUrl:string;sourceUrl:string;kind:'remote';}
 type RemoteSession={server:http.Server;origin:string;source:URL;remoteOrigin:string};
 const sessions=new Map<string,RemoteSession>();
-const runtimePaths=new Map<string,string>([['/__animator/runtime.js',runtimeSource],['/__animator/seek-runtime.js',seekRuntimeSource],['/__animator/mutation-runtime.js',mutationRuntimeSource],['/__animator/aux-runtime.js',auxiliaryRuntimeSource],['/__animator/clock-worker.js',clockWorkerSource]]);
-const runtimeInjection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
+const runtimePaths=new Map<string,string>([['/__animator/gate-runtime.js',gateRuntimeSource],['/__animator/runtime.js',runtimeSource],['/__animator/seek-runtime.js',seekRuntimeSource],['/__animator/mutation-runtime.js',mutationRuntimeSource],['/__animator/aux-runtime.js',auxiliaryRuntimeSource],['/__animator/clock-worker.js',clockWorkerSource]]);
+const runtimeInjection='<script src="/__animator/gate-runtime.js"></script><script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
 const blockedResponseHeaders=new Set(['content-security-policy','content-security-policy-report-only','x-frame-options','content-length','content-encoding','transfer-encoding','set-cookie']);
 
 export async function openRemotePreview(input:string):Promise<RemoteProjectDescriptor>{const source=parseRemoteUrl(input),id='remote-'+createHash('sha1').update(source.href).digest('hex').slice(0,16);let session=sessions.get(id);if(!session){const holder={origin:''},mutable={remoteOrigin:source.origin},server=createRemoteServer(source,mutable,()=>holder.origin),port=await listenRandom(server);holder.origin=`http://127.0.0.1:${port}`;session={server,origin:holder.origin,source,remoteOrigin:mutable.remoteOrigin};sessions.set(id,session);server.once('close',()=>sessions.delete(id));}const path=source.pathname+(source.search||'');return{id,root:source.href,entries:[path||'/'],selectedEntry:path||'/',tree:[],previewOrigin:session.origin,previewUrl:session.origin+(path.startsWith('/')?path:'/'+path),sourceUrl:source.href,kind:'remote'};}
