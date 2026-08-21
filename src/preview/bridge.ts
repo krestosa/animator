@@ -18,7 +18,7 @@ export function connectPreview(iframe:HTMLIFrameElement|null):()=>void {
     else if(msg.type==='EVENTS'){if(store.get().recording)store.addEvents(msg.events);}
     else if(msg.type==='TIMELINE_STATE'){
       window.dispatchEvent(new CustomEvent(TIMELINE_STATE_EVENT,{detail:msg}));
-      sendCommand(iframe,{type:'APPLY_VIEW_HISTORY_TIME',time:msg.time,controlled:msg.controlled});
+      if(!store.get().recording)sendCommand(iframe,{type:'APPLY_VIEW_HISTORY_TIME',time:msg.time,controlled:msg.controlled});
       const stamp=performance.now();if(!msg.playing||stamp-lastPlayheadStoreSync>=250){lastPlayheadStoreSync=stamp;const current=store.get().playhead;if(Math.abs(current-msg.time)>.25)store.set({playhead:Math.max(0,msg.time)});}
     }
     else if(msg.type==='RECORDING_STATE')window.dispatchEvent(new CustomEvent(RECORDING_STATE_EVENT,{detail:msg}));
