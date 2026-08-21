@@ -22,5 +22,5 @@ function row(label:string,count:number,content:string):string{return `<div class
 function marker(event:TimelineEvent,pxPerMs:number,className:string):string{return `<i class="${className}" style="left:${Math.max(0,event.at*pxPerMs)}px" title="${attr(`${event.label} · ${Math.round(event.at)}ms`)}"></i>`;}
 function networkBar(event:TimelineEvent,index:number,pxPerMs:number):string{const start=number(event.data?.start,event.at),end=number(event.data?.end,event.at),duration=Math.max(1,end-start),type=String(event.data?.initiatorType??'resource'),url=String(event.data?.url??event.label);return `<i class="v2NetworkBar" data-resource-type="${attr(type)}" style="left:${Math.max(0,start*pxPerMs)}px;width:${Math.max(2,duration*pxPerMs)}px;top:${5+(index%3)*5}px" title="${attr(`${type} · ${Math.round(duration)}ms · ${url}`)}"></i>`;}
 function number(value:unknown,fallback:number):number{const n=Number(value);return Number.isFinite(n)?n:fallback;}
-function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'})[char]??char);}
+function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
 function attr(value:string):string{return html(value);}
