@@ -7,9 +7,14 @@ import { analyzeProject } from './analysis.js';
 import { getProject, loadProject, resolveInside } from './project.js';
 import { runtimeSource } from './runtime.js';
 import { writeOverrides } from './export.js';
-const __dirname=path.dirname(fileURLToPath(import.meta.url)); const app=express(); app.use(express.json({limit:'2mb'}));
+import { FolderSelectionCancelled, pickProjectFolder } from './folder-dialog.js';
+
+const __dirname=path.dirname(fileURLToPath(import.meta.url));
+const app=express();
+app.use(express.json({limit:'2mb'}));
 app.get('/api/health',(_req,res)=>res.json({ok:true}));
 app.post('/api/projects/open',(req,res)=>{try{res.json(loadProject(String(req.body?.path||'')));}catch(error){res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
+app.post('/api/projects/pick-folder',async(_req,res)=>{try{const selected=await pickProjectFolder();return res.json(loadProject(selected));}catch(error){if(error instanceof FolderSelectionCancelled)return res.status(204).end();return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
 app.get('/api/projects/:id/analysis',(req,res)=>{const p=getProject(req.params.id);if(!p)return res.status(404).json({error:'Project not loaded'});try{return res.json(analyzeProject(p));}catch(error){return res.status(500).json({error:error instanceof Error?error.message:String(error)});}});
 app.get('/api/projects/:id/source',(req,res)=>{const p=getProject(req.params.id);if(!p)return res.status(404).end();try{const file=resolveInside(p.root,String(req.query.path||''));return res.type('text/plain').send(fs.readFileSync(file,'utf8'));}catch(error){return res.status(400).send(String(error));}});
 app.post('/api/projects/:id/export-overrides',(req,res)=>{const p=getProject(req.params.id);if(!p)return res.status(404).json({error:'Project not loaded'});try{return res.json(writeOverrides(p,String(req.body?.css||''),String(req.body?.ts||'')));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
