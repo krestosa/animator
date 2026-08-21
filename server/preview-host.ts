@@ -31,14 +31,14 @@ export async function ensurePreviewOrigin(project:LoadedProject):Promise<string>
   const port=await listenRandom(server);
   const session:PreviewSession={origin:`http://127.0.0.1:${port}`,server,upstream};
   sessions.set(project.id,session);
-  server.once('close',()=>{sessions.delete(project.id);if(upstream&&!upstream.process.killed)upstream.process.kill();});
+  server.once('close',()=>{sessions.delete(project.id);if(upstream)stopChild(upstream.process);});
   return session.origin;
 }
 
 export function closePreviewOrigin(projectId:string):void{
   const session=sessions.get(projectId);if(!session)return;
   session.server.close();
-  if(session.upstream&&!session.upstream.process.killed)session.upstream.process.kill();
+  if(session.upstream)stopChild(session.upstream.process);
   sessions.delete(projectId);
 }
 
@@ -117,11 +117,17 @@ async function startKnownDevServer(root:string):Promise<{port:number;process:Chi
   if(/\bnext\b/.test(script))args.push('--','--hostname','127.0.0.1','--port',String(port));
   else if(/\b(vite|astro|parcel)\b/.test(script))args.push('--','--host','127.0.0.1','--port',String(port));
   const child=spawn(npm,args,{cwd:root,env:{...process.env,HOST:'127.0.0.1',PORT:String(port),BROWSER:'none'},stdio:['ignore','pipe','pipe'],windowsHide:true});
+  child.stdout?.resume();child.stderr?.resume();
   let exited=false;child.once('exit',()=>{exited=true;});
-  const ready=await waitForHttp(port,12000,()=>exited);if(!ready){if(!child.killed)child.kill();return undefined;}
+  const ready=await waitForHttp(port,12000,()=>exited);if(!ready){stopChild(child);return undefined;}
   return {port,process:child};
 }
 
+function stopChild(child:ChildProcess):void{
+  if(child.killed)return;
+  if(process.platform==='win32'&&child.pid){const killer=spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});killer.unref();return;}
+  child.kill();
+}
 async function waitForHttp(port:number,timeoutMs:number,stopped:()=>boolean):Promise<boolean>{
   const deadline=Date.now()+timeoutMs;
   while(Date.now()<deadline&&!stopped()){
