@@ -21,7 +21,7 @@ try{
   const browser=await chromium.launch({headless:true});
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});await page.goto(base,{waitUntil:'networkidle'});
-    await page.locator('.toolbarMore summary').click();await page.locator('[data-path-input]').fill(path.join(process.cwd(),'fixture'));await page.locator('[data-action="open-project"]').click();
+    await page.locator('[data-path-input]').fill(path.join(process.cwd(),'fixture'));await page.locator('[data-action="open-project"]').click();
     const frameLocator=page.locator('[data-preview-frame]');await frameLocator.waitFor({state:'attached'});await waitUntil(async()=>/^http:\/\/127\.0\.0\.1:\d+\//.test(await frameLocator.getAttribute('src')??''),'preview did not use dedicated origin');
     let frameHandle=await frameLocator.elementHandle(),frame=await frameHandle?.contentFrame();assert(frame,'preview iframe missing');await frame.locator('.repeat-motion').first().waitFor();
     await waitUntil(async()=>await page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).count()===1,'repeat-pop group missing');
@@ -49,7 +49,7 @@ try{
     await page.keyboard.press('Home');await page.locator('[data-preview-step="1"]').click();await waitUntil(async()=>/Frame 1/.test(await page.locator('[data-preview-frame-label]').textContent()??''),'frame stepping failed');
     await page.evaluate(()=>{window.__heartbeat=0;window.__heartbeatTimer=setInterval(()=>window.__heartbeat++,10);});await page.locator('[data-action="play"]').click();await page.waitForTimeout(300);const heartbeat=await page.evaluate(()=>window.__heartbeat);await page.locator('[data-action="pause"]').click();await page.evaluate(()=>clearInterval(window.__heartbeatTimer));assert(heartbeat>10,`playback blocked editor UI: ${heartbeat}`);
 
-    await page.locator('.toolbarMore').evaluate(element=>{if(element instanceof HTMLDetailsElement)element.open=false;});const localSrc=await frameLocator.getAttribute('src');await page.locator('.webLoader>summary').click();await page.locator('[data-web-url]').fill(remoteUrl);await page.locator('[data-web-open]').click();
+    const localSrc=await frameLocator.getAttribute('src');await page.locator('.webLoader>summary').click();await page.locator('[data-web-url]').fill(remoteUrl);await page.locator('[data-web-open]').click();
     await waitUntil(async()=>{const src=await frameLocator.getAttribute('src');return !!src&&src!==localSrc&&/\/remote\/$/.test(new URL(src).pathname);},'remote redirect was not preserved in iframe URL');frameHandle=await frameLocator.elementHandle();frame=await frameHandle?.contentFrame();assert(frame,'remote frame missing');await frame.locator('#remote-card').waitFor();assert(await frame.evaluate(()=>window.__remoteLoaded===true&&document.documentElement.dataset.remoteScript==='ok'),'remote relative JS did not load');assert.equal(await frame.locator('#remote-card').evaluate(node=>getComputedStyle(node).animationName),'remote-in','remote relative CSS did not load');
   } finally {await browser.close();}
 } finally {server.kill('SIGTERM');await closeServer(remoteFixture);}
