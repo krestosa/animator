@@ -12,7 +12,7 @@ export interface DetectedAnimation {
 export interface RuntimeElement { id: string; tag: string; domId?: string | undefined; classes: string[]; text?: string | undefined; rect?: {x:number;y:number;width:number;height:number} | undefined; alive: boolean; }
 export interface TimelineEvent { id: string; at: number; kind: string; elementId?: string | undefined; label: string; data?: Record<string, unknown> | undefined; }
 export interface ProjectFile { path: string; name: string; type: 'file' | 'directory'; children?: ProjectFile[] | undefined; }
-export interface ProjectDescriptor { id: string; root: string; entries: string[]; selectedEntry: string; tree: ProjectFile[]; }
+export interface ProjectDescriptor { id: string; root: string; entries: string[]; selectedEntry: string; tree: ProjectFile[]; previewOrigin?: string | undefined; }
 export interface StaticAnalysis { animations: DetectedAnimation[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
 export type PreviewMessage =
  | {source:'animator-preview'; type:'READY'}
