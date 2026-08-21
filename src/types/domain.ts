@@ -18,6 +18,7 @@ export interface ProjectDescriptor {
   id: string; root: string; entries: string[]; selectedEntry: string; tree: ProjectFile[];
   previewOrigin?: string | undefined; previewUrl?: string | undefined; sourceUrl?: string | undefined; kind?: 'local' | 'remote' | undefined;
   browserSessionId?: string | undefined; browserEngine?: BrowserEngine | undefined; browserProfile?: BrowserProfile | undefined;
+  browserWidth?: number | undefined; browserHeight?: number | undefined; browserExternal?: boolean | undefined;
 }
 export interface StaticAnalysis { animations: DetectedAnimation[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
 export type PreviewMessage =
