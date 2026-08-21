@@ -92,9 +92,10 @@ async function captureDocument(document:Document):Promise<Blob>{
   }
 }
 
-function captureFrameRuntime(frame:HTMLIFrameElement):Promise<Blob>{
+async function captureFrameRuntime(frame:HTMLIFrameElement):Promise<Blob>{
   const target=frame.contentWindow;
-  if(!target)return Promise.reject(new Error('Viewport is not ready'));
+  if(!target)throw new Error('Viewport is not ready');
+  await waitForCaptureRuntime(target);
   const requestId=`viewport-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
   return new Promise((resolve,reject)=>{
     let settled=false;
@@ -109,9 +110,20 @@ function captureFrameRuntime(frame:HTMLIFrameElement):Promise<Blob>{
       if(!message.dataUrl){finish(new Error('Viewport did not return image data'));return;}
       void fetch(message.dataUrl).then(response=>response.blob()).then(blob=>finish(undefined,blob),error=>finish(error instanceof Error?error:new Error(String(error))));
     };
-    const timer=window.setTimeout(()=>finish(new Error('Exact viewport capture timed out')),12000);
+    const timer=window.setTimeout(()=>finish(new Error('Viewport rendering took too long')),30000);
     window.addEventListener('message',onMessage);
     target.postMessage({source:'animator-editor',type:'CAPTURE_VIEWPORT_PNG',requestId},'*');
+  });
+}
+
+function waitForCaptureRuntime(target:Window):Promise<void>{
+  const requestId=`viewport-ready-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
+  return new Promise((resolve,reject)=>{
+    let settled=false,retryTimer=0,attempts=0;
+    const finish=(error?:Error):void=>{if(settled)return;settled=true;if(retryTimer)clearTimeout(retryTimer);window.removeEventListener('message',onMessage);error?reject(error):resolve();};
+    const onMessage=(event:MessageEvent):void=>{if(event.source!==target)return;const message=event.data as{source?:string;type?:string;requestId?:string}|null;if(message?.source==='animator-preview'&&message.type==='VIEWPORT_CAPTURE_READY'&&message.requestId===requestId)finish();};
+    const ping=():void=>{if(settled)return;if(attempts++>=40){finish(new Error('Viewport capture is not ready yet'));return;}target.postMessage({source:'animator-editor',type:'CAPTURE_VIEWPORT_PING',requestId},'*');retryTimer=window.setTimeout(ping,125);};
+    window.addEventListener('message',onMessage);ping();
   });
 }
 
