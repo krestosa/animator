@@ -40,30 +40,43 @@ try{
     assert(motionBox,'timeline motion surface has no box');
     const pxPerMs=Number(await page.locator('[data-timeline-v2]').getAttribute('data-px-per-ms'));
     assert(Number.isFinite(pxPerMs)&&pxPerMs>0,'timeline scale is invalid');
-    const seek=async ms=>{await page.mouse.click(motionBox.x+Math.max(.5,ms*pxPerMs),motionBox.y+motionBox.height/2);await page.waitForTimeout(80);};
-    const style=async()=>frame.locator('.repeat-motion').first().evaluate(element=>({opacity:Number(getComputedStyle(element).opacity),transform:getComputedStyle(element).transform}));
+    const seekOn=async(box,ms)=>{await page.mouse.click(box.x+Math.max(.5,ms*pxPerMs),box.y+box.height/2);await page.waitForTimeout(80);};
+    const style=async selector=>frame.locator(selector).first().evaluate(element=>({opacity:Number(getComputedStyle(element).opacity),transform:getComputedStyle(element).transform}));
 
-    await seek(0);const atStart=await style();
-    await seek(400);const atMiddle=await style();
-    await seek(760);const nearEnd=await style();
-    await seek(0);const backAtStart=await style();
+    await seekOn(motionBox,0);const atStart=await style('.repeat-motion');
+    await seekOn(motionBox,400);const atMiddle=await style('.repeat-motion');
+    await seekOn(motionBox,760);const nearEnd=await style('.repeat-motion');
+    await seekOn(motionBox,0);const backAtStart=await style('.repeat-motion');
     assert(atMiddle.opacity>atStart.opacity+.15,`scrub did not advance visual opacity: ${atStart.opacity} -> ${atMiddle.opacity}`);
     assert(nearEnd.opacity>=atMiddle.opacity,`later frame regressed unexpectedly: ${atMiddle.opacity} -> ${nearEnd.opacity}`);
     assert(backAtStart.opacity<atMiddle.opacity-.15,`reverse scrub did not restore earlier visual frame: ${atMiddle.opacity} -> ${backAtStart.opacity}`);
     assert.notEqual(atStart.transform,atMiddle.transform,'transform must change between start and middle frames');
 
-    await page.locator('[data-preview-frame-forward]').click();const oneFrame=await style();
+    await page.locator('[data-preview-frame-forward]').click();const oneFrame=await style('.repeat-motion');
     assert(oneFrame.opacity>=backAtStart.opacity,'single-frame stepping must not move backwards');
 
-    await seek(0);
-    const playStart=await style();
+    await seekOn(motionBox,0);
+    const playStart=await style('.repeat-motion');
     await page.locator('[data-action="play"]').click();
     await page.waitForTimeout(280);
-    const playAdvanced=await style();
+    const playAdvanced=await style('.repeat-motion');
     await page.locator('[data-action="pause"]').click();
     assert(playAdvanced.opacity>playStart.opacity+.08,`Play did not advance preview animation: ${playStart.opacity} -> ${playAdvanced.opacity}`);
     const playheadText=await page.locator('[data-playhead-label]').textContent();
     assert(Number.parseInt(playheadText??'0',10)>100,`playhead did not advance during playback: ${playheadText}`);
+
+    await page.locator('[data-preview-live]').click();
+    await frame.locator('#raf').click();await page.waitForTimeout(950);
+    const jsGroup=page.locator('.v2GroupRow').filter({hasText:'JS style · transform'}).first();
+    await jsGroup.waitFor();
+    const jsClip=jsGroup.locator('.v2Clip').first();const title=await jsClip.getAttribute('title')??'';const match=title.match(/·\s*(\d+)ms\s*·\s*(\d+)ms/);assert(match,'javascript motion clip did not expose timeline timing');
+    const jsStart=Number(match[1]),jsDuration=Number(match[2]);assert(jsDuration>500,'javascript rAF motion duration was not captured');
+    const jsMotionBox=await jsGroup.locator('.v2Motion').boundingBox();assert(jsMotionBox,'javascript motion timeline row has no box');
+    await seekOn(jsMotionBox,jsStart+20);const jsEarly=await style('#box');
+    await seekOn(jsMotionBox,jsStart+jsDuration*.75);const jsLate=await style('#box');
+    await seekOn(jsMotionBox,jsStart+20);const jsBack=await style('#box');
+    assert.notEqual(jsEarly.transform,jsLate.transform,'javascript rAF motion did not advance under timeline control');
+    assert.equal(jsBack.transform,jsEarly.transform,'javascript rAF motion did not reverse to the captured frame');
   } finally { await browser.close(); }
 } finally {
   server.kill('SIGTERM');
