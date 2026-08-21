@@ -14,7 +14,7 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
   const detach=controls.querySelector<HTMLButtonElement>('[data-view-history-detach]');
   if(!toggle||!detach){controls.remove();return()=>{};}
 
-  let review=false,detached=false,lastRecording=store.get().recording,lastProjectId=store.get().project?.id,lastFrame:HTMLIFrameElement|null=null,confirmedRecording=true;
+  let review=false,detached=false,lastRecording=store.get().recording,lastProjectId=store.get().project?.id,lastFrame:HTMLIFrameElement|null=null,confirmedRecording=true,recordingCycleStarted=!!store.get().project&&store.get().recording,completedRecording=false;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const currentMode=()=>!review?'off':detached?'detached':'attached';
   const sendState=(reset=false):void=>{
@@ -23,7 +23,7 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
     sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:recording?'off':currentMode()});
   };
   const render=():void=>{
-    const recording=store.get().recording,available=!recording&&!confirmedRecording;
+    const recording=store.get().recording,available=!recording&&!confirmedRecording&&completedRecording;
     toggle.hidden=!available;detach.hidden=!available;
     toggle.classList.toggle('active',review);toggle.setAttribute('aria-pressed',String(review));
     detach.disabled=!review;detach.classList.toggle('active',review&&detached);detach.setAttribute('aria-pressed',String(review&&detached));
@@ -38,14 +38,14 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
   };
   const sync=():void=>{
     const state=store.get(),recording=state.recording,projectId=state.project?.id;bindFrame();
-    if(projectId!==lastProjectId){lastProjectId=projectId;review=false;detached=false;lastRecording=recording;confirmedRecording=true;sendState(true);render();return;}
-    if(recording!==lastRecording){lastRecording=recording;review=false;detached=false;if(recording)confirmedRecording=true;sendState(recording);}
+    if(projectId!==lastProjectId){lastProjectId=projectId;review=false;detached=false;lastRecording=recording;confirmedRecording=true;recordingCycleStarted=!!projectId&&recording;completedRecording=false;sendState(true);render();return;}
+    if(recording!==lastRecording){lastRecording=recording;review=false;detached=false;if(recording){confirmedRecording=true;recordingCycleStarted=!!projectId;completedRecording=false;}sendState(recording);}
     render();
   };
-  const onRecordingState=(event:Event):void=>{const detail=(event as CustomEvent<Extract<PreviewMessage,{type:'RECORDING_STATE'}>>).detail;if(!detail)return;confirmedRecording=detail.enabled;if(detail.enabled){review=false;detached=false;}render();};
+  const onRecordingState=(event:Event):void=>{const detail=(event as CustomEvent<Extract<PreviewMessage,{type:'RECORDING_STATE'}>>).detail;if(!detail)return;confirmedRecording=detail.enabled;if(detail.enabled){recordingCycleStarted=!!store.get().project;completedRecording=false;review=false;detached=false;}else if(recordingCycleStarted){completedRecording=true;}render();};
   const click=(event:MouseEvent):void=>{
     const target=(event.target as Element|null)?.closest<HTMLElement>('[data-view-history-toggle],[data-view-history-detach]');
-    if(!target||store.get().recording||confirmedRecording)return;
+    if(!target||store.get().recording||confirmedRecording||!completedRecording)return;
     event.preventDefault();event.stopImmediatePropagation();
     if(target.hasAttribute('data-view-history-toggle')){review=!review;if(!review)detached=false;}
     else if(review)detached=!detached;
