@@ -38,7 +38,7 @@ const timelineCommands=new Set<string>([
 ]);
 export function sendCommand(iframe:HTMLIFrameElement|null, command:EditorCommandInput):void {
   const target=iframe?.contentWindow;if(!target)return;
-  if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'||command.type==='SET_RECORDING'){
+  if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){
     target.postMessage({source:'animator-timeline',...command},'*');
     target.postMessage({source:'animator-editor',...command},'*');
     return;
