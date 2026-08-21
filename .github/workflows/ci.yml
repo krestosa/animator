@@ -14,7 +14,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       PLAYWRIGHT_BROWSERS_PATH: .animator-browsers
     steps:
@@ -32,8 +32,8 @@ jobs:
         run: npm run test
       - name: Build
         run: npm run build
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install browser runtimes
+        run: npx playwright install --with-deps chromium firefox webkit
       - name: Timeline E2E
         run: node e2e/timeline.mjs
       - name: Record and input gate E2E
