@@ -1,9 +1,10 @@
 export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
   if(window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__)return;window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__=true;
   let recording=true,timer=0,busy=false;
+  const capturable=()=>location.protocol==='http:'||location.protocol==='https:';
   const emit=payload=>{const target=window.__animatorEmit;if(typeof target!=='function')return;try{void target(payload);}catch{}};
   const capture=()=>{
-    if(!recording||busy||!document.documentElement||typeof window.__animatorEmit!=='function')return;busy=true;
+    if(!recording||busy||!capturable()||!document.documentElement||typeof window.__animatorEmit!=='function')return;busy=true;
     try{
       const idFor=window.__ANIMATOR_ELEMENT_ID__,marked=[],all=[document.documentElement,...document.documentElement.querySelectorAll('*')];
       for(const element of all){if(!(element instanceof Element)||element.hasAttribute('data-animator-internal'))continue;const id=typeof idFor==='function'?idFor(element):element.id?'dom-'+element.id:'';if(!id)continue;marked.push([element,element.getAttribute('data-animator-capture-id')]);element.setAttribute('data-animator-capture-id',id);}
@@ -13,7 +14,7 @@ export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
     }catch{}finally{busy=false;}
   };
   const schedule=delay=>{if(timer)clearTimeout(timer);if(!recording||typeof window.__animatorEmit!=='function')return;timer=setTimeout(()=>{timer=0;capture();schedule(900);},Math.max(80,Number(delay)||900));};
-  addEventListener('message',event=>{const message=event.data;if(!message||message.type!=='SET_RECORDING'||(message.source!=='animator-editor'&&message.source!=='animator-timeline'))return;recording=!!message.enabled;if(recording){capture();schedule(900);}else if(timer){clearTimeout(timer);timer=0;} });
+  addEventListener('message',event=>{const message=event.data;if(!message||typeof message.type!=='string')return;if(message.type==='CAPTURE_BROWSER_CHECKPOINT'&&message.source==='animator-editor'){capture();schedule(900);return;}if(message.type!=='SET_RECORDING'||(message.source!=='animator-editor'&&message.source!=='animator-timeline'))return;recording=!!message.enabled;if(recording){capture();schedule(900);}else if(timer){clearTimeout(timer);timer=0;}});
   addEventListener('DOMContentLoaded',()=>{capture();schedule(900);},{once:true});
   addEventListener('load',()=>capture(),{once:true});
   addEventListener('pagehide',()=>capture(),{capture:true});
