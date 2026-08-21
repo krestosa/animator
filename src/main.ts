@@ -26,6 +26,7 @@ import { mountRemoteOpen } from './app/remote-open';
 import { mountTimelineTools } from './app/timeline-tools';
 import { mountLoadTimeline } from './app/load-timeline';
 import { mountDomLoadTree } from './app/dom-load-tree';
+import { mountControlSync } from './app/control-sync';
 import { installPreviewNavigationGate, mountRecordGate } from './app/record-gate';
 
 const root=document.querySelector<HTMLElement>('#root');
@@ -33,6 +34,7 @@ if(!root)throw new Error('Animator root element not found');
 
 const cleanupNavigationGate=installPreviewNavigationGate();
 const cleanupApp=mountApp(root);
+const cleanupControlSync=mountControlSync();
 const cleanupRecordGate=mountRecordGate(root);
 const cleanupRecordViewHistory=mountRecordViewHistory(root);
 const cleanupExtras=mountEditorExtras(root);
@@ -49,6 +51,6 @@ const cleanupPreviewCamera=mountPreviewCamera(root);
 const cleanupPreviewTheme=mountPreviewTheme(root);
 const cleanupLoadTimeline=mountLoadTimeline(root);
 const cleanupDomLoadTree=mountDomLoadTree(root);
-const cleanup=():void=>{cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordGate();cleanupApp();cleanupNavigationGate();};
+const cleanup=():void=>{cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
 
 if(import.meta.hot)import.meta.hot.dispose(cleanup);
