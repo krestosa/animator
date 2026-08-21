@@ -1,24 +1,25 @@
 # Animator
 
-Local web animation inspector and visual editor for static web projects.
+Local visual animation inspector/editor for static and development web projects.
 
-Current implementation uses a Node.js/TypeScript backend and a framework-free TypeScript frontend. There is no React or Electron dependency.
-
-## Development
+## Run
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` and use `__fixture__` as the project path to load the bundled validation project.
+Open the local URL shown by the server.
 
-## Verification
+Remote pages can be opened with either the instrumented Proxy preview or the embedded Browser preview. The Browser preview uses an installed Chromium-compatible browser when available; otherwise run `npm run setup:browser` once to install the managed Chromium runtime.
+
+## Validate
 
 ```bash
 npm run typecheck
-npm run test
+npm test
 npm run build
+npm run test:e2e
 ```
 
-The editor keeps inspected source files unchanged while experimenting. Runtime edits are applied through the isolated preview bridge and can be exported as non-destructive override files.
+The app detects CSS animations/transitions, WAAPI and runtime motion, captures interaction events, provides timeline scrubbing/editing/presets, and exports CSS/TypeScript or safe source patches.

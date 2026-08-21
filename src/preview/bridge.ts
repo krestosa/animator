@@ -3,53 +3,43 @@ import type { EditorCommand, PreviewMessage } from '../types/domain';
 
 export const TIMELINE_STATE_EVENT='animator:timeline-state';
 export const CAPTURE_REPORT_EVENT='animator:capture-report';
+export const RECORDING_STATE_EVENT='animator:recording-state';
 
 export function isPreviewMessage(value:unknown): value is PreviewMessage {
   return !!value && typeof value==='object' && (value as {source?:unknown}).source==='animator-preview' && typeof (value as {type?:unknown}).type==='string';
 }
 export function connectPreview(iframe:HTMLIFrameElement):()=>void {
-  let lastPlayheadStoreSync=0;
-  const handler=(event:MessageEvent<unknown>)=>{
-    if(event.source!==iframe.contentWindow || !isPreviewMessage(event.data))return;
-    const msg=event.data;
+  let lastPlayheadStoreSync=0,disposed=false,pollTimer=0;
+  const handle=(msg:PreviewMessage):void=>{
     if(msg.type==='ELEMENTS') store.upsertElements(msg.elements);
     else if(msg.type==='SELECT_ELEMENT'){store.upsertElements([msg.element]);store.set({selectedElementId:msg.element.id,picker:false});}
-    else if(msg.type==='ANIMATION') { if(store.get().recording||msg.animation.name==='Created animation') store.addAnimation(msg.animation); }
-    else if(msg.type==='EVENT') { if(store.get().recording) store.addEvent(msg.event); }
-    else if(msg.type==='EVENTS') { if(store.get().recording) store.addEvents(msg.events); }
-    else if(msg.type==='TIMELINE_STATE') {
+    else if(msg.type==='ANIMATION'){if(store.get().recording||msg.animation.name==='Created animation')store.addAnimation(msg.animation);}
+    else if(msg.type==='EVENT'){if(store.get().recording)store.addEvent(msg.event);}
+    else if(msg.type==='EVENTS'){if(store.get().recording)store.addEvents(msg.events);}
+    else if(msg.type==='TIMELINE_STATE'){
       window.dispatchEvent(new CustomEvent(TIMELINE_STATE_EVENT,{detail:msg}));
-      iframe.contentWindow?.postMessage({source:'animator-editor',type:'APPLY_VIEW_HISTORY_TIME',time:msg.time,controlled:msg.controlled},'*');
-      const stamp=performance.now();
-      if(!msg.playing||stamp-lastPlayheadStoreSync>=250){
-        lastPlayheadStoreSync=stamp;const current=store.get().playhead;
-        if(Math.abs(current-msg.time)>.25) store.set({playhead:Math.max(0,msg.time)});
-      }
+      sendCommand(iframe,{type:'APPLY_VIEW_HISTORY_TIME',time:msg.time,controlled:msg.controlled});
+      const stamp=performance.now();if(!msg.playing||stamp-lastPlayheadStoreSync>=250){lastPlayheadStoreSync=stamp;const current=store.get().playhead;if(Math.abs(current-msg.time)>.25)store.set({playhead:Math.max(0,msg.time)});}
     }
-    else if(msg.type==='CAPTURE_REPORT') window.dispatchEvent(new CustomEvent(CAPTURE_REPORT_EVENT,{detail:msg}));
-    else if(msg.type==='DIAGNOSTIC') store.set({diagnostics:[...store.get().diagnostics, `${msg.level}: ${msg.message}`].slice(-100)});
+    else if(msg.type==='RECORDING_STATE')window.dispatchEvent(new CustomEvent(RECORDING_STATE_EVENT,{detail:msg}));
+    else if(msg.type==='CAPTURE_REPORT')window.dispatchEvent(new CustomEvent(CAPTURE_REPORT_EVENT,{detail:msg}));
+    else if(msg.type==='DIAGNOSTIC')store.set({diagnostics:[...store.get().diagnostics,`${msg.level}: ${msg.message}`].slice(-100)});
   };
-  window.addEventListener('message',handler); return()=>window.removeEventListener('message',handler);
+  const browserSessionId=store.get().project?.browserSessionId;
+  if(browserSessionId){
+    const poll=async():Promise<void>=>{if(disposed)return;try{const response=await fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/events`,{cache:'no-store'});if(response.ok){const values=await response.json() as unknown[];for(const value of values)if(isPreviewMessage(value))handle(value);}}catch{}finally{if(!disposed)pollTimer=window.setTimeout(()=>void poll(),45);}};
+    void poll();return()=>{disposed=true;if(pollTimer)clearTimeout(pollTimer);};
+  }
+  const handler=(event:MessageEvent<unknown>)=>{if(event.source!==iframe.contentWindow||!isPreviewMessage(event.data))return;handle(event.data);};
+  window.addEventListener('message',handler);return()=>{disposed=true;window.removeEventListener('message',handler);};
 }
-type EditorCommandInput = EditorCommand extends infer Command ? Command extends {source:'animator-editor'} ? Omit<Command,'source'> : never : never;
-const timelineCommands=new Set<string>([
-  'SET_ANIMATION_TIME','SCRUB_TIMELINE','SEEK_FRAME','STEP_FRAME','PLAY_ALL','PAUSE_ALL','RESTART_ALL','RELEASE_TIMELINE','SET_LOOP_ALL',
-  'SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION',
-  'APPLY_OVERRIDE','HIGHLIGHT_ANIMATION','SET_SOLO_ANIMATION','CLEAR_SOLO_ANIMATION','SET_FOCUS_ANIMATION','SET_MAGNIFY_ANIMATION'
-]);
-export function sendCommand(iframe:HTMLIFrameElement|null, command:EditorCommandInput):void {
+type EditorCommandInput=EditorCommand extends infer Command?Command extends{source:'animator-editor'}?Omit<Command,'source'>:never:never;
+const timelineCommands=new Set<string>(['SET_ANIMATION_TIME','SCRUB_TIMELINE','SEEK_FRAME','STEP_FRAME','PLAY_ALL','PAUSE_ALL','RESTART_ALL','RELEASE_TIMELINE','SET_LOOP_ALL','SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION','APPLY_OVERRIDE','HIGHLIGHT_ANIMATION','SET_SOLO_ANIMATION','CLEAR_SOLO_ANIMATION','SET_FOCUS_ANIMATION','SET_MAGNIFY_ANIMATION']);
+export function sendCommand(iframe:HTMLIFrameElement|null,command:EditorCommandInput):void{
+  const browserSessionId=store.get().project?.browserSessionId;
+  if(browserSessionId){void fetch(`/api/browser-sessions/${encodeURIComponent(browserSessionId)}/command`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(command)}).catch(()=>{});return;}
   const target=iframe?.contentWindow;if(!target)return;
-  if(command.type==='SET_RECORDING'){
-    const requestedAt=Date.now();
-    if(command.enabled)target.postMessage({source:'animator-timeline',type:'RELEASE_TIMELINE'},'*');
-    target.postMessage({source:'animator-editor',...command,requestedAt},'*');
-    return;
-  }
-  if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){
-    target.postMessage({source:'animator-timeline',...command},'*');
-    target.postMessage({source:'animator-editor',...command},'*');
-    return;
-  }
-  const source=timelineCommands.has(command.type)?'animator-timeline':'animator-editor';
-  target.postMessage({source,...command},'*');
+  if(command.type==='SET_RECORDING'){const requestedAt=Date.now();if(command.enabled)target.postMessage({source:'animator-timeline',type:'RELEASE_TIMELINE'},'*');target.postMessage({source:'animator-editor',...command,requestedAt},'*');return;}
+  if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){target.postMessage({source:'animator-timeline',...command},'*');target.postMessage({source:'animator-editor',...command},'*');return;}
+  const source=timelineCommands.has(command.type)?'animator-timeline':'animator-editor';target.postMessage({source,...command},'*');
 }

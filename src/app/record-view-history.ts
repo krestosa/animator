@@ -1,4 +1,5 @@
 import { sendCommand } from '../preview/bridge';
+import { store } from '../state/store';
 
 export function mountRecordViewHistory(root:HTMLElement):()=>void{
   const record=root.querySelector<HTMLElement>('[data-action="record"]');
@@ -6,41 +7,49 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
 
   const controls=document.createElement('span');
   controls.className='recordViewControls';
-  controls.innerHTML='<button type="button" data-view-history-toggle aria-pressed="false">View history</button><button type="button" data-view-history-detach aria-pressed="false" disabled>Detach</button>';
+  controls.innerHTML='<button type="button" data-view-history-toggle aria-pressed="false" hidden>View history</button><button type="button" data-view-history-detach aria-pressed="false" hidden disabled>Detach</button>';
   record.insertAdjacentElement('afterend',controls);
   const toggle=controls.querySelector<HTMLButtonElement>('[data-view-history-toggle]');
   const detach=controls.querySelector<HTMLButtonElement>('[data-view-history-detach]');
   if(!toggle||!detach){controls.remove();return()=>{};}
 
-  let enabled=false,detached=false,currentFrame:HTMLIFrameElement|null=null;
+  let review=false,detached=false,lastRecording=store.get().recording,lastProjectId=store.get().project?.id,lastFrame:HTMLIFrameElement|null=null;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
-  const mode=()=>!enabled?'off':detached?'detached':'attached';
-  const apply=():void=>{
-    const preview=frame();
-    sendCommand(preview,{type:'SET_VIEW_HISTORY_CAPTURE',enabled});
-    sendCommand(preview,{type:'SET_VIEW_HISTORY_MODE',mode:mode()});
+  const currentMode=()=>!review?'off':detached?'detached':'attached';
+  const sendState=(reset=false):void=>{
+    const recording=store.get().recording;
+    sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:recording,reset});
+    sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:recording?'off':currentMode()});
   };
   const render=():void=>{
-    toggle.classList.toggle('active',enabled);toggle.setAttribute('aria-pressed',String(enabled));
-    toggle.title=enabled?'Scroll and mouse history is recorded and follows the timeline':'Record scroll and mouse history with the preview timeline';
-    detach.disabled=!enabled;detach.classList.toggle('active',enabled&&detached);detach.setAttribute('aria-pressed',String(enabled&&detached));
-    detach.title=detached?'Freecam: the page stays where you move it while the recorded viewport is shown as a moving window':'Detach recorded viewport from page scroll for off-screen diagnostics';
+    const recording=store.get().recording;
+    toggle.hidden=recording;detach.hidden=recording;
+    toggle.classList.toggle('active',review);toggle.setAttribute('aria-pressed',String(review));
+    detach.disabled=!review;detach.classList.toggle('active',review&&detached);detach.setAttribute('aria-pressed',String(review&&detached));
+    toggle.title=review?'Disable recorded view playback':'Review scroll and pointer history from the completed recording';
+    detach.title=detached?'Free camera enabled':'Keep the page free while showing the recorded viewport';
   };
-  const onFrameLoad=():void=>apply();
+  const onFrameLoad=():void=>sendState(lastRecording);
   const bindFrame=():void=>{
-    const next=frame();if(next===currentFrame)return;
-    currentFrame?.removeEventListener('load',onFrameLoad);currentFrame=next;
-    currentFrame?.addEventListener('load',onFrameLoad);if(currentFrame)queueMicrotask(apply);
+    const next=frame();if(next===lastFrame)return;
+    lastFrame?.removeEventListener('load',onFrameLoad);lastFrame=next;lastFrame?.addEventListener('load',onFrameLoad);
+    if(lastFrame)queueMicrotask(()=>sendState(lastRecording));
+  };
+  const sync=():void=>{
+    const state=store.get(),recording=state.recording,projectId=state.project?.id;bindFrame();
+    if(projectId!==lastProjectId){lastProjectId=projectId;review=false;detached=false;lastRecording=recording;sendState(true);render();return;}
+    if(recording!==lastRecording){lastRecording=recording;review=false;detached=false;sendState(recording);}
+    render();
   };
   const click=(event:MouseEvent):void=>{
-    const target=(event.target as Element|null)?.closest<HTMLElement>('[data-view-history-toggle],[data-view-history-detach]');if(!target)return;
+    const target=(event.target as Element|null)?.closest<HTMLElement>('[data-view-history-toggle],[data-view-history-detach]');
+    if(!target||store.get().recording)return;
     event.preventDefault();event.stopImmediatePropagation();
-    if(target.hasAttribute('data-view-history-toggle'))enabled=!enabled;
-    else if(enabled)detached=!detached;
-    render();apply();
+    if(target.hasAttribute('data-view-history-toggle')){review=!review;if(!review)detached=false;}
+    else if(review)detached=!detached;
+    render();sendState(false);
   };
-  const device=root.querySelector<HTMLElement>('[data-device]');
-  const observer=new MutationObserver(bindFrame);if(device)observer.observe(device,{childList:true});
-  root.addEventListener('click',click,true);bindFrame();render();
-  return()=>{sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:false});sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:'off'});currentFrame?.removeEventListener('load',onFrameLoad);observer.disconnect();root.removeEventListener('click',click,true);controls.remove();};
+  const device=root.querySelector<HTMLElement>('[data-device]');const observer=new MutationObserver(bindFrame);if(device)observer.observe(device,{childList:true});
+  const unsubscribe=store.subscribe(sync);root.addEventListener('click',click,true);bindFrame();sendState(true);render();
+  return()=>{unsubscribe();sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:false});sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:'off'});lastFrame?.removeEventListener('load',onFrameLoad);observer.disconnect();root.removeEventListener('click',click,true);controls.remove();};
 }

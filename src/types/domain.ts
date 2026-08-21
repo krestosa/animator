@@ -15,6 +15,7 @@ export interface ProjectFile { path: string; name: string; type: 'file' | 'direc
 export interface ProjectDescriptor {
   id: string; root: string; entries: string[]; selectedEntry: string; tree: ProjectFile[];
   previewOrigin?: string | undefined; previewUrl?: string | undefined; sourceUrl?: string | undefined; kind?: 'local' | 'remote' | undefined;
+  browserSessionId?: string | undefined;
 }
 export interface StaticAnalysis { animations: DetectedAnimation[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
 export type PreviewMessage =
@@ -25,14 +26,15 @@ export type PreviewMessage =
  | {source:'animator-preview'; type:'EVENT'; event:TimelineEvent}
  | {source:'animator-preview'; type:'EVENTS'; events:TimelineEvent[]}
  | {source:'animator-preview'; type:'TIMELINE_STATE'; time:number; frame?:number | undefined; fps?:number | undefined; playing:boolean; controlled:boolean}
+ | {source:'animator-preview'; type:'RECORDING_STATE'; enabled:boolean; requestId?:string | undefined}
  | {source:'animator-preview'; type:'CAPTURE_REPORT'; reason:string; visibleElements:number; activeAnimations:number; capturedAnimations:number; styleTracks:number; autoCapture:boolean; burstActive:boolean; at:number}
  | {source:'animator-preview'; type:'DIAGNOSTIC'; level:'info'|'warn'|'error'; message:string};
 
 export type EditorCommand =
  | {source:'animator-editor'; type:'SET_PICKER'; enabled:boolean}
- | {source:'animator-editor'; type:'SET_RECORDING'; enabled:boolean}
+ | {source:'animator-editor'; type:'SET_RECORDING'; enabled:boolean; requestId?:string | undefined}
  | {source:'animator-editor'; type:'SET_COLOR_SCHEME'; mode:'auto'|'light'|'dark'}
- | {source:'animator-editor'; type:'SET_VIEW_HISTORY_CAPTURE'; enabled:boolean}
+ | {source:'animator-editor'; type:'SET_VIEW_HISTORY_CAPTURE'; enabled:boolean; reset?:boolean | undefined}
  | {source:'animator-editor'; type:'SET_VIEW_HISTORY_MODE'; mode:'off'|'attached'|'detached'}
  | {source:'animator-editor'; type:'APPLY_VIEW_HISTORY_TIME'; time:number; controlled:boolean}
  | {source:'animator-editor'; type:'SET_ANIMATION_TIME'; id:string; time:number}
