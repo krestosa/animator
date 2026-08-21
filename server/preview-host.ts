@@ -9,6 +9,7 @@ import { resolveInside } from './project.js';
 import { runtimeSource } from './runtime.js';
 import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
+import { mutationRuntimeSource } from './mutation-runtime.js';
 
 interface PreviewSession {
   origin:string;
@@ -20,9 +21,10 @@ const sessions=new Map<string,PreviewSession>();
 const runtimePaths=new Map<string,string>([
   ['/__animator/runtime.js',runtimeSource],
   ['/__animator/seek-runtime.js',seekRuntimeSource],
+  ['/__animator/mutation-runtime.js',mutationRuntimeSource],
   ['/__animator/aux-runtime.js',auxiliaryRuntimeSource]
 ]);
-const injection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
+const injection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
 
 export async function ensurePreviewOrigin(project:LoadedProject):Promise<string>{
   const existing=sessions.get(project.id);if(existing)return existing.origin;
