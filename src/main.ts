@@ -7,6 +7,7 @@ import './app/preview-camera.css';
 import './app/preview-theme.css';
 import './app/record-view-history.css';
 import './app/browser-preview.css';
+import './app/browser-runtime.css';
 import './app/motion-catalog.css';
 import './app/editor-pro.css';
 import { mountApp } from './app/app';
