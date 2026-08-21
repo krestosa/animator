@@ -14,7 +14,7 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
     const msg=event.data;
     if(msg.type==='ELEMENTS') store.upsertElements(msg.elements);
     else if(msg.type==='SELECT_ELEMENT'){store.upsertElements([msg.element]);store.set({selectedElementId:msg.element.id,picker:false});}
-    else if(msg.type==='ANIMATION') { if(store.get().recording) store.addAnimation(msg.animation); }
+    else if(msg.type==='ANIMATION') { if(store.get().recording||msg.animation.name==='Created animation') store.addAnimation(msg.animation); }
     else if(msg.type==='EVENT') { if(store.get().recording) store.addEvent(msg.event); }
     else if(msg.type==='EVENTS') { if(store.get().recording) store.addEvents(msg.events); }
     else if(msg.type==='TIMELINE_STATE') {
