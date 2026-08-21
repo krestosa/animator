@@ -16,10 +16,11 @@ try{
     await page.locator('.toolbarMore summary').click();
     await page.locator('[data-path-input]').fill(path.join(process.cwd(),'fixture'));
     await page.locator('[data-action="open-project"]').click();
-    await page.locator('[data-preview-frame]').waitFor({state:'attached'});
-    const frame=page.frames().find(candidate=>candidate.url().includes('/preview/'));
-    assert(frame,'preview iframe did not load');
+    const frameLocator=page.locator('[data-preview-frame]');await frameLocator.waitFor({state:'attached'});
+    await waitUntil(async()=>/^http:\/\/127\.0\.0\.1:\d+\//.test(await frameLocator.getAttribute('src')??''),'preview was not moved to a dedicated local origin');
+    const frameHandle=await frameLocator.elementHandle();const frame=await frameHandle?.contentFrame();assert(frame,'preview iframe did not load');
     await frame.locator('.repeat-motion').first().waitFor();
+    await waitUntil(async()=>/^Ready/.test(await page.locator('[data-preview-capture-status]').textContent()??''),'startup animation capture did not complete');
 
     const group=page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).first();
     await group.waitFor();
@@ -50,6 +51,9 @@ try{
     assert(backAtStart.opacity<atMiddle.opacity-.15,`reverse scrub did not restore earlier visual frame: ${atMiddle.opacity} -> ${backAtStart.opacity}`);
     assert.notEqual(atStart.transform,atMiddle.transform,'transform must change between start and middle frames');
 
+    await page.locator('[data-preview-frame-forward]').click();const oneFrame=await style();
+    assert(oneFrame.opacity>=backAtStart.opacity,'single-frame stepping must not move backwards');
+
     await seek(0);
     const playStart=await style();
     await page.locator('[data-action="play"]').click();
@@ -65,4 +69,4 @@ try{
 }
 
 async function waitForServer(url){for(let attempt=0;attempt<80;attempt++){try{const response=await fetch(url);if(response.ok)return;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}throw new Error(`server did not start\n${serverLog}`);}
-async function waitUntil(check,message){for(let attempt=0;attempt<80;attempt++){if(await check())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error(message);}
+async function waitUntil(check,message){for(let attempt=0;attempt<120;attempt++){if(await check())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error(message);}
