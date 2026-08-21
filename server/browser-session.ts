@@ -75,6 +75,14 @@ async function applyBrowserCommand(session:BrowserSession,command:BrowserCommand
     if(message.enabled===true)await postToPage(session.page,{source:'animator-timeline',type:'RELEASE_TIMELINE'});
   }
   const source=timelineCommands.has(type)?'animator-timeline':'animator-editor';await postToPage(session.page,{source,...message});
+  if(type==='SET_RECORDING')await confirmBrowserRecording(session,message);
+}
+async function confirmBrowserRecording(session:BrowserSession,message:BrowserCommand):Promise<void>{
+  const enabled=message.enabled===true;
+  try{
+    await session.page.waitForFunction(expected=>{const gate=(globalThis as typeof globalThis&{__ANIMATOR_CAPTURE_GATE__?:{recording?:boolean}}).__ANIMATOR_CAPTURE_GATE__;return typeof gate?.recording==='boolean'&&gate.recording===expected;},enabled,{timeout:2000});
+  }catch{throw new Error(`Browser preview did not apply recording state ${enabled?'REC':'STOP'}`);}
+  if(typeof message.requestId==='string')pushEvent(session,{source:'animator-preview',type:'RECORDING_STATE',enabled,requestId:message.requestId});
 }
 async function reapplySticky(session:BrowserSession,version:number):Promise<void>{
   try{await session.page.waitForLoadState('domcontentloaded',{timeout:5000});}catch{}
