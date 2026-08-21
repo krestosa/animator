@@ -66,6 +66,7 @@ export const store = {
     const index = state.animations.findIndex(item => item.id === normalized.id);
     state = {
       ...state,
+      selectedAnimationId: state.selectedAnimationId ?? normalized.id,
       animations: index >= 0
         ? state.animations.map(item => item.id === normalized.id ? correlateSource({ ...item, ...normalized }, state.analysis) : item)
         : [...state.animations, normalized]
