@@ -1,7 +1,10 @@
 export const browserSnapshotRuntimeSource=String.raw`(()=>{
   if(window.__ANIMATOR_BROWSER_SNAPSHOT_RUNTIME__)return;window.__ANIMATOR_BROWSER_SNAPSHOT_RUNTIME__=true;
+  const roots=()=>{const list=[document];for(let index=0;index<list.length;index++){const root=list[index];let nodes=[];try{nodes=[...root.querySelectorAll('*')];}catch{}for(const node of nodes)if(node instanceof Element&&node.shadowRoot&&!list.includes(node.shadowRoot))list.push(node.shadowRoot);}return list;};
+  const restoreShadowRoots=()=>{for(let pass=0;pass<24;pass++){let changed=0;for(const root of roots()){let templates=[];try{templates=[...root.querySelectorAll('template[data-animator-shadow-snapshot]')];}catch{}for(const template of templates){if(!(template instanceof HTMLTemplateElement))continue;const host=template.parentElement;if(!(host instanceof Element)){template.remove();continue;}let shadow=host.shadowRoot;try{if(!shadow)shadow=host.attachShadow({mode:'open'});}catch{}if(!shadow)continue;try{shadow.replaceChildren(template.content.cloneNode(true));template.remove();changed++;}catch{}}}if(!changed)break;}};
+  restoreShadowRoots();
   const definitions=Array.isArray(window.__ANIMATOR_SNAPSHOT_ANIMATIONS__)?window.__ANIMATOR_SNAPSHOT_ANIMATIONS__:[],visuals=Array.isArray(window.__ANIMATOR_SNAPSHOT_VISUALS__)?window.__ANIMATOR_SNAPSHOT_VISUALS__:[],elements=new Map();
-  for(const element of document.querySelectorAll('[data-animator-capture-id]'))elements.set(element.getAttribute('data-animator-capture-id'),element);
+  for(const root of roots()){let nodes=[];try{nodes=[...root.querySelectorAll('[data-animator-capture-id]')];}catch{}for(const element of nodes)elements.set(element.getAttribute('data-animator-capture-id'),element);}
   const nativeAnimate=Element.prototype.animate;
   for(const definition of definitions){
     const element=elements.get(definition.elementId);if(!(element instanceof Element)||!Array.isArray(definition.keyframes)||!definition.keyframes.length)continue;
@@ -12,9 +15,10 @@ export const browserSnapshotRuntimeSource=String.raw`(()=>{
     }catch{}
   }
   const escape=value=>String(value).replace(/\\/g,'\\\\').replace(/"/g,'\\"');
+  const findVisual=id=>{for(const root of roots()){try{const found=root.querySelector('[data-animator-visual-id="'+escape(id)+'"]');if(found)return found;}catch{}}return null;};
   for(const visual of visuals){
     if(!visual||typeof visual.id!=='string'||typeof visual.dataUrl!=='string'||!visual.dataUrl.startsWith('data:image/'))continue;
-    const element=document.querySelector('[data-animator-visual-id="'+escape(visual.id)+'"]');if(!(element instanceof Element))continue;
+    const element=findVisual(visual.id);if(!(element instanceof Element))continue;
     try{
       if(element instanceof HTMLCanvasElement){element.style.backgroundImage='url("'+visual.dataUrl+'")';element.style.backgroundSize='100% 100%';element.style.backgroundRepeat='no-repeat';element.style.backgroundPosition='center';element.dataset.animatorVisualRestored='canvas';continue;}
       if(element instanceof HTMLVideoElement){try{element.pause();}catch{}element.removeAttribute('src');element.removeAttribute('autoplay');for(const source of element.querySelectorAll('source'))source.remove();element.poster=visual.dataUrl;element.dataset.animatorVisualRestored='video';continue;}
