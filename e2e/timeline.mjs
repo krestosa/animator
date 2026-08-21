@@ -25,9 +25,10 @@ try{
     await waitUntil(async()=>await page.locator('[data-preview-live]').evaluate(element=>element.classList.contains('active')),'preview did not remain in Live mode after startup capture');
 
     const previewSrcBeforeRecalculate=await frameLocator.getAttribute('src');
-    await frame.locator('#scroll-fade').scrollIntoViewIfNeeded();
-    await waitUntil(async()=>await page.locator('.v2GroupRow').filter({hasText:'scroll-fade-in'}).count()>0,'short viewport fade-in was missed while Live scrolling');
-    assert(await frame.locator('#scroll-fade').evaluate(element=>element.classList.contains('revealed')),'scroll fixture did not enter its revealed state');
+    await frame.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
+    await waitUntil(async()=>await frame.locator('#scroll-fade').evaluate(element=>element.classList.contains('revealed')),'scroll fixture did not enter its revealed state');
+    const scrollGroup=page.locator('.v2GroupRow').filter({hasText:'scroll-fade-in'}).first();await scrollGroup.waitFor();
+    await waitUntil(async()=>{const ids=await scrollGroup.locator('.v2Clip').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-v2-instance')));return ids.some(id=>!!id&&!id.startsWith('static:'));},'short viewport fade-in was not captured as a runtime animation while Live scrolling');
     await page.locator('[data-preview-recalculate]').click();
     await waitUntil(async()=>/visible|captured|Scanning|Viewport/.test(await page.locator('[data-preview-capture-status]').textContent()??''),'viewport recalculation did not publish capture stats');
     await waitUntil(async()=>!(await page.locator('[data-preview-recalculate]').isDisabled()),'viewport recalculation control stayed disabled');
