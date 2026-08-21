@@ -40,28 +40,30 @@ export function mountTimelineTools(root:HTMLElement):()=>void{
   const leaveSoloInspection=():void=>{
     if(!isolatedAnimationId)return;sendCommand(frame(),{type:'CLEAR_SOLO_ANIMATION'});isolatedAnimationId=undefined;window.dispatchEvent(new Event(ANIMATION_CLEAR_INSPECTION_EVENT));
   };
-  const clearInspection=():void=>{
-    if(focusMode)setFocusMode(false);leaveSoloInspection();isolatedElementId=undefined;isolation='all';applyIsolation();requestAnimationFrame(()=>centerPlayhead());
-  };
+  const clearIsolation=():void=>{leaveSoloInspection();isolatedElementId=undefined;isolation='all';applyIsolation();requestAnimationFrame(()=>centerPlayhead());};
+  const clearInspection=():void=>{if(focusMode)setFocusMode(false);clearIsolation();};
   const setIsolation=(mode:Isolation):void=>{
-    if(mode==='all'){clearInspection();return;}
+    if(mode==='all'){clearIsolation();return;}
     if(mode==='animation'){const animation=selectedAnimation();if(animation){beginInspection(animation);return;}isolation='animation';applyIsolation();return;}
     if(mode==='element'){
       const animation=selectedAnimation();isolatedElementId=animation?.elementId??store.get().selectedElementId;
       leaveSoloInspection();isolation='element';applyIsolation();return;
     }
   };
+  const validateTargets=():void=>{
+    const state=store.get();
+    if(isolatedAnimationId&&!state.animations.some(animation=>animation.id===isolatedAnimationId)){sendCommand(frame(),{type:'CLEAR_SOLO_ANIMATION'});isolatedAnimationId=undefined;isolatedElementId=undefined;isolation='all';window.dispatchEvent(new Event(ANIMATION_CLEAR_INSPECTION_EVENT));}
+    if(isolation==='element'&&isolatedElementId&&!state.elements.some(element=>element.id===isolatedElementId)&&!state.animations.some(animation=>animation.elementId===isolatedElementId)){isolatedElementId=undefined;isolation='all';}
+    if(focusMode&&focusedAnimationId&&!state.animations.some(animation=>animation.id===focusedAnimationId))setFocusMode(false);
+  };
   const applyIsolation=():void=>{
     const view=viewport();if(!view)return;const state=store.get();let ids:Set<string>|undefined;
     if(isolation==='animation')ids=new Set(isolatedAnimationId?[isolatedAnimationId]:[]);
-    else if(isolation==='element'){
-      const elementId=isolatedElementId;
-      ids=new Set(elementId?state.animations.filter(animation=>animation.elementId===elementId).map(animation=>animation.id):[]);
-    }
+    else if(isolation==='element')ids=new Set(isolatedElementId?state.animations.filter(animation=>animation.elementId===isolatedElementId).map(animation=>animation.id):[]);
     const isolated=!!ids;
     for(const row of view.querySelectorAll<HTMLElement>('.v2GroupRow,.v2InstanceRow')){
       const clips=[...row.querySelectorAll<HTMLElement>('[data-v2-instance]')].map(item=>item.dataset.v2Instance).filter((id):id is string=>!!id);
-      const matches=!ids||clips.some(id=>ids.has(id));row.hidden=!matches;
+      const matches=!ids||clips.some(id=>ids?.has(id));row.hidden=!matches;
       for(const clip of row.querySelectorAll<HTMLElement>('.v2Clip[data-v2-instance]'))clip.hidden=!!ids&&!ids.has(clip.dataset.v2Instance??'');
     }
     for(const row of view.querySelectorAll<HTMLElement>('.v2EventRow,.v2LoadRow'))row.hidden=isolated;
@@ -69,11 +71,11 @@ export function mountTimelineTools(root:HTMLElement):()=>void{
     const label=tools.querySelector<HTMLElement>('[data-isolation-label]');if(label)label.textContent=isolation==='animation'?(isolatedAnimationId?'1 motion':'Select motion'):isolation==='element'?(isolatedElementId?`${ids?.size??0} on element`:'Select element'):'All tracks';
   };
   const updateAvailability=():void=>{
-    const hasAnimation=!!selectedAnimation(),hasElement=!!(selectedAnimation()?.elementId??store.get().selectedElementId);
+    const animation=selectedAnimation(),hasAnimation=!!animation,hasElement=!!(animation?.elementId??store.get().selectedElementId);
     const motion=tools.querySelector<HTMLButtonElement>('[data-isolate="animation"]'),element=tools.querySelector<HTMLButtonElement>('[data-isolate="element"]'),focus=tools.querySelector<HTMLButtonElement>('[data-focus-mode]'),zoom=tools.querySelector<HTMLButtonElement>('[data-magnify-mode]');
     if(motion)motion.disabled=!hasAnimation;if(element)element.disabled=!hasElement;if(focus)focus.disabled=!hasAnimation;if(zoom)zoom.disabled=!hasAnimation;
   };
-  const schedule=():void=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;updateScale();applyIsolation();updateAvailability();});};
+  const schedule=():void=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;validateTargets();updateScale();applyIsolation();updateAvailability();});};
   const click=(event:MouseEvent):void=>{const button=(event.target as Element|null)?.closest<HTMLButtonElement>('[data-timeline-zoom],[data-isolate],[data-focus-mode],[data-inspection-clear]');if(!button)return;const zoom=button.dataset.timelineZoom;if(zoom==='in')stepZoom(1);else if(zoom==='out')stepZoom(-1);else if(zoom==='fit')fit();else if(zoom==='frame')zoomFrame();else if(button.dataset.isolate)setIsolation(button.dataset.isolate as Isolation);else if(button.hasAttribute('data-focus-mode'))setFocusMode(!focusMode);else clearInspection();};
   const key=(event:KeyboardEvent):void=>{const target=event.target as HTMLElement|null;if(target?.matches('input,textarea,select,[contenteditable="true"]'))return;if(event.key==='Escape'&&focusMode){event.preventDefault();setFocusMode(false);return;}const mod=event.ctrlKey||event.metaKey;if(mod&&(event.key==='+'||event.key==='=')){event.preventDefault();stepZoom(1);}else if(mod&&event.key==='-'){event.preventDefault();stepZoom(-1);}else if(mod&&event.key==='0'){event.preventDefault();fit();}else if(!mod&&event.key===']'){event.preventDefault();stepZoom(1);}else if(!mod&&event.key==='['){event.preventDefault();stepZoom(-1);}};
   const wheel=(event:WheelEvent):void=>{const view=viewport();if(!view||!view.contains(event.target as Node)||!(event.ctrlKey||event.metaKey))return;event.preventDefault();zoomTarget=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,zoomTarget*Math.exp(-event.deltaY*.0025)));if(!raf)raf=requestAnimationFrame(()=>{raf=0;setZoom(zoomTarget);});};
