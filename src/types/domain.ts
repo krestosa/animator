@@ -20,7 +20,7 @@ export type PreviewMessage =
  | {source:'animator-preview'; type:'SELECT_ELEMENT'; element:RuntimeElement}
  | {source:'animator-preview'; type:'ANIMATION'; animation:DetectedAnimation}
  | {source:'animator-preview'; type:'EVENT'; event:TimelineEvent}
- | {source:'animator-preview'; type:'TIMELINE_STATE'; time:number; playing:boolean; controlled:boolean}
+ | {source:'animator-preview'; type:'TIMELINE_STATE'; time:number; frame?:number | undefined; fps?:number | undefined; playing:boolean; controlled:boolean}
  | {source:'animator-preview'; type:'DIAGNOSTIC'; level:'info'|'warn'|'error'; message:string};
 
 export type EditorCommand =
@@ -28,6 +28,8 @@ export type EditorCommand =
  | {source:'animator-editor'; type:'SET_RECORDING'; enabled:boolean}
  | {source:'animator-editor'; type:'SET_ANIMATION_TIME'; id:string; time:number}
  | {source:'animator-editor'; type:'SCRUB_TIMELINE'; time:number}
+ | {source:'animator-editor'; type:'SEEK_FRAME'; frame:number}
+ | {source:'animator-editor'; type:'STEP_FRAME'; delta:number}
  | {source:'animator-editor'; type:'PLAY_ALL'}
  | {source:'animator-editor'; type:'PAUSE_ALL'}
  | {source:'animator-editor'; type:'RESTART_ALL'}
