@@ -22,7 +22,16 @@ try{
     await frame.locator('.repeat-motion').first().waitFor();
     assert(await frame.locator('#root-asset').evaluate(image=>image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0),'root-relative preview asset did not load');
     assert.equal(await frame.evaluate(async()=>{const response=await fetch('/__animator/clock-worker.js');return response.status;}),200,'worker-backed playback clock was not served by preview origin');
-    await waitUntil(async()=>/^Ready/.test(await page.locator('[data-preview-capture-status]').textContent()??''),'startup animation capture did not complete');
+    await waitUntil(async()=>await page.locator('[data-preview-live]').evaluate(element=>element.classList.contains('active')),'preview did not remain in Live mode after startup capture');
+
+    const previewSrcBeforeRecalculate=await frameLocator.getAttribute('src');
+    await frame.locator('#scroll-fade').scrollIntoViewIfNeeded();
+    await waitUntil(async()=>await page.locator('.v2GroupRow').filter({hasText:'scroll-fade-in'}).count()>0,'short viewport fade-in was missed while Live scrolling');
+    assert(await frame.locator('#scroll-fade').evaluate(element=>element.classList.contains('revealed')),'scroll fixture did not enter its revealed state');
+    await page.locator('[data-preview-recalculate]').click();
+    await waitUntil(async()=>/visible|captured|Scanning|Viewport/.test(await page.locator('[data-preview-capture-status]').textContent()??''),'viewport recalculation did not publish capture stats');
+    await waitUntil(async()=>!(await page.locator('[data-preview-recalculate]').isDisabled()),'viewport recalculation control stayed disabled');
+    assert.equal(await frameLocator.getAttribute('src'),previewSrcBeforeRecalculate,'viewport recalculation reloaded the preview unexpectedly');
 
     const timeline=page.locator('[data-timeline-v2]');
     const group=page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).first();
