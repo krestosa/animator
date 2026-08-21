@@ -50,7 +50,6 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
     if(!inspect)return;
     inspectedAnimationId=animation.id;viewOriginMs=animationStart(animation);structuralSignature='';
     sendCommand(frame(),{type:'SET_SOLO_ANIMATION',id:animation.id,elementId:animation.elementId,anchorTime:viewOriginMs});
-    sendCommand(frame(),{type:'SET_ANIMATION_TIME',id:animation.id,time:0});
     window.dispatchEvent(new CustomEvent<InspectionDetail>(ANIMATION_INSPECT_EVENT,{detail:{id:animation.id,elementId:animation.elementId,origin:viewOriginMs}}));
     schedule();
   };
