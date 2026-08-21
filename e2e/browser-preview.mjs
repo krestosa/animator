@@ -10,15 +10,16 @@ try{
   await waitForServer(`${base}/api/health`);const browser=await chromium.launch({headless:true});
   try{
     const page=await browser.newPage({viewport:{width:1365,height:900}});await page.goto(base,{waitUntil:'networkidle'});await page.locator('.app').waitFor();
-    const options=await page.locator('[data-browser-engine] option').allTextContents();assert.deepEqual(options,['Chromium','Firefox','Safari / WebKit'],'Browser engine selector is incomplete');
+    const engineControl=page.locator('select[data-browser-engine]'),profileControl=page.locator('select[data-browser-profile]');
+    const options=await engineControl.locator('option').allTextContents();assert.deepEqual(options,['Chromium','Firefox','Safari / WebKit'],'Browser engine selector is incomplete');
     const combinations=[
       ['chromium','mobile'],['firefox','desktop'],['firefox','mobile'],['webkit','desktop'],['webkit','mobile'],['chromium','desktop']
     ];
     for(const [engine,profile] of combinations){
       const loader=page.locator('.webLoader');if(!(await loader.getAttribute('open')))await page.locator('.webLoader>summary').click();
-      await page.locator('[data-web-url]').fill(remoteUrl);await page.locator('[data-web-engine]').selectOption('browser');await page.locator('[data-browser-engine]').selectOption(engine);await page.locator('[data-browser-profile]').selectOption(profile);await page.locator('[data-web-open]').click();
+      await page.locator('[data-web-url]').fill(remoteUrl);await page.locator('[data-web-engine]').selectOption('browser');await engineControl.selectOption(engine);await profileControl.selectOption(profile);await page.locator('[data-web-open]').click();
       const surface=page.locator('[data-browser-preview]');await surface.waitFor({state:'visible'});assert.equal(await page.locator('[data-preview-frame]').count(),0,`${engine}/${profile} rendered an iframe`);
-      await waitUntil(async()=>await surface.getAttribute('data-browser-engine')===engine&&await surface.getAttribute('data-browser-profile')===profile,`${engine}/${profile} state metadata was not applied`);
+      await waitUntil(async()=>await surface.getAttribute('data-browser-engine-active')===engine&&await surface.getAttribute('data-browser-profile-active')===profile,`${engine}/${profile} state metadata was not applied`);
       const expected=profile==='mobile'?['390','844']:['1100','700'];assert.equal(await surface.getAttribute('data-browser-width'),expected[0],`${engine}/${profile} width mismatch`);assert.equal(await surface.getAttribute('data-browser-height'),expected[1],`${engine}/${profile} height mismatch`);
       await waitUntil(async()=>await surface.locator('img').evaluate(image=>image.naturalWidth>0&&image.naturalHeight>0),`${engine}/${profile} did not receive streamed frames`);
       await waitUntil(async()=>await page.locator('[data-motion-region] .motionRow').count()>0,`${engine}/${profile} did not detect animations`);
