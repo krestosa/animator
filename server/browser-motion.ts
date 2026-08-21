@@ -21,7 +21,7 @@ export async function scanBrowserMotion(id:string):Promise<BrowserMotionSnapshot
     const elementMeta=(element:Element):BrowserMotionElement=>{const rect=element.getBoundingClientRect();return{id:idFor(element),tag:element.tagName.toLowerCase(),domId:element.id||undefined,classes:[...element.classList],text:(element.textContent||'').trim().slice(0,80)||undefined,rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},alive:element.isConnected};};
     const rawAnimations=document.getAnimations().slice(0,600),animations:BrowserMotionAnimation[]=[];
     for(const animation of rawAnimations){
-      const effect=animation.effect instanceof KeyframeEffect?animation.effect:null,target=effect?.target;if(!(target instanceof Element)||target.hasAttribute('data-animator-internal'))continue;
+      const effect=animation.effect instanceof KeyframeEffect?animation.effect:null;if(!effect)continue;const target=effect.target;if(!(target instanceof Element)||target.hasAttribute('data-animator-internal'))continue;
       const object=animation as Animation&{__animatorId?:string|undefined;__animatorBrowserStartTime?:number|undefined};
       const id=object.__animatorId||(object.__animatorId=`browser-anim-${Math.random().toString(36).slice(2)}`),elementId=idFor(target);elementIds.set(target,elementId);
       let timing:ComputedEffectTiming={} as ComputedEffectTiming,rawFrames:ComputedKeyframe[]=[];try{timing=effect.getComputedTiming();rawFrames=effect.getKeyframes();}catch{}
