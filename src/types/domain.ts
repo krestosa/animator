@@ -31,6 +31,7 @@ export type EditorCommand =
  | {source:'animator-editor'; type:'PLAY_ALL'}
  | {source:'animator-editor'; type:'PAUSE_ALL'}
  | {source:'animator-editor'; type:'RESTART_ALL'}
+ | {source:'animator-editor'; type:'RELEASE_TIMELINE'}
  | {source:'animator-editor'; type:'SET_LOOP_ALL'; enabled:boolean}
  | {source:'animator-editor'; type:'SET_ALL_PLAYBACK_RATE'; rate:number}
  | {source:'animator-editor'; type:'SET_REDUCED_MOTION'; enabled:boolean}
