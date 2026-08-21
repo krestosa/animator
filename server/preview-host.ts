@@ -7,6 +7,7 @@ import ts from 'typescript';
 import type { LoadedProject } from './project.js';
 import { resolveInside } from './project.js';
 import { gateRuntimeSource } from './gate-runtime.js';
+import { recordResumeRuntimeSource } from './record-resume-runtime.js';
 import { runtimeSource } from './runtime.js';
 import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
@@ -17,8 +18,8 @@ import { stripPreviewThemeReset } from './theme-request.js';
 
 interface PreviewSession { origin:string; server:http.Server; upstream?:{port:number;process:ChildProcess}|undefined; }
 const sessions=new Map<string,PreviewSession>();
-const runtimePaths=new Map<string,string>([['/__animator/gate-runtime.js',gateRuntimeSource],['/__animator/runtime.js',runtimeSource],['/__animator/seek-runtime.js',seekRuntimeSource],['/__animator/mutation-runtime.js',mutationRuntimeSource],['/__animator/aux-runtime.js',auxiliaryRuntimeSource],['/__animator/clock-worker.js',clockWorkerSource]]);
-const runtimeInjection='<script src="/__animator/gate-runtime.js"></script><script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
+const runtimePaths=new Map<string,string>([['/__animator/gate-runtime.js',gateRuntimeSource],['/__animator/runtime.js',runtimeSource],['/__animator/record-resume-runtime.js',recordResumeRuntimeSource],['/__animator/seek-runtime.js',seekRuntimeSource],['/__animator/mutation-runtime.js',mutationRuntimeSource],['/__animator/aux-runtime.js',auxiliaryRuntimeSource],['/__animator/clock-worker.js',clockWorkerSource]]);
+const runtimeInjection='<script src="/__animator/gate-runtime.js"></script><script src="/__animator/runtime.js"></script><script src="/__animator/record-resume-runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
 
 export async function ensurePreviewOrigin(project:LoadedProject):Promise<string>{
   const existing=sessions.get(project.id);if(existing)return existing.origin;
