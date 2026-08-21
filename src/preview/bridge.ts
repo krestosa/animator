@@ -39,8 +39,9 @@ const timelineCommands=new Set<string>([
 export function sendCommand(iframe:HTMLIFrameElement|null, command:EditorCommandInput):void {
   const target=iframe?.contentWindow;if(!target)return;
   if(command.type==='SET_RECORDING'){
+    const requestedAt=Date.now();
     if(command.enabled)target.postMessage({source:'animator-timeline',type:'RELEASE_TIMELINE'},'*');
-    target.postMessage({source:'animator-editor',...command},'*');
+    target.postMessage({source:'animator-editor',...command,requestedAt},'*');
     return;
   }
   if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){
