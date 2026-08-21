@@ -19,7 +19,8 @@ type BrowserEvent=Record<string,unknown>;
 type BrowserCommand=Record<string,unknown>;
 type BrowserSession={id:string;browser:Browser;context:BrowserContext;page:Page;events:BrowserEvent[];width:number;height:number;closed:boolean;headless:boolean;snapshotHtml?:string;sticky:Map<string,BrowserCommand>;navigationVersion:number;engine:BrowserEngine;profile:BrowserProfile};
 type SnapshotAnimation={id:string;elementId:string;startTime:number;duration:number;delay:number;iterations:number|string;direction:string;easing:string;fill:string;keyframes:Array<Record<string,unknown>>;currentTime:number|null;playbackRate:number};
-type SnapshotPayload={html:string;url:string;scrollX:number;scrollY:number;history:unknown[];animations:SnapshotAnimation[]};
+type SnapshotVisual={id:string;tag:string;width:number;height:number;dataUrl?:string};
+type SnapshotPayload={html:string;url:string;scrollX:number;scrollY:number;history:unknown[];animations:SnapshotAnimation[];visuals:SnapshotVisual[]};
 
 const sessions=new Map<string,BrowserSession>();
 const timelineCommands=new Set(['SET_ANIMATION_TIME','SCRUB_TIMELINE','SEEK_FRAME','STEP_FRAME','PLAY_ALL','PAUSE_ALL','RESTART_ALL','RELEASE_TIMELINE','SET_LOOP_ALL','SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION','APPLY_OVERRIDE','HIGHLIGHT_ANIMATION','SET_SOLO_ANIMATION','CLEAR_SOLO_ANIMATION','SET_FOCUS_ANIMATION','SET_MAGNIFY_ANIMATION']);
@@ -66,9 +67,11 @@ async function confirmBrowserRecording(session:BrowserSession,message:BrowserCom
   if(!enabled)await captureBrowserSnapshot(session);if(typeof message.requestId==='string')pushEvent(session,{source:'animator-preview',type:'RECORDING_STATE',enabled,requestId:message.requestId});
 }
 async function captureBrowserSnapshot(session:BrowserSession):Promise<void>{
-  const payload=await session.page.evaluate(():SnapshotPayload=>{
+  const visualToken='visual-'+randomUUID().replace(/-/g,''),payload=await session.page.evaluate((token):SnapshotPayload=>{
     const host=globalThis as typeof globalThis&{__ANIMATOR_ELEMENT_ID__?:(element:Element)=>string;__ANIMATOR_VIEW_HISTORY__?:{snapshot?:()=>unknown[]}},idFor=host.__ANIMATOR_ELEMENT_ID__,marked:Array<{element:Element;previous:string|null}>=[],all=[document.documentElement,...document.documentElement.querySelectorAll('*')];
     for(const element of all){if(element.hasAttribute('data-animator-internal'))continue;const id=typeof idFor==='function'?idFor(element):element.id?`dom-${element.id}`:'';if(!id)continue;marked.push({element,previous:element.getAttribute('data-animator-capture-id')});element.setAttribute('data-animator-capture-id',id);}
+    const visuals:Array<{id:string;tag:string;width:number;height:number}>=[];let visualIndex=0;
+    for(const element of document.querySelectorAll('canvas,video,iframe,object,embed')){if(element.hasAttribute('data-animator-internal'))continue;const rect=element.getBoundingClientRect();if(rect.width<1||rect.height<1)continue;const id=`${token}-${++visualIndex}`;element.setAttribute('data-animator-visual-id',id);visuals.push({id,tag:element.tagName.toLowerCase(),width:rect.width,height:rect.height});if(visuals.length>=64)break;}
     const animations:SnapshotAnimation[]=[];
     for(const animation of document.getAnimations?.()??[]){
       const effect=animation.effect;if(!(effect instanceof KeyframeEffect))continue;const target=effect.target;if(!(target instanceof Element)||target.hasAttribute('data-animator-internal'))continue;const elementId=typeof idFor==='function'?idFor(target):target.getAttribute('data-animator-capture-id')||'';if(!elementId)continue;
@@ -78,9 +81,17 @@ async function captureBrowserSnapshot(session:BrowserSession):Promise<void>{
     }
     const clone=document.documentElement.cloneNode(true) as HTMLElement;for(const item of marked){if(item.previous==null)item.element.removeAttribute('data-animator-capture-id');else item.element.setAttribute('data-animator-capture-id',item.previous);}
     clone.querySelectorAll('script,[data-animator-internal],[data-animator-picker-outline],[data-animator-recorded-viewport],[data-animator-recorded-cursor]').forEach(node=>node.remove());clone.querySelectorAll('meta[http-equiv]').forEach(node=>{if((node.getAttribute('http-equiv')||'').toLowerCase()==='content-security-policy')node.remove();});clone.querySelectorAll('base').forEach(node=>node.remove());
-    return{html:'<!doctype html>'+clone.outerHTML,url:location.href,scrollX,scrollY,history:host.__ANIMATOR_VIEW_HISTORY__?.snapshot?.()??[],animations};
-  });
-  const base=`<base href="${escapeHtml(payload.url)}">`,freeze='<style data-animator-snapshot-freeze>*,*::before,*::after{animation:none!important;transition:none!important}</style>',seed=`<script>window.__ANIMATOR_VIEW_HISTORY_SEED__=${safeJson(payload.history)};window.__ANIMATOR_SNAPSHOT_STATE__=${safeJson({scrollX:payload.scrollX,scrollY:payload.scrollY})};window.__ANIMATOR_SNAPSHOT_ANIMATIONS__=${safeJson(payload.animations)};</script>`,runtimes=inlineScript(browserSnapshotRuntimeSource)+inlineScript(recordResumeRuntimeSource)+inlineScript(seekRuntimeSource);
+    return{html:'<!doctype html>'+clone.outerHTML,url:location.href,scrollX,scrollY,history:host.__ANIMATOR_VIEW_HISTORY__?.snapshot?.()??[],animations,visuals};
+  },visualToken);
+  const capturedVisuals:SnapshotVisual[]=[];
+  try{
+    for(const visual of payload.visuals){
+      try{const locator=session.page.locator(`[data-animator-visual-id="${visual.id}"]`).first(),box=await locator.boundingBox();if(!box||box.width<1||box.height<1)continue;const buffer=await locator.screenshot({type:'png',animations:'allow',caret:'hide',scale:'css',timeout:4000});capturedVisuals.push({...visual,dataUrl:'data:image/png;base64,'+buffer.toString('base64')});}catch{}
+    }
+  }finally{
+    try{await session.page.evaluate(ids=>{for(const id of ids)document.querySelector(`[data-animator-visual-id="${id}"]`)?.removeAttribute('data-animator-visual-id');},payload.visuals.map(visual=>visual.id));await session.page.evaluate(({x,y})=>scrollTo(x,y),{x:payload.scrollX,y:payload.scrollY});}catch{}
+  }
+  const base=`<base href="${escapeHtml(payload.url)}">`,freeze='<style data-animator-snapshot-freeze>*,*::before,*::after{animation:none!important;transition:none!important}</style>',seed=`<script>window.__ANIMATOR_VIEW_HISTORY_SEED__=${safeJson(payload.history)};window.__ANIMATOR_SNAPSHOT_STATE__=${safeJson({scrollX:payload.scrollX,scrollY:payload.scrollY})};window.__ANIMATOR_SNAPSHOT_ANIMATIONS__=${safeJson(payload.animations)};window.__ANIMATOR_SNAPSHOT_VISUALS__=${safeJson(capturedVisuals)};</script>`,runtimes=inlineScript(browserSnapshotRuntimeSource)+inlineScript(recordResumeRuntimeSource)+inlineScript(seekRuntimeSource);
   let html=payload.html.replace(/<head([^>]*)>/i,match=>match+base+freeze);if(!/<head[\s>]/i.test(html))html=html.replace(/<html([^>]*)>/i,match=>match+'<head>'+base+freeze+'</head>');html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,seed+runtimes+'</body>'):html.replace(/<\/html>/i,seed+runtimes+'</html>');session.snapshotHtml=html;
 }
 async function reapplySticky(session:BrowserSession,version:number):Promise<void>{try{await session.page.waitForLoadState('domcontentloaded',{timeout:5000});}catch{}if(session.closed||version!==session.navigationVersion)return;for(const command of session.sticky.values()){try{await applyBrowserCommand(session,command);}catch{}}await forceRuntimeScan(session);}
