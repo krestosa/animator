@@ -13,13 +13,15 @@ import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
 import { mutationRuntimeSource } from './mutation-runtime.js';
 import { clockWorkerSource } from './clock-worker.js';
+import { viewportCaptureRuntimeSource } from './viewport-capture-runtime.js';
 import { previewColorSchemeBootstrap, resolvePreviewColorScheme, rewriteColorSchemeCss, rewriteInlineColorSchemeStyles, stripPreviewColorScheme, type PreviewColorScheme } from './color-scheme.js';
 import { stripPreviewThemeReset } from './theme-request.js';
 
 interface PreviewSession { origin:string; server:http.Server; upstream?:{port:number;process:ChildProcess}|undefined; }
 const sessions=new Map<string,PreviewSession>();
-const runtimePaths=new Map<string,string>([['/__animator/gate-runtime.js',gateRuntimeSource],['/__animator/runtime.js',runtimeSource],['/__animator/record-resume-runtime.js',recordResumeRuntimeSource],['/__animator/seek-runtime.js',seekRuntimeSource],['/__animator/mutation-runtime.js',mutationRuntimeSource],['/__animator/aux-runtime.js',auxiliaryRuntimeSource],['/__animator/clock-worker.js',clockWorkerSource]]);
-const runtimeInjection='<script src="/__animator/gate-runtime.js"></script><script src="/__animator/runtime.js"></script><script src="/__animator/record-resume-runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
+const html2canvasSource=fs.readFileSync(path.resolve(process.cwd(),'node_modules','html2canvas','dist','html2canvas.min.js'),'utf8');
+const runtimePaths=new Map<string,string>([['/__animator/gate-runtime.js',gateRuntimeSource],['/__animator/runtime.js',runtimeSource],['/__animator/record-resume-runtime.js',recordResumeRuntimeSource],['/__animator/seek-runtime.js',seekRuntimeSource],['/__animator/mutation-runtime.js',mutationRuntimeSource],['/__animator/aux-runtime.js',auxiliaryRuntimeSource],['/__animator/clock-worker.js',clockWorkerSource],['/__animator/html2canvas.js',html2canvasSource],['/__animator/viewport-capture-runtime.js',viewportCaptureRuntimeSource]]);
+const runtimeInjection='<script src="/__animator/gate-runtime.js"></script><script src="/__animator/runtime.js"></script><script src="/__animator/record-resume-runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script><script src="/__animator/html2canvas.js"></script><script src="/__animator/viewport-capture-runtime.js"></script>';
 
 export async function ensurePreviewOrigin(project:LoadedProject):Promise<string>{
   const existing=sessions.get(project.id);if(existing)return existing.origin;
@@ -27,7 +29,7 @@ export async function ensurePreviewOrigin(project:LoadedProject):Promise<string>
   const session:PreviewSession={origin:`http://127.0.0.1:${port}`,server,upstream};sessions.set(project.id,session);
   server.once('close',()=>{sessions.delete(project.id);if(upstream)stopChild(upstream.process);});return session.origin;
 }
-export function closePreviewOrigin(projectId:string):void{const session=sessions.get(projectId);if(!session)return;session.server.close();if(session.upstream)stopChild(session.upstream.process);sessions.delete(projectId);}
+export function closePreviewOrigin(projectId:string):void{const session=sessions.get(projectId);if(!session)return;session.server.close();if(session.upstream)stopChild(session.process);sessions.delete(projectId);}
 
 function requestTheme(req:IncomingMessage,current:PreviewColorScheme):{path:string;scheme:PreviewColorScheme;documentRequest:boolean}{
   const reset=stripPreviewThemeReset(req.url??'/'),stripped=stripPreviewColorScheme(reset.path),documentRequest=isDocumentRequest(req),explicit:PreviewColorScheme|undefined=reset.reset?'auto':stripped.mode;
