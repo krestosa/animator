@@ -10,10 +10,12 @@ import { runtimeSource } from './runtime.js';
 import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
 import { mutationRuntimeSource } from './mutation-runtime.js';
+import { recordResumeRuntimeSource } from './record-resume-runtime.js';
+import { browserSnapshotRuntimeSource } from './browser-snapshot-runtime.js';
 import { clockWorkerSource } from './clock-worker.js';
 import { ensurePreviewOrigin } from './preview-host.js';
 import { openRemotePreview } from './remote-preview.js';
-import { browserFrame, browserInput, browserState, closeAllBrowserSessions, closeBrowserSession, drainBrowserEvents, installBrowserRuntimes, listBrowserRuntimes, openBrowserSession, sendBrowserCommand, subscribeBrowserFrames } from './browser-session.js';
+import { browserFrame, browserInput, browserSnapshot, browserState, closeAllBrowserSessions, closeBrowserSession, drainBrowserEvents, installBrowserRuntimes, listBrowserRuntimes, openBrowserSession, sendBrowserCommand, subscribeBrowserFrames } from './browser-session.js';
 import { scanBrowserMotion } from './browser-motion.js';
 import { applyCssAnimationEdit, previewCssAnimationEdit, writeOverrides, type CssAnimationEdit } from './export.js';
 import { FolderSelectionCancelled, pickProjectFolder } from './folder-dialog.js';
@@ -26,6 +28,7 @@ app.post('/api/projects/open-url',async(req,res)=>{try{return res.json(await ope
 app.get('/api/browser-runtimes',async(_req,res)=>{try{return res.json({runtimes:await listBrowserRuntimes()});}catch(error){return res.status(500).json({error:error instanceof Error?error.message:String(error)});}});
 app.post('/api/browser-runtimes/install',async(req,res)=>{try{return res.json({runtimes:await installBrowserRuntimes(req.body?.engines)});}catch(error){return res.status(500).json({error:error instanceof Error?error.message:String(error)});}});
 app.post('/api/browser-sessions/open',async(req,res)=>{try{return res.json(await openBrowserSession(String(req.body?.url||''),{width:Number(req.body?.width)||1100,height:Number(req.body?.height)||700,engine:req.body?.engine,profile:req.body?.profile}));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:String(error)});}});
+app.get('/api/browser-sessions/:id/snapshot',(req,res)=>{try{res.setHeader('cache-control','no-store');return res.type('html').send(browserSnapshot(req.params.id));}catch(error){return res.status(404).send(error instanceof Error?error.message:String(error));}});
 app.get('/api/browser-sessions/:id/frame',async(req,res)=>{try{const frame=await browserFrame(req.params.id);res.setHeader('cache-control','no-store');return res.type('image/jpeg').send(frame);}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
 app.get('/api/browser-sessions/:id/stream',async(req,res)=>{
   const boundary='animatorframe';let writable=true,unsubscribe:(()=>void)|undefined,closed=false;
@@ -53,6 +56,8 @@ app.get('/__animator/runtime.js',(_req,res)=>res.type('application/javascript').
 app.get('/__animator/aux-runtime.js',(_req,res)=>res.type('application/javascript').send(auxiliaryRuntimeSource));
 app.get('/__animator/seek-runtime.js',(_req,res)=>res.type('application/javascript').send(seekRuntimeSource));
 app.get('/__animator/mutation-runtime.js',(_req,res)=>res.type('application/javascript').send(mutationRuntimeSource));
+app.get('/__animator/record-resume-runtime.js',(_req,res)=>res.type('application/javascript').send(recordResumeRuntimeSource));
+app.get('/__animator/browser-snapshot-runtime.js',(_req,res)=>res.type('application/javascript').send(browserSnapshotRuntimeSource));
 app.get('/__animator/clock-worker.js',(_req,res)=>res.type('application/javascript').send(clockWorkerSource));
 
 app.get('/preview/:id/*path',(req,res,next)=>{if(req.params.id.startsWith('browser-'))return res.type('html').send('<!doctype html><html><body></body></html>');return serveLegacyPreview(req.params.id,String(req.params.path||''),res,next);});
