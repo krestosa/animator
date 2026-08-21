@@ -11,12 +11,14 @@ describe('preview color scheme emulation',()=>{
     expect(stripPreviewColorScheme('/carta-sc/?x=1&__animator_color_scheme=dark')).toEqual({path:'/carta-sc/?x=1',mode:'dark'});
   });
 
-  it('resets a document without an override to auto while assets inherit the active document mode',()=>{
+  it('keeps the active mode inside one preview session and resets only through an explicit auto state',()=>{
     expect(resolvePreviewColorScheme('light',undefined,true,'dark')).toBe('light');
     expect(resolvePreviewColorScheme(undefined,'http://preview.local/page?__animator_color_scheme=dark',true,'light')).toBe('dark');
-    expect(resolvePreviewColorScheme(undefined,undefined,true,'dark')).toBe('auto');
+    expect(resolvePreviewColorScheme(undefined,undefined,true,'dark')).toBe('dark');
+    expect(resolvePreviewColorScheme('auto',undefined,true,'dark')).toBe('auto');
     expect(resolvePreviewColorScheme(undefined,undefined,false,'dark')).toBe('dark');
     expect(previewColorSchemeFromUrl('http://x/?__animator_color_scheme=light')).toBe('light');
+    expect(previewColorSchemeFromUrl('http://x/?__animator_color_scheme=auto')).toBe('auto');
     expect(previewColorSchemeFromUrl('http://x/')).toBeUndefined();
   });
 
