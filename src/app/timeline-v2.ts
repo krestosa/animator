@@ -13,7 +13,7 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
   legacy.classList.add('legacyTimeline');
   const viewport=document.createElement('div');viewport.className='timelineV2Viewport';viewport.dataset.timelineV2='';timeline.append(viewport);
   const expanded=new Set<string>();
-  let structuralSignature='',dragging=false,raf=0,livePxPerMs=.1;
+  let structuralSignature='',dragging=false,dragMotion:HTMLElement|null=null,raf=0,livePxPerMs=.1;
 
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(render);};
@@ -41,20 +41,19 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
     store.set({selectedAnimationId:animation.id,selectedElementId:animation.elementId.startsWith('static:')?store.get().selectedElementId:animation.elementId});
     sendCommand(frame(),{type:'HIGHLIGHT_ANIMATION',id:animation.id});
   };
-  const scrub=(event:PointerEvent):void=>{
-    const motion=(event.target as Element|null)?.closest<HTMLElement>('.v2Motion');if(!motion)return;
-    const pxPerMs=Number(viewport.dataset.pxPerMs??.1),duration=Number(viewport.dataset.duration??0),rect=viewport.getBoundingClientRect();
-    const x=event.clientX-rect.left+viewport.scrollLeft-LABEL_WIDTH;
+  const scrub=(event:PointerEvent,motion:HTMLElement):void=>{
+    const pxPerMs=Number(viewport.dataset.pxPerMs??.1),duration=Number(viewport.dataset.duration??0),rect=motion.getBoundingClientRect();
+    const x=event.clientX-rect.left;
     const time=Math.max(0,Math.min(duration,x/pxPerMs));
     store.set({playhead:time});sendCommand(frame(),{type:'SCRUB_TIMELINE',time});
   };
-  const down=(event:PointerEvent):void=>{if(!(event.target as Element|null)?.closest('.v2Motion'))return;dragging=true;viewport.setPointerCapture(event.pointerId);scrub(event);};
-  const move=(event:PointerEvent):void=>{if(dragging&&viewport.hasPointerCapture(event.pointerId))scrub(event);};
-  const up=(event:PointerEvent):void=>{dragging=false;if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);};
+  const down=(event:PointerEvent):void=>{const motion=(event.target as Element|null)?.closest<HTMLElement>('.v2Motion');if(!motion)return;dragging=true;dragMotion=motion;viewport.setPointerCapture(event.pointerId);scrub(event,motion);};
+  const move=(event:PointerEvent):void=>{if(dragging&&dragMotion&&viewport.hasPointerCapture(event.pointerId))scrub(event,dragMotion);};
+  const up=(event:PointerEvent):void=>{dragging=false;dragMotion=null;if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);};
 
-  viewport.addEventListener('click',click);viewport.addEventListener('pointerdown',down);viewport.addEventListener('pointermove',move);viewport.addEventListener('pointerup',up);window.addEventListener(TIMELINE_STATE_EVENT,liveState);
+  viewport.addEventListener('click',click);viewport.addEventListener('pointerdown',down);viewport.addEventListener('pointermove',move);viewport.addEventListener('pointerup',up);viewport.addEventListener('pointercancel',up);window.addEventListener(TIMELINE_STATE_EVENT,liveState);
   const unsubscribe=store.subscribe(schedule);render();
-  return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);viewport.removeEventListener('click',click);viewport.removeEventListener('pointerdown',down);viewport.removeEventListener('pointermove',move);viewport.removeEventListener('pointerup',up);window.removeEventListener(TIMELINE_STATE_EVENT,liveState);viewport.remove();legacy.classList.remove('legacyTimeline');};
+  return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);viewport.removeEventListener('click',click);viewport.removeEventListener('pointerdown',down);viewport.removeEventListener('pointermove',move);viewport.removeEventListener('pointerup',up);viewport.removeEventListener('pointercancel',up);window.removeEventListener(TIMELINE_STATE_EVENT,liveState);viewport.remove();legacy.classList.remove('legacyTimeline');};
 }
 
 function groupRows(group:AnimationGroup,elements:Map<string,RuntimeElement>,expanded:Set<string>,selectedId:string|undefined,pxPerMs:number):string {
