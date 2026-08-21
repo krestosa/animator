@@ -14,6 +14,7 @@ import { clockWorkerSource } from './clock-worker.js';
 import { ensurePreviewOrigin } from './preview-host.js';
 import { openRemotePreview } from './remote-preview.js';
 import { browserFrame, browserInput, browserState, closeAllBrowserSessions, closeBrowserSession, drainBrowserEvents, installBrowserRuntimes, listBrowserRuntimes, openBrowserSession, sendBrowserCommand, subscribeBrowserFrames } from './browser-session.js';
+import { scanBrowserMotion } from './browser-motion.js';
 import { applyCssAnimationEdit, previewCssAnimationEdit, writeOverrides, type CssAnimationEdit } from './export.js';
 import { FolderSelectionCancelled, pickProjectFolder } from './folder-dialog.js';
 
@@ -36,6 +37,7 @@ app.get('/api/browser-sessions/:id/stream',async(req,res)=>{
   }catch(error){unsubscribe?.();if(!res.headersSent)return res.status(404).json({error:error instanceof Error?error.message:String(error)});close();}
 });
 app.get('/api/browser-sessions/:id/events',(req,res)=>{try{return res.json(drainBrowserEvents(req.params.id));}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
+app.get('/api/browser-sessions/:id/motion',async(req,res)=>{try{res.setHeader('cache-control','no-store');return res.json(await scanBrowserMotion(req.params.id));}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
 app.get('/api/browser-sessions/:id/state',async(req,res)=>{try{return res.json(await browserState(req.params.id));}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
 app.post('/api/browser-sessions/:id/command',async(req,res)=>{try{await sendBrowserCommand(req.params.id,req.body as Record<string,unknown>);return res.json({ok:true});}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
 app.post('/api/browser-sessions/:id/input',async(req,res)=>{try{await browserInput(req.params.id,req.body as Record<string,unknown>);return res.json({ok:true});}catch(error){return res.status(404).json({error:error instanceof Error?error.message:String(error)});}});
