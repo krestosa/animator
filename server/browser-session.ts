@@ -1,7 +1,8 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { gateRuntimeSource } from './gate-runtime.js';
 import { recordResumeRuntimeSource } from './record-resume-runtime.js';
@@ -16,10 +17,13 @@ type BrowserSession={id:string;browser:Browser;context:BrowserContext;page:Page;
 const sessions=new Map<string,BrowserSession>();
 const timelineCommands=new Set(['SET_ANIMATION_TIME','SCRUB_TIMELINE','SEEK_FRAME','STEP_FRAME','PLAY_ALL','PAUSE_ALL','RESTART_ALL','RELEASE_TIMELINE','SET_LOOP_ALL','SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION','APPLY_OVERRIDE','HIGHLIGHT_ANIMATION','SET_SOLO_ANIMATION','CLEAR_SOLO_ANIMATION','SET_FOCUS_ANIMATION','SET_MAGNIFY_ANIMATION']);
 const stickyCommandTypes=new Set(['SET_RECORDING','SET_COLOR_SCHEME','SET_VIEW_HISTORY_CAPTURE','SET_VIEW_HISTORY_MODE','SET_REDUCED_MOTION']);
+const animatorRoot=findAnimatorRoot();
+const localBrowserDir=path.join(animatorRoot,'.animator-browsers');
+let browserInstallPromise:Promise<string>|undefined;
 
 export async function openBrowserSession(input:string,width=1100,height=700):Promise<{id:string;url:string;title:string}>{
-  const url=parseUrl(input),id='browser-'+randomUUID(),executablePath=findBrowserExecutable();
-  const browser=await chromium.launch({headless:true,...(executablePath?{executablePath}:{}),args:['--disable-dev-shm-usage']});
+  const url=parseUrl(input),id='browser-'+randomUUID(),executablePath=await ensureBrowserExecutable();
+  const browser=await chromium.launch({headless:true,executablePath,args:['--disable-dev-shm-usage']});
   const context=await browser.newContext({viewport:{width:clamp(width,320,3840),height:clamp(height,240,2160)},ignoreHTTPSErrors:true});
   const page=await context.newPage();
   const session:BrowserSession={id,browser,context,page,events:[],width:clamp(width,320,3840),height:clamp(height,240,2160),closed:false,sticky:new Map(),navigationVersion:0};sessions.set(id,session);
@@ -85,14 +89,32 @@ function number(value:unknown):number{const parsed=Number(value);return Number.i
 function clamp(value:number,min:number,max:number):number{return Math.max(min,Math.min(max,Math.round(value||min)));}
 function mouseButton(value:unknown):'left'|'middle'|'right'{return value===1?'middle':value===2?'right':'left';}
 async function safeTitle(page:Page):Promise<string>{try{return await page.title();}catch{return'';}}
-function findBrowserExecutable():string|undefined{
-  const candidates:string[]=[];
-  if(process.platform==='win32'){
-    const pf=process.env.PROGRAMFILES||'C:\\Program Files',pf86=process.env['PROGRAMFILES(X86)']||'C:\\Program Files (x86)',local=process.env.LOCALAPPDATA||path.join(os.homedir(),'AppData','Local');
-    candidates.push(path.join(pf,'Microsoft','Edge','Application','msedge.exe'),path.join(pf86,'Microsoft','Edge','Application','msedge.exe'),path.join(pf,'Google','Chrome','Application','chrome.exe'),path.join(pf86,'Google','Chrome','Application','chrome.exe'),path.join(local,'Google','Chrome','Application','chrome.exe'));
-  }else if(process.platform==='darwin')candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge');
-  else candidates.push('/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/microsoft-edge');
-  for(const candidate of candidates)if(fs.existsSync(candidate))return candidate;
-  try{const managed=chromium.executablePath();if(managed&&fs.existsSync(managed))return managed;}catch{}
+
+async function ensureBrowserExecutable():Promise<string>{
+  const existing=findLocalBrowserExecutable();if(existing)return existing;
+  if(!browserInstallPromise)browserInstallPromise=installLocalBrowser().finally(()=>{browserInstallPromise=undefined;});
+  return browserInstallPromise;
+}
+async function installLocalBrowser():Promise<string>{
+  fs.mkdirSync(localBrowserDir,{recursive:true});
+  const cli=path.join(animatorRoot,'node_modules','playwright','cli.js');
+  if(!fs.existsSync(cli))throw new Error('Animator Browser requires installed npm dependencies. Run npm install in the Animator project once.');
+  await new Promise<void>((resolve,reject)=>{
+    const child=spawn(process.execPath,[cli,'install','chromium'],{cwd:animatorRoot,env:{...process.env,PLAYWRIGHT_BROWSERS_PATH:localBrowserDir},windowsHide:true,stdio:['ignore','pipe','pipe']});
+    let output='';const append=(chunk:Buffer|string)=>{output=(output+String(chunk)).slice(-5000);};child.stdout?.on('data',append);child.stderr?.on('data',append);
+    child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error(`Could not install Animator Browser runtime in ${localBrowserDir}.${output.trim()?`\n${output.trim()}`:''}`)));
+  });
+  const executable=findLocalBrowserExecutable();if(!executable)throw new Error(`Playwright finished installing but no Chromium executable was found in ${localBrowserDir}.`);return executable;
+}
+function findLocalBrowserExecutable():string|undefined{
+  if(!fs.existsSync(localBrowserDir))return undefined;
+  const expected=process.platform==='win32'?new Set(['chrome.exe']):process.platform==='darwin'?new Set(['Chromium','chrome']):new Set(['chrome']);
+  const stack=[localBrowserDir];
+  while(stack.length){const current=stack.pop()!;let entries:fs.Dirent[];try{entries=fs.readdirSync(current,{withFileTypes:true});}catch{continue;}for(const entry of entries){const full=path.join(current,entry.name);if(entry.isDirectory()){if(!/headless[_-]?shell/i.test(full))stack.push(full);continue;}if(expected.has(entry.name)&&!/headless[_-]?shell/i.test(full))return full;}}
   return undefined;
+}
+function findAnimatorRoot():string{
+  let current=path.dirname(fileURLToPath(import.meta.url));
+  for(let depth=0;depth<6;depth++){const packagePath=path.join(current,'package.json');if(fs.existsSync(packagePath)){try{const pkg=JSON.parse(fs.readFileSync(packagePath,'utf8')) as {name?:string};if(pkg.name==='animator')return current;}catch{}}const parent=path.dirname(current);if(parent===current)break;current=parent;}
+  return process.cwd();
 }
