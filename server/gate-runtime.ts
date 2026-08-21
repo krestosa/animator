@@ -7,6 +7,7 @@ export const gateRuntimeSource=String.raw`(()=>{
   const nativeFetch=window.fetch?.bind(window),NativeXHR=window.XMLHttpRequest,NativeWebSocket=window.WebSocket,NativeEventSource=window.EventSource,nativeBeacon=navigator.sendBeacon?.bind(navigator),NativeIntersectionObserver=window.IntersectionObserver,nativeAnimate=Element.prototype.animate;
   const abortError=()=>new DOMException('Animator recording is stopped','AbortError');
   const remember=value=>{try{sessionStorage.setItem(SESSION_KEY,value?'1':'0');}catch{}};
+  const acknowledge=requestId=>{try{parent.postMessage({source:'animator-preview',type:'RECORDING_STATE',enabled:recording,requestId:typeof requestId==='string'?requestId:undefined},'*');}catch{}};
   const focusStyle=document.createElement('style');focusStyle.dataset.animatorInternal='';focusStyle.textContent='[data-animator-focus-overlay]{border:0!important;border-radius:0!important;outline:0!important;box-shadow:0 0 0 9999px rgba(0,0,0,.68)!important;}html:has([data-animator-focus-overlay]) [data-animator-selection-highlight]{display:none!important;}';document.documentElement.appendChild(focusStyle);
   const blockInput=event=>{if(!inputLocked)return;event.preventDefault?.();event.stopImmediatePropagation?.();};
   for(const type of ['pointerdown','pointerup','pointermove','mousedown','mouseup','mousemove','click','dblclick','contextmenu','wheel','touchstart','touchmove','touchend','keydown','keyup','input','change','submit'])window.addEventListener(type,blockInput,{capture:true,passive:false});
@@ -44,6 +45,6 @@ export const gateRuntimeSource=String.raw`(()=>{
   const hardStart=requestedAt=>{recording=true;remember(true);resumeAnimations(requestedAt);reportActiveAnimations();queueMicrotask(reportActiveAnimations);requestAnimationFrame(reportActiveAnimations);if(stoppedDuringLoad){stoppedDuringLoad=false;queueMicrotask(()=>location.reload());}};
   const pan=(dx,dy)=>{if(!inputLocked)return;const x=Number(dx)||0,y=Number(dy)||0;try{window.scrollBy({left:x,top:y,behavior:'instant'});}catch{window.scrollBy(x,y);}};
   window.__ANIMATOR_CAPTURE_GATE__={get recording(){return recording;},get inputLocked(){return inputLocked;},stop:hardStop,start:hardStart,pan};
-  addEventListener('message',event=>{const message=event.data;if(!message||message.source!=='animator-editor')return;if(message.type==='SET_RECORDING'){message.enabled?hardStart(message.requestedAt):hardStop();return;}if(message.type==='SET_INPUT_LOCK'){inputLocked=!!message.enabled;return;}if(message.type==='PAN_VIEWPORT'){pan(message.dx,message.dy);}});
+  addEventListener('message',event=>{const message=event.data;if(!message||message.source!=='animator-editor')return;if(message.type==='SET_RECORDING'){message.enabled?hardStart(message.requestedAt):hardStop();acknowledge(message.requestId);return;}if(message.type==='SET_INPUT_LOCK'){inputLocked=!!message.enabled;return;}if(message.type==='PAN_VIEWPORT'){pan(message.dx,message.dy);}});
   if(!recording)queueMicrotask(hardStop);
 })();`;
