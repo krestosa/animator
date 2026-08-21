@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { chromium } from '@playwright/test';
 
 const remote=createServer((req,res)=>{
   res.writeHead(200,{'content-type':'text/html'});
@@ -34,6 +35,12 @@ try{
   const navigationState=await api('GET',`/api/browser-sessions/${navigationId}/state`);assert.equal(new URL(navigationState.url).pathname,'/second','Navigation regression never reached the second document');
   const navigationClosed=await api('POST','/api/control/close',{});assert.equal(navigationClosed.state.snapshotReady,true,'Closing after navigation did not promote the current document checkpoint');
   const snapshotResponse=await fetch(`${base}/api/browser-sessions/${navigationId}/snapshot`,{cache:'no-store'});assert.equal(snapshotResponse.ok,true,'Navigation reconstruction endpoint is unavailable');const snapshotHtml=await snapshotResponse.text();assert.match(snapshotHtml,/id="navigation-final"[^>]*>final checkpoint/,'Reconstruction did not preserve the final navigated document');assert.doesNotMatch(snapshotHtml,/id="first-checkpoint"/,'Reconstruction reused the stale first-document checkpoint');assert.match(snapshotHtml,new RegExp(`<base href="http://127\\.0\\.0\\.1:${remotePort}/second`),'Reconstruction base URL did not track the final navigation');
+
+  const browser=await chromium.launch({headless:true});
+  try{
+    const page=await browser.newPage();await page.goto(base,{waitUntil:'networkidle'});const surface=page.locator('[data-browser-preview]');await waitUntil(async()=>await surface.getAttribute('data-browser-session-id')===navigationId,'UI did not synchronize the active Control API session');
+    await api('DELETE',`/api/browser-sessions/${navigationId}`);await waitUntil(async()=>await page.locator('[data-browser-preview]').count()===0,'UI kept a stale Browser project after its controlled session was deleted');
+  } finally {await browser.close();}
 } finally {server.kill('SIGTERM');await closeServer(remote);}
 
 async function api(method,path,body){const response=await fetch(base+path,{method,headers:body?{'content-type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined});const text=await response.text();let value;try{value=text?JSON.parse(text):{};}catch{value={message:text};}if(!response.ok)throw new Error(value.error??value.message??`${method} ${path} failed: ${response.status}`);return value;}
