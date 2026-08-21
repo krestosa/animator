@@ -28,6 +28,7 @@ const runtimePaths=new Map<string,string>([
   ['/__animator/clock-worker.js',clockWorkerSource]
 ]);
 const injection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
+const blockedResponseHeaders=new Set(['content-security-policy','content-security-policy-report-only','x-frame-options','content-length','content-encoding','transfer-encoding','set-cookie']);
 
 export async function openRemotePreview(input:string):Promise<RemoteProjectDescriptor>{
   const source=parseRemoteUrl(input);const id='remote-'+createHash('sha1').update(source.href).digest('hex').slice(0,16);
@@ -65,14 +66,19 @@ function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin
       }
       headers.set('accept-encoding','identity');
       headers.set('origin',mutable.remoteOrigin);
-      headers.set('referer',source.href);
+      headers.set('referer',new URL(local.pathname+local.search,mutable.remoteOrigin+'/').href);
       const rawBody=req.method==='GET'||req.method==='HEAD'?undefined:await readBody(req);
       const body=rawBody?rawBody.buffer.slice(rawBody.byteOffset,rawBody.byteOffset+rawBody.byteLength) as ArrayBuffer:undefined;
-      const upstream=await fetch(target,{method:req.method??'GET',headers,body,redirect:'follow'});
-      const finalUrl=new URL(upstream.url||target.href);if(upstream.headers.get('content-type')?.includes('text/html'))mutable.remoteOrigin=finalUrl.origin;
-      const responseHeaders:Record<string,string>={};
-      upstream.headers.forEach((value,name)=>{if(['content-security-policy','content-security-policy-report-only','x-frame-options','content-length','content-encoding','transfer-encoding','set-cookie'].includes(name.toLowerCase()))return;responseHeaders[name]=value;});
-      responseHeaders['cache-control']='no-store';responseHeaders['access-control-allow-origin']='*';
+      const upstream=await fetch(target,{method:req.method??'GET',headers,body,redirect:'manual'});
+      const responseHeaders=proxyHeaders(upstream.headers);
+      const location=upstream.headers.get('location');
+      if(location&&upstream.status>=300&&upstream.status<400){
+        const redirected=new URL(location,target);mutable.remoteOrigin=redirected.origin;
+        responseHeaders.location=localOrigin()+redirected.pathname+redirected.search+redirected.hash;
+        res.writeHead(upstream.status,responseHeaders);res.end();return;
+      }
+      const finalUrl=new URL(upstream.url||target.href);
+      if(upstream.headers.get('content-type')?.includes('text/html'))mutable.remoteOrigin=finalUrl.origin;
       const type=String(upstream.headers.get('content-type')??'application/octet-stream');
       const textual=/text\/html|text\/css|javascript|ecmascript|application\/json|image\/svg\+xml/.test(type);
       if(!textual){const buffer=Buffer.from(await upstream.arrayBuffer());res.writeHead(upstream.status,responseHeaders);res.end(buffer);return;}
@@ -86,6 +92,10 @@ function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin
   });
 }
 
+function proxyHeaders(headers:Headers):Record<string,string>{
+  const output:Record<string,string>={};headers.forEach((value,name)=>{if(!blockedResponseHeaders.has(name.toLowerCase())&&name.toLowerCase()!=='location')output[name]=value;});
+  output['cache-control']='no-store';output['access-control-allow-origin']='*';return output;
+}
 function rewriteSameOrigin(text:string,remoteOrigin:string,localOrigin:string):string{
   const escaped=remoteOrigin.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   const protocolRelative='//'+new URL(remoteOrigin).host;
