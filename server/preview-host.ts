@@ -10,6 +10,7 @@ import { runtimeSource } from './runtime.js';
 import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
 import { mutationRuntimeSource } from './mutation-runtime.js';
+import { clockWorkerSource } from './clock-worker.js';
 
 interface PreviewSession {
   origin:string;
@@ -22,7 +23,8 @@ const runtimePaths=new Map<string,string>([
   ['/__animator/runtime.js',runtimeSource],
   ['/__animator/seek-runtime.js',seekRuntimeSource],
   ['/__animator/mutation-runtime.js',mutationRuntimeSource],
-  ['/__animator/aux-runtime.js',auxiliaryRuntimeSource]
+  ['/__animator/aux-runtime.js',auxiliaryRuntimeSource],
+  ['/__animator/clock-worker.js',clockWorkerSource]
 ]);
 const injection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
 
