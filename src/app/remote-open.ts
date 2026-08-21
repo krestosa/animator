@@ -24,7 +24,7 @@ export function mountRemoteOpen(root:HTMLElement):()=>void{
   let opening=false,installing=false,disposed=false;
   const syncMode=():void=>{browserOptions.hidden=engine.value!=='browser';};
   const renderRuntimeStatus=(runtimes:RuntimeStatus[]):void=>{if(!disposed)runtimeStatus.textContent=runtimes.map(runtime=>`${runtime.label}: ${runtime.installed?'installed':'not installed'}`).join(' · ');};
-  const refreshRuntimes=async():Promise<void=>{try{const response=await fetch('/api/browser-runtimes',{cache:'no-store'}),body=await response.json() as{runtimes?:RuntimeStatus[]};if(disposed)return;if(response.ok&&body.runtimes)renderRuntimeStatus(body.runtimes);else runtimeStatus.textContent='Could not read browser runtimes';}catch{if(!disposed)runtimeStatus.textContent='Could not read browser runtimes';}};
+  const refreshRuntimes=async():Promise<void>=>{try{const response=await fetch('/api/browser-runtimes',{cache:'no-store'}),body=await response.json() as{runtimes?:RuntimeStatus[]};if(disposed)return;if(response.ok&&body.runtimes)renderRuntimeStatus(body.runtimes);else runtimeStatus.textContent='Could not read browser runtimes';}catch{if(!disposed)runtimeStatus.textContent='Could not read browser runtimes';}};
   const install=async():Promise<void>=>{
     if(disposed||installing)return;const selected=[...details.querySelectorAll<HTMLInputElement>('[data-runtime-install]:checked')].map(item=>item.value as BrowserEngine);if(!selected.length)return;
     installing=true;const button=details.querySelector<HTMLButtonElement>('[data-browser-install]');if(button){button.disabled=true;button.textContent='Installing…';}runtimeStatus.textContent='Installing in .animator-browsers/…';
