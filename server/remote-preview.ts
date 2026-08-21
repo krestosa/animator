@@ -5,6 +5,7 @@ import { auxiliaryRuntimeSource } from './aux-runtime.js';
 import { seekRuntimeSource } from './seek-runtime.js';
 import { mutationRuntimeSource } from './mutation-runtime.js';
 import { clockWorkerSource } from './clock-worker.js';
+import { previewColorSchemeBootstrap, rewriteColorSchemeCss, stripPreviewColorScheme, type PreviewColorScheme } from './color-scheme.js';
 
 export interface RemoteProjectDescriptor {
   id:string;
@@ -27,7 +28,7 @@ const runtimePaths=new Map<string,string>([
   ['/__animator/aux-runtime.js',auxiliaryRuntimeSource],
   ['/__animator/clock-worker.js',clockWorkerSource]
 ]);
-const injection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
+const runtimeInjection='<script src="/__animator/runtime.js"></script><script src="/__animator/seek-runtime.js"></script><script src="/__animator/mutation-runtime.js"></script><script src="/__animator/aux-runtime.js"></script>';
 const blockedResponseHeaders=new Set(['content-security-policy','content-security-policy-report-only','x-frame-options','content-length','content-encoding','transfer-encoding','set-cookie']);
 
 export async function openRemotePreview(input:string):Promise<RemoteProjectDescriptor>{
@@ -58,10 +59,12 @@ export function mapRemoteRedirect(location:string,target:URL,localOrigin:string)
 }
 
 function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin:()=>string):http.Server{
+  let colorScheme:PreviewColorScheme='system';
   return http.createServer(async(req,res)=>{
     if(serveRuntime(req,res))return;
     try{
-      const local=new URL(req.url??'/', 'http://preview.local');
+      const stripped=stripPreviewColorScheme(req.url??'/');if(stripped.mode)colorScheme=stripped.mode;
+      const local=new URL(stripped.path,'http://preview.local');
       const target=new URL(local.pathname+local.search,mutable.remoteOrigin+'/');
       const headers=new Headers();
       for(const [name,value] of Object.entries(req.headers)){
@@ -72,13 +75,14 @@ function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin
       const rawBody=req.method==='GET'||req.method==='HEAD'?undefined:await readBody(req);
       const body=rawBody?rawBody.buffer.slice(rawBody.byteOffset,rawBody.byteOffset+rawBody.byteLength) as ArrayBuffer:undefined;
       const upstream=await fetch(target,{method:req.method??'GET',headers,body,redirect:'manual'}),responseHeaders=proxyHeaders(upstream.headers),location=upstream.headers.get('location');
-      if(location&&upstream.status>=300&&upstream.status<400){const redirect=mapRemoteRedirect(location,target,localOrigin());mutable.remoteOrigin=redirect.remote.origin;responseHeaders.location=redirect.local;res.writeHead(upstream.status,responseHeaders);res.end();return;}
+      if(location&&upstream.status>=300&&upstream.status<400){const redirect=mapRemoteRedirect(location,target,localOrigin());mutable.remoteOrigin=redirect.remote.origin;responseHeaders.location=appendTheme(redirect.local,colorScheme);res.writeHead(upstream.status,responseHeaders);res.end();return;}
       const finalUrl=new URL(upstream.url||target.href);if(upstream.headers.get('content-type')?.includes('text/html'))mutable.remoteOrigin=finalUrl.origin;
       const type=String(upstream.headers.get('content-type')??'application/octet-stream'),textual=/text\/html|text\/css|javascript|ecmascript|application\/json|image\/svg\+xml/.test(type);
       if(!textual){const buffer=Buffer.from(await upstream.arrayBuffer());res.writeHead(upstream.status,responseHeaders);res.end(buffer);return;}
       let text=await upstream.text();const localBase=localOrigin();
-      if(type.includes('text/html')){text=rewriteSameOrigin(text,finalUrl.origin,localBase).replace(/\s+integrity=(['"])[\s\S]*?\1/gi,'');text=injectHtml(text);}
-      else if(type.includes('text/css')||type.includes('javascript')||type.includes('ecmascript')||type.includes('json')||type.includes('svg'))text=rewriteSameOrigin(text,finalUrl.origin,localBase);
+      if(type.includes('text/html')){text=rewriteSameOrigin(text,finalUrl.origin,localBase).replace(/\s+integrity=(['"])[\s\S]*?\1/gi,'');text=injectHtml(text,colorScheme);}
+      else if(type.includes('text/css'))text=rewriteColorSchemeCss(rewriteSameOrigin(text,finalUrl.origin,localBase),colorScheme);
+      else if(type.includes('javascript')||type.includes('ecmascript')||type.includes('json')||type.includes('svg'))text=rewriteSameOrigin(text,finalUrl.origin,localBase);
       const output=Buffer.from(text);responseHeaders['content-length']=String(output.length);res.writeHead(upstream.status,responseHeaders);res.end(output);
     }catch(error){sendText(res,502,error instanceof Error?`Remote preview failed: ${error.message}`:'Remote preview failed');}
   });
@@ -86,7 +90,8 @@ function createRemoteServer(source:URL,mutable:{remoteOrigin:string},localOrigin
 
 function proxyHeaders(headers:Headers):Record<string,string>{const output:Record<string,string>={};headers.forEach((value,name)=>{if(!blockedResponseHeaders.has(name.toLowerCase())&&name.toLowerCase()!=='location')output[name]=value;});output['cache-control']='no-store';output['access-control-allow-origin']='*';return output;}
 function rewriteSameOrigin(text:string,remoteOrigin:string,localOrigin:string):string{const escaped=remoteOrigin.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),protocolRelative='//'+new URL(remoteOrigin).host;return text.replace(new RegExp(escaped,'g'),localOrigin).split(protocolRelative).join(localOrigin);}
-function injectHtml(html:string):string{if(html.includes('/__animator/seek-runtime.js'))return html;const head=/<head(?:\s[^>]*)?>/i.exec(html);if(head&&head.index!==undefined){const at=head.index+head[0].length;return html.slice(0,at)+injection+html.slice(at);}return injection+html;}
+function injectHtml(html:string,mode:PreviewColorScheme):string{if(html.includes('/__animator/seek-runtime.js'))return html;const injection=previewColorSchemeBootstrap(mode)+runtimeInjection;const head=/<head(?:\s[^>]*)?>/i.exec(html);if(head&&head.index!==undefined){const at=head.index+head[0].length;return html.slice(0,at)+injection+html.slice(at);}return injection+html;}
+function appendTheme(input:string,mode:PreviewColorScheme):string{const url=new URL(input);url.searchParams.set('__animator_color_scheme',mode);return url.toString();}
 function serveRuntime(req:IncomingMessage,res:ServerResponse):boolean{const pathname=new URL(req.url??'/', 'http://preview.local').pathname,source=runtimePaths.get(pathname);if(source===undefined)return false;res.statusCode=200;res.setHeader('content-type','application/javascript; charset=utf-8');res.setHeader('cache-control','no-store');res.end(source);return true;}
 function readBody(req:IncomingMessage):Promise<Buffer>{return new Promise((resolve,reject)=>{const chunks:Buffer[]=[];req.on('data',chunk=>chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk)));req.on('end',()=>resolve(Buffer.concat(chunks)));req.on('error',reject);});}
 function listenRandom(server:http.Server):Promise<number>{return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.off('error',reject);const address=server.address();if(!address||typeof address==='string')return reject(new Error('Remote preview server did not expose a TCP port'));resolve(address.port);});});}
