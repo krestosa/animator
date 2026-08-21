@@ -5,14 +5,13 @@ import { generateCss, generateOverrideFiles, generateTs, generateUnifiedDiff } f
 import { timelineDuration, timeToPercent } from '../utils/timeline';
 import type { DetectedAnimation, ProjectDescriptor, ProjectFile, StaticAnalysis } from '../types/domain';
 
-const fixtureDefault = '__fixture__';
 type Tab = 'motion' | 'source' | 'export';
 type Viewport = { width: number; height: number };
 type SourceState = { path: string; text: string };
 type UiState = { pathInput: string; viewport: Viewport; source?: SourceState; tab: Tab; playbackRate: number };
 
 export function mountApp(root: HTMLElement): () => void {
-  const ui: UiState = { pathInput: fixtureDefault, viewport: { width: 1100, height: 700 }, tab: 'motion', playbackRate: 1 };
+  const ui: UiState = { pathInput: '', viewport: { width: 1100, height: 700 }, tab: 'motion', playbackRate: 1 };
   let iframe: HTMLIFrameElement | null = null;
   let bridgeCleanup: (() => void) | undefined;
   let previewKey = '';
@@ -64,7 +63,7 @@ function buildShell(state: AnimatorState, ui: UiState, previewKey: string): stri
     ${renderToolbar(state, ui)}
     <main class="workspace">
       <aside class="leftPanel">
-        <section><h3>Project</h3>${state.project ? renderTree(state.project.tree) : '<p class="muted">Open a local project. The included fixture path is prefilled.</p>'}</section>
+        <section><h3>Project</h3>${state.project ? renderTree(state.project.tree) : '<p class="muted">Open a local project folder to inspect its files and motion.</p>'}</section>
         <section class="elementList"><h3>Elements <small>${state.elements.length}</small></h3>${state.elements.slice(0, 300).map(el => `<button class="row${state.selectedElementId === el.id ? ' selected' : ''}" data-element-id="${attr(el.id)}"><code>${html(el.tag)}</code>${el.domId ? `#${html(el.domId)}` : ''}${el.classes[0] ? `.${html(el.classes[0])}` : ''}</button>`).join('')}</section>
       </aside>
       ${renderPreview(state.project, state.analysis, ui.viewport, previewKey)}
@@ -77,7 +76,7 @@ function buildShell(state: AnimatorState, ui: UiState, previewKey: string): stri
 
 function renderToolbar(state: AnimatorState, ui: UiState): string {
   const rates = [0.1, 0.25, 0.5, 1, 2, 4];
-  return `<header class="toolbar"><b>Animator</b><input class="path" data-path-input value="${attr(ui.pathInput)}" placeholder="Local project path"><button data-action="open-project">Open project</button><span class="sep"></span><button data-action="picker" class="${state.picker ? 'active' : ''}">Pick element</button><button data-action="record">${state.recording ? 'Recording' : 'Record'}</button><span class="sep"></span><button data-action="previous-event" title="Previous event">◀|</button><button data-action="restart" title="Restart animation">↺</button><button data-action="play" title="Play">▶</button><button data-action="pause" title="Pause">Ⅱ</button><button data-action="next-event" title="Next event">|▶</button><select data-playback-rate title="Playback speed">${rates.map(rate => `<option value="${rate}"${rate === ui.playbackRate ? ' selected' : ''}>${rate}x</option>`).join('')}</select><button data-action="clear-overrides">Clear overrides</button><button data-action="undo">Undo</button><button data-action="redo">Redo</button><span class="grow"></span><select data-viewport><option value="390"${ui.viewport.width === 390 ? ' selected' : ''}>Mobile</option><option value="768"${ui.viewport.width === 768 ? ' selected' : ''}>Tablet</option><option value="1100"${ui.viewport.width === 1100 ? ' selected' : ''}>Desktop</option></select><span>${ui.viewport.width}×${ui.viewport.height}</span></header>`;
+  return `<header class="toolbar"><b>Animator</b><button data-action="pick-folder" title="Choose a local project folder">Open folder…</button><input class="path" data-path-input value="${attr(ui.pathInput)}" placeholder="Or enter local project path"><button data-action="open-project">Open path</button><span class="sep"></span><button data-action="picker" class="${state.picker ? 'active' : ''}">Pick element</button><button data-action="record">${state.recording ? 'Recording' : 'Record'}</button><span class="sep"></span><button data-action="previous-event" title="Previous event">◀|</button><button data-action="restart" title="Restart animation">↺</button><button data-action="play" title="Play">▶</button><button data-action="pause" title="Pause">Ⅱ</button><button data-action="next-event" title="Next event">|▶</button><select data-playback-rate title="Playback speed">${rates.map(rate => `<option value="${rate}"${rate === ui.playbackRate ? ' selected' : ''}>${rate}x</option>`).join('')}</select><button data-action="clear-overrides">Clear overrides</button><button data-action="undo">Undo</button><button data-action="redo">Redo</button><span class="grow"></span><select data-viewport><option value="390"${ui.viewport.width === 390 ? ' selected' : ''}>Mobile</option><option value="768"${ui.viewport.width === 768 ? ' selected' : ''}>Tablet</option><option value="1100"${ui.viewport.width === 1100 ? ' selected' : ''}>Desktop</option></select><span>${ui.viewport.width}×${ui.viewport.height}</span></header>`;
 }
 
 function renderPreview(project: ProjectDescriptor | undefined, analysis: StaticAnalysis | undefined, viewport: Viewport, key: string): string {
@@ -117,6 +116,7 @@ function renderTimeline(state: AnimatorState, duration: number): string {
 
 function bindEvents(root: HTMLElement, snapshot: AnimatorState, ui: UiState, getIframe: () => HTMLIFrameElement | null, render: () => void): void {
   root.querySelector<HTMLInputElement>('[data-path-input]')?.addEventListener('input', event => { ui.pathInput = (event.currentTarget as HTMLInputElement).value; });
+  root.querySelector('[data-action="pick-folder"]')?.addEventListener('click', () => void pickFolder(ui));
   root.querySelector('[data-action="open-project"]')?.addEventListener('click', () => void openProject(ui));
   root.querySelector('[data-action="picker"]')?.addEventListener('click', () => { const enabled = !store.get().picker; store.set({ picker: enabled }); sendCommand(getIframe(), { type: 'SET_PICKER', enabled }); });
   root.querySelector('[data-action="record"]')?.addEventListener('click', () => { const enabled = !store.get().recording; store.set({ recording: enabled }); sendCommand(getIframe(), { type: 'SET_RECORDING', enabled }); });
@@ -186,18 +186,34 @@ function commitEdit(frame: HTMLIFrameElement | null, patch: Partial<DetectedAnim
   previewEdit(frame, patch);
 }
 
+async function pickFolder(ui: UiState): Promise<void> {
+  try {
+    const response = await fetch('/api/projects/pick-folder', { method: 'POST' });
+    if (response.status === 204) return;
+    const body = await response.json() as ProjectDescriptor & { error?: string };
+    if (!response.ok) return diagnostic(body.error ?? 'Folder selection failed');
+    ui.pathInput = body.root;
+    await activateProject(body);
+  } catch (error) { diagnostic(String(error)); }
+}
+
 async function openProject(ui: UiState): Promise<void> {
+  if (!ui.pathInput.trim()) return diagnostic('Enter a local project path or choose Open folder…');
   try {
     const response = await fetch('/api/projects/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: ui.pathInput }) });
     const body = await response.json() as ProjectDescriptor & { error?: string };
     if (!response.ok) return diagnostic(body.error ?? 'Open failed');
-    store.set({ project: body, analysis: undefined, animations: [], events: [], elements: [], selectedElementId: undefined, selectedAnimationId: undefined });
-    const analysisResponse = await fetch(`/api/projects/${body.id}/analysis`);
-    if (!analysisResponse.ok) return diagnostic('Static analysis failed');
-    const analysis = await analysisResponse.json() as StaticAnalysis;
-    store.set({ analysis });
-    for (const animation of analysis.animations as DetectedAnimation[]) store.addAnimation(animation);
+    await activateProject(body);
   } catch (error) { diagnostic(String(error)); }
+}
+
+async function activateProject(project: ProjectDescriptor): Promise<void> {
+  store.set({ project, analysis: undefined, animations: [], events: [], elements: [], selectedElementId: undefined, selectedAnimationId: undefined });
+  const analysisResponse = await fetch(`/api/projects/${project.id}/analysis`);
+  if (!analysisResponse.ok) return diagnostic('Static analysis failed');
+  const analysis = await analysisResponse.json() as StaticAnalysis;
+  store.set({ analysis });
+  for (const animation of analysis.animations as DetectedAnimation[]) store.addAnimation(animation);
 }
 
 async function openFile(file: string, ui: UiState): Promise<void> {
