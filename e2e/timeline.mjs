@@ -30,8 +30,8 @@ try{
     await waitUntil(async()=>await page.locator('.v2InstanceRow').count()>=3,'expanded group did not render component rows');
     const firstInstance=page.locator('.v2InstanceRow').first();
     await firstInstance.locator('.v2InstanceLabel button[data-v2-instance]').click();
-    assert(await firstInstance.evaluate(node=>node.classList.contains('selected')),'component instance was not individually selectable');
-    assert((await page.locator('.elementList .row.selected').count())>=1,'selecting a timeline instance must select its DOM component');
+    await waitUntil(async()=>await firstInstance.evaluate(node=>node.classList.contains('selected')),'component instance was not individually selectable');
+    await waitUntil(async()=>await page.locator('.elementList .row.selected').count()>=1,'selecting a timeline instance must select its DOM component');
 
     const motion=group.locator('.v2Motion');
     const motionBox=await motion.boundingBox();
