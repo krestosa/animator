@@ -1,7 +1,7 @@
 export const viewHistoryRuntimeSource = String.raw`(()=>{
   if(window.__ANIMATOR_VIEW_HISTORY__)return;
-  const IN='animator-editor',started=performance.now(),MAX_SAMPLES=30000,MIN_SAMPLE_MS=20;
-  const samples=[];let recording=true,captureEnabled=false,mode='off',controlled=false,pointerX=0,pointerY=0,pointerInside=false,lastSampleAt=-Infinity,captureRaf=0,lastApplied=null,viewportBox=null,cursor=null,label=null;
+  const IN='animator-editor',started=performance.now(),MAX_SAMPLES=30000,MIN_SAMPLE_MS=20,seed=Array.isArray(window.__ANIMATOR_VIEW_HISTORY_SEED__)?window.__ANIMATOR_VIEW_HISTORY_SEED__:[];
+  const samples=seed.map(sample=>({...sample})).slice(-MAX_SAMPLES);let recording=!samples.length,captureEnabled=false,mode='off',controlled=false,pointerX=0,pointerY=0,pointerInside=false,lastSampleAt=samples.at(-1)?.at??-Infinity,captureRaf=0,lastApplied=null,viewportBox=null,cursor=null,label=null;
   const now=()=>performance.now()-started;
   const currentSample=at=>({at,x:scrollX,y:scrollY,vw:innerWidth,vh:innerHeight,mx:pointerX,my:pointerY,inside:pointerInside,pageWidth:Math.max(document.documentElement.scrollWidth,document.body?.scrollWidth||0),pageHeight:Math.max(document.documentElement.scrollHeight,document.body?.scrollHeight||0)});
   const reset=()=>{samples.length=0;lastSampleAt=-Infinity;lastApplied=null;controlled=false;hideOverlay();};
@@ -22,5 +22,5 @@ export const viewHistoryRuntimeSource = String.raw`(()=>{
   addEventListener('message',event=>{const message=event.data;if(!message||message.source!==IN||typeof message.type!=='string')return;if(message.type==='SET_RECORDING'){recording=!!message.enabled;if(recording&&captureEnabled)scheduleCapture(true);return;}if(message.type==='SET_VIEW_HISTORY_CAPTURE'){setCapture(message.enabled,!!message.reset);return;}if(message.type==='SET_VIEW_HISTORY_MODE'){setMode(message.mode);return;}if(message.type==='APPLY_VIEW_HISTORY_TIME'){if(message.controlled)seek(message.time);else release();return;}});
   const heartbeat=setInterval(()=>{if(captureEnabled&&recording&&!controlled)capture(true);},120);
   addEventListener('beforeunload',()=>{clearInterval(heartbeat);if(captureRaf)cancelAnimationFrame(captureRaf);},{once:true});
-  window.__ANIMATOR_VIEW_HISTORY__={seek,release,setMode,setCapture,reset,stats:()=>({samples:samples.length,end:samples.at(-1)?.at||0,start:samples[0]?.at||0,mode,enabled:captureEnabled,captureEnabled,recording,controlled})};
+  window.__ANIMATOR_VIEW_HISTORY__={seek,release,setMode,setCapture,reset,snapshot:()=>samples.map(sample=>({...sample})),stats:()=>({samples:samples.length,end:samples.at(-1)?.at||0,start:samples[0]?.at||0,mode,enabled:captureEnabled,captureEnabled,recording,controlled})};
 })();`;
