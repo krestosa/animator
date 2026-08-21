@@ -19,6 +19,7 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
   let structuralSignature='',eventSignature='',dragging=false,dragMotion:HTMLElement|null=null,raf=0,livePxPerMs=.1,viewOriginMs=0,inspectedAnimationId:string|undefined;
 
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
+  const pauseRecording=():void=>{if(!store.get().recording)return;store.set({recording:false});sendCommand(frame(),{type:'SET_RECORDING',enabled:false});};
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(render);};
   const render=():void=>{
     raf=0;const state=store.get(),groups=groupAnimations(state.animations,state.selectedAnimationId);
@@ -45,7 +46,7 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
   const liveState=(event:Event):void=>{const detail=(event as CustomEvent<TimelineStateMessage>).detail;if(!detail)return;viewport.style.setProperty('--timeline-playhead',`${Math.max(0,(detail.time-viewOriginMs)*livePxPerMs)}px`);};
   const syncInspection=(event:Event):void=>{const detail=(event as CustomEvent<InspectionDetail>).detail;if(!detail)return;inspectedAnimationId=detail.id;viewOriginMs=Math.max(0,detail.origin);structuralSignature='';eventSignature='';schedule();};
   const selectAnimation=(animation:DetectedAnimation,inspect=false):void=>{
-    store.set({selectedAnimationId:animation.id,selectedElementId:animation.elementId.startsWith('static:')?store.get().selectedElementId:animation.elementId});
+    pauseRecording();store.set({selectedAnimationId:animation.id,selectedElementId:animation.elementId.startsWith('static:')?store.get().selectedElementId:animation.elementId});
     sendCommand(frame(),{type:'HIGHLIGHT_ANIMATION',id:animation.id});
     if(!inspect)return;
     inspectedAnimationId=animation.id;viewOriginMs=animationStart(animation);structuralSignature='';
