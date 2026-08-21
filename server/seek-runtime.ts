@@ -3,19 +3,20 @@ export const seekRuntimeSource = String.raw`(()=>{
   const IN='animator-timeline',OUT='animator-preview',FPS=60,FRAME_MS=1000/FPS,started=performance.now();
   const registry=new Set(),meta=new WeakMap(),mirrors=new WeakMap(),snapshots=new WeakMap(),ends=new WeakMap(),suspendedRafs=new Map();
   const nativeRAF=window.requestAnimationFrame.bind(window),nativeCancelRAF=window.cancelAnimationFrame.bind(window),nativeAnimate=Element.prototype.animate;
-  let active=[],controlled=false,playing=false,masterTime=0,masterFrame=0,rate=1,loop=false,highlight=null,virtualRafId=1000000,endCache=0,soloId=null,soloAnchor=0,soloFrozen=0;
+  let active=[],controlled=false,playing=false,masterTime=0,masterFrame=0,rate=1,loop=false,virtualRafId=1000000,endCache=0,soloId=null,soloAnchor=0,soloFrozen=0;
   let fallbackRaf=0,playOriginTime=0,playOriginPerf=0,lastAppliedPerf=0,lastTelemetryPerf=0,clock=null;
   const post=(type,payload={})=>parent.postMessage({source:OUT,type,...payload},'*');
   const now=()=>performance.now()-started;
   const mutationReplay=()=>window.__ANIMATOR_MUTATION_REPLAY__;
+  const isInternal=el=>el instanceof Element&&(el.hasAttribute('data-animator-internal')||el.hasAttribute('data-animator-focus-overlay')||el.hasAttribute('data-animator-magnify-host')||el.hasAttribute('data-animator-magnify-lens')||el.hasAttribute('data-animator-magnify-clone')||el.hasAttribute('data-animator-selection-highlight')||el.hasAttribute('data-animator-dom-highlight')||el.hasAttribute('data-animator-picker-outline')||el.hasAttribute('data-animator-reduced-motion'));
   const documentAnimations=()=>{try{return document.getAnimations({subtree:true});}catch{return document.getAnimations();}};
-  const connected=animation=>{const target=animation?.effect?.target;return !(target instanceof Element)||target.isConnected;};
+  const connected=animation=>{const target=animation?.effect?.target;return (!(target instanceof Element)||(!isInternal(target)&&target.isConnected));};
   const animationId=animation=>animation?.__animatorId||'';
-  const captureAnimation=animation=>{if(!animation||animation.__animatorMirror||animation.__animatorMutationMirror)return animation;registry.add(animation);remember(animation);if(controlled&&!active.includes(animation))active.push(animation);return animation;};
+  const captureAnimation=animation=>{if(!animation||animation.__animatorMirror||animation.__animatorMutationMirror)return animation;const target=animation.effect?.target;if(target instanceof Element&&isInternal(target))return animation;registry.add(animation);remember(animation);if(controlled&&!active.includes(animation))active.push(animation);return animation;};
   const capture=(force=false)=>{if(controlled&&!force)return;for(const animation of documentAnimations())captureAnimation(animation);};
   const refreshActive=(force=false)=>{capture(force);active=[...registry].filter(connected);};
   const all=()=>controlled?active.filter(connected):(capture(),[...registry].filter(connected));
-  Element.prototype.animate=function(keyframes,options){const animation=nativeAnimate.call(this,keyframes,options);captureAnimation(animation);return animation;};
+  Element.prototype.animate=function(keyframes,options){const animation=nativeAnimate.call(this,keyframes,options);if(!isInternal(this))captureAnimation(animation);return animation;};
   window.requestAnimationFrame=function(callback){if(!controlled)return nativeRAF(callback);const id=++virtualRafId;suspendedRafs.set(id,callback);return id;};
   window.cancelAnimationFrame=function(id){if(suspendedRafs.delete(id))return;nativeCancelRAF(id);};
   document.addEventListener('animationstart',()=>queueMicrotask(()=>capture(true)),true);
@@ -30,7 +31,7 @@ export const seekRuntimeSource = String.raw`(()=>{
   const snapshot=animation=>{if(snapshots.has(animation))return;try{snapshots.set(animation,{timing:animation.effect?.getTiming?.(),frames:animation.effect?.getKeyframes?.(),rate:animation.playbackRate,currentTime:animation.currentTime,playState:animation.playState});}catch{}};
   const ensureMirror=animation=>{
     const existing=mirrors.get(animation);if(existing)return existing;const info=remember(animation),target=info.target;
-    if(!(target instanceof Element)||!info.frames.length||!info.timing)return animation;snapshot(animation);
+    if(!(target instanceof Element)||isInternal(target)||!info.frames.length||!info.timing)return animation;snapshot(animation);
     try{animation.pause();const effect=new KeyframeEffect(target,info.frames,info.timing);const mirror=new Animation(effect,document.timeline);mirror.__animatorMirror=true;mirror.pause();mirrors.set(animation,mirror);return mirror;}catch{return animation;}
   };
   const seekOne=(animation,time)=>{const info=remember(animation),controller=ensureMirror(animation),local=time-info.start;try{controller.pause();if(local<0){controller.currentTime=0;return;}const end=endOf(controller);controller.currentTime=Number.isFinite(end)?Math.min(local,end):local;}catch{}};
@@ -57,7 +58,6 @@ export const seekRuntimeSource = String.raw`(()=>{
   const resumeSuspendedRafs=()=>{const callbacks=[...suspendedRafs.values()];suspendedRafs.clear();for(const callback of callbacks)nativeRAF(callback);};
   const release=()=>{stopClock();playing=false;for(const animation of active){const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}mirrors.delete(animation);const info=remember(animation),local=masterTime-info.start;try{animation.pause();const end=endOf(animation);animation.currentTime=local<0?null:Number.isFinite(end)?Math.min(local,end):local;animation.play();}catch{}}controlled=false;soloId=null;soloAnchor=0;mutationReplay()?.clearSolo?.();mutationReplay()?.release?.();resumeSuspendedRafs();capture(true);postState(true);post('DIAGNOSTIC',{level:'info',message:'Live capture resumed'});};
   const restore=()=>{stopClock();playing=false;for(const animation of active){const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}mirrors.delete(animation);const original=snapshots.get(animation);if(!original)continue;try{if(animation.effect&&original.timing)animation.effect.updateTiming(original.timing);if(animation.effect&&original.frames)animation.effect.setKeyframes(original.frames);animation.playbackRate=original.rate;animation.currentTime=original.currentTime;if(original.playState==='running')animation.play();else if(original.playState==='paused')animation.pause();}catch{}}controlled=false;soloId=null;soloAnchor=0;mutationReplay()?.clearSolo?.();mutationReplay()?.release?.();resumeSuspendedRafs();capture(true);postState(true);};
-  const highlightAnimation=id=>{const animation=all().find(item=>item.__animatorId===id);const target=animation?.effect?.target;if(!(target instanceof Element))return;try{target.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});}catch{}const rect=target.getBoundingClientRect();if(!highlight){highlight=document.createElement('div');Object.assign(highlight.style,{position:'fixed',pointerEvents:'none',zIndex:'2147483646',border:'2px solid #58a6ff',background:'rgba(88,166,255,.08)',boxSizing:'border-box',transition:'opacity .15s'});document.documentElement.appendChild(highlight);}Object.assign(highlight.style,{display:'block',opacity:'1',left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});setTimeout(()=>{if(highlight)highlight.style.opacity='0';},900);};
   addEventListener('message',event=>{const m=event.data;if(!m||m.source!==IN||typeof m.type!=='string')return;
     if(m.type==='SCRUB_TIMELINE'){scrub(m.time);return;}if(m.type==='SEEK_FRAME'){seekFrame(m.frame);return;}if(m.type==='STEP_FRAME'){stepFrame(m.delta);return;}
     if(m.type==='RECALCULATE_VIEWPORT'){refreshActive(true);recomputeEnd();if(controlled){for(const animation of active)ensureMirror(animation);seekAll(masterTime);}postState(true);return;}
@@ -69,7 +69,7 @@ export const seekRuntimeSource = String.raw`(()=>{
     if(m.type==='RELEASE_TIMELINE'){release();return;}
     if(m.type==='RESTART_ANIMATION'){const selected=all().find(animation=>animation.__animatorId===m.id),start=selected?remember(selected).start:soloId===m.id?soloAnchor:0;if(soloId!==m.id)setSolo(m.id,start);scrub(start);play();return;}
     if(m.type==='SET_ALL_PLAYBACK_RATE'||m.type==='SET_PLAYBACK_RATE'){const next=Number(m.rate);if(Number.isFinite(next)&&next>0){if(playing){applyClock();rate=next;startClock();}else rate=next;}return;}
-    if(m.type==='SET_LOOP_ALL'){loop=!!m.enabled;return;}if(m.type==='APPLY_OVERRIDE'){applyGroup(m);return;}if(m.type==='HIGHLIGHT_ANIMATION'){highlightAnimation(m.id);return;}if(m.type==='CLEAR_OVERRIDES'){restore();return;}
+    if(m.type==='SET_LOOP_ALL'){loop=!!m.enabled;return;}if(m.type==='APPLY_OVERRIDE'){applyGroup(m);return;}if(m.type==='CLEAR_OVERRIDES'){restore();return;}
   });
   capture(true);nativeRAF(()=>capture(true));setInterval(()=>{if(!controlled)capture();},200);
 })();`;
