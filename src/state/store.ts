@@ -42,9 +42,9 @@ export const store={
   addAnimation(animation:DetectedAnimation):void{
     const normalized=correlateSource(animation,state.analysis);
     const index=state.animations.findIndex(item=>item.id===normalized.id);
-    const existing=index>=0?state.animations[index]:undefined;
-    const shouldSelect=normalized.name==='Created animation'||(!existing&&!!state.selectedElementId&&normalized.elementId===state.selectedElementId&&normalized.startTime>0);
-    state={...state,selectedAnimationId:shouldSelect?normalized.id:state.selectedAnimationId??normalized.id,animations:index>=0?state.animations.map(item=>item.id===normalized.id?mergeRuntimeReport(item,normalized,state.analysis):item):[...state.animations,normalized]};emit();
+    const shouldSelect=normalized.name==='Created animation';
+    const fallbackSelection=state.selectedAnimationId??(state.animations.length===0?normalized.id:undefined);
+    state={...state,selectedAnimationId:shouldSelect?normalized.id:fallbackSelection,animations:index>=0?state.animations.map(item=>item.id===normalized.id?mergeRuntimeReport(item,normalized,state.analysis):item):[...state.animations,normalized]};emit();
   },
   addEvent(event:TimelineEvent):void{state={...state,events:[...state.events,event].slice(-MAX_EVENTS)};emit();},
   addEvents(events:TimelineEvent[]):void{if(!events.length)return;state={...state,events:[...state.events,...events].slice(-MAX_EVENTS)};emit();},
