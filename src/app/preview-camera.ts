@@ -11,21 +11,16 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   const previewDevice=root.querySelector<HTMLElement>('[data-device]');
   if(!tools||!zoomButton||!focusGroup||!previewDevice)return()=>{};
 
-  zoomButton.title='Camera zoom · center the real viewport on the selected element';
+  zoomButton.title='Camera zoom · center the selected element without changing page zoom';
   const mouseButton=document.createElement('button');
   mouseButton.type='button';mouseButton.dataset.webInteraction='';mouseButton.className='webMouseToggle active';mouseButton.textContent='↖';mouseButton.setAttribute('aria-pressed','true');mouseButton.title='Mouse interaction with preview: on';
   const reset=focusGroup.querySelector('[data-inspection-clear]');focusGroup.insertBefore(mouseButton,reset);
 
-  let cameraActive=false,mouseEnabled=true,raf=0,lastFrame:HTMLIFrameElement|null=null;
+  let cameraActive=false,mouseEnabled=true,raf=0,lastFrame:HTMLIFrameElement|null=null,cameraElementId:string|undefined,cameraAnimationId:string|undefined;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const stage=()=>root.querySelector<HTMLElement>('.stage');
-  const selectedElement=()=>{
-    const state=store.get();
-    const animation=state.selectedAnimationId?state.animations.find(item=>item.id===state.selectedAnimationId):undefined;
-    const id=animation?.elementId??state.selectedElementId;
-    return id?state.elements.find(element=>element.id===id):undefined;
-  };
   const selectedAnimation=()=>{const state=store.get();return state.selectedAnimationId?state.animations.find(item=>item.id===state.selectedAnimationId):undefined;};
+  const cameraElement=()=>cameraElementId?store.get().elements.find(element=>element.id===cameraElementId):undefined;
 
   const updateMouse=():void=>{
     const preview=frame();
@@ -39,11 +34,11 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   };
   const resetCamera=():void=>{
     const preview=frame();if(preview){preview.style.removeProperty('transform');preview.style.removeProperty('transform-origin');preview.style.removeProperty('will-change');preview.dataset.cameraZoom='off';preview.removeAttribute('data-camera-scale');}
-    previewDevice.classList.remove('cameraZoomActive');
+    previewDevice.classList.remove('cameraZoomActive');cameraElementId=undefined;cameraAnimationId=undefined;
   };
   const applyCamera=():void=>{
     raf=0;if(!cameraActive){resetCamera();return;}
-    const preview=frame(),target=selectedElement();if(!preview||!target?.rect)return;
+    const preview=frame(),target=cameraElement();if(!preview||!target?.rect)return;
     const rect=target.rect,vw=Math.max(1,preview.clientWidth),vh=Math.max(1,preview.clientHeight),width=Math.max(1,rect.width),height=Math.max(1,rect.height);
     const scale=Math.max(CAMERA_MIN_SCALE,Math.min(CAMERA_MAX_SCALE,(vw*.72)/width,(vh*.72)/height));
     const centerX=rect.x+width/2,centerY=rect.y+height/2;
@@ -58,14 +53,13 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   };
   const scheduleCamera=():void=>{if(!cameraActive||raf)return;raf=requestAnimationFrame(applyCamera);};
   const refreshTarget=():void=>{
-    const animation=selectedAnimation();if(animation)sendCommand(frame(),{type:'HIGHLIGHT_ANIMATION',id:animation.id});
+    if(cameraAnimationId)sendCommand(frame(),{type:'HIGHLIGHT_ANIMATION',id:cameraAnimationId,reveal:true});
     scheduleCamera();window.setTimeout(scheduleCamera,90);window.setTimeout(scheduleCamera,260);
   };
   const setCamera=(enabled:boolean):void=>{
+    if(enabled){const animation=selectedAnimation();if(!animation)return;cameraAnimationId=animation.id;cameraElementId=animation.elementId;}
     cameraActive=enabled;zoomButton.classList.toggle('active',enabled);zoomButton.setAttribute('aria-pressed',String(enabled));
-    if(!enabled){resetCamera();return;}
-    if(store.get().recording){store.set({recording:false});sendCommand(frame(),{type:'SET_RECORDING',enabled:false});}
-    refreshTarget();
+    if(!enabled){resetCamera();return;}refreshTarget();
   };
   const setMouse=(enabled:boolean):void=>{mouseEnabled=enabled;updateMouse();};
 
@@ -74,7 +68,6 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
     if(target?.closest('[data-magnify-mode]')){event.preventDefault();event.stopImmediatePropagation();setCamera(!cameraActive);return;}
     if(target?.closest('[data-web-interaction]')){event.preventDefault();event.stopImmediatePropagation();setMouse(!mouseEnabled);return;}
     if(target?.closest('[data-inspection-clear]'))setCamera(false);
-    if(target?.closest('[data-isolate="all"]'))setCamera(false);
   };
   const key=(event:KeyboardEvent):void=>{if(event.key==='Escape'&&cameraActive){event.preventDefault();setCamera(false);}};
   const unsubscribe=store.subscribe(()=>{updateMouse();scheduleCamera();});
