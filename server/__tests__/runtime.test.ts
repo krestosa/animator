@@ -23,6 +23,16 @@ describe('preview runtime',()=>{
     expect(runtimeSource).not.toContain('masterTime');
   });
 
+  it('captures short live animations as elements enter or move through the viewport',()=>{
+    expect(runtimeSource).toContain('IntersectionObserver');
+    expect(runtimeSource).toContain("startBurst('scroll'");
+    expect(runtimeSource).toContain("startBurst('viewport-entry'");
+    expect(runtimeSource).toContain('RECALCULATE_VIEWPORT');
+    expect(runtimeSource).toContain('SET_AUTO_VIEWPORT_CAPTURE');
+    expect(runtimeSource).toContain("post('CAPTURE_REPORT'");
+    expect(runtimeSource).toContain('reportedAnimations=new Map()');
+  });
+
   it('uses a worker-backed dedicated timeline with exact frame stepping',()=>{
     expect(seekRuntimeSource).toContain("IN='animator-timeline'");
     expect(seekRuntimeSource).toContain("post('TIMELINE_STATE'");
@@ -32,17 +42,20 @@ describe('preview runtime',()=>{
     expect(seekRuntimeSource).toContain('SCRUB_TIMELINE');
     expect(seekRuntimeSource).toContain('STEP_FRAME');
     expect(seekRuntimeSource).toContain('SEEK_FRAME');
+    expect(seekRuntimeSource).toContain('RECALCULATE_VIEWPORT');
     expect(seekRuntimeSource).toContain("new Worker('/__animator/clock-worker.js'");
     expect(seekRuntimeSource).not.toContain('getComputedStyle(target)');
     expect(seekRuntimeSource).not.toContain('replayAttributes(time)');
   });
 
-  it('replays only animated inline style properties for javascript motion',()=>{
+  it('replays and recalculates only animated inline style properties for javascript motion',()=>{
     expect(mutationRuntimeSource).toContain("type:'runtime-style'");
     expect(mutationRuntimeSource).toContain('MutationObserver');
     expect(mutationRuntimeSource).toContain('style.setProperty');
     expect(mutationRuntimeSource).toContain('style.removeProperty');
     expect(mutationRuntimeSource).toContain('frameIndexAt');
+    expect(mutationRuntimeSource).toContain('recalculateViewport');
+    expect(mutationRuntimeSource).toContain('stats');
     expect(mutationRuntimeSource).toContain('HIGHLIGHT_ANIMATION');
   });
 
