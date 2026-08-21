@@ -27,6 +27,7 @@ export type AnimatorState = {
   future: HistoryEntry[];
 };
 
+const MAX_EVENTS=10000;
 let state:AnimatorState={project:undefined,analysis:undefined,elements:[],animations:[],events:[],selectedElementId:undefined,selectedAnimationId:undefined,picker:false,recording:true,playhead:0,zoom:1,diagnostics:[],history:[],future:[]};
 const listeners=new Set<()=>void>();const emit=():void=>{for(const listener of listeners)listener();};
 const snapshot=(animation:DetectedAnimation):EditableSnapshot=>({duration:animation.duration,delay:animation.delay,easing:animation.easing,iterations:animation.iterations,direction:animation.direction,fill:animation.fill,keyframes:animation.keyframes?.map(frame=>({...frame}))});
@@ -45,7 +46,8 @@ export const store={
     const shouldSelect=normalized.name==='Created animation'||(!existing&&!!state.selectedElementId&&normalized.elementId===state.selectedElementId&&normalized.startTime>0);
     state={...state,selectedAnimationId:shouldSelect?normalized.id:state.selectedAnimationId??normalized.id,animations:index>=0?state.animations.map(item=>item.id===normalized.id?correlateSource({...item,...normalized,startTime:item.startTime},state.analysis):item):[...state.animations,normalized]};emit();
   },
-  addEvent(event:TimelineEvent):void{state={...state,events:[...state.events,event].slice(-1000)};emit();},
+  addEvent(event:TimelineEvent):void{state={...state,events:[...state.events,event].slice(-MAX_EVENTS)};emit();},
+  addEvents(events:TimelineEvent[]):void{if(!events.length)return;state={...state,events:[...state.events,...events].slice(-MAX_EVENTS)};emit();},
   upsertElements(elements:RuntimeElement[]):void{const map=new Map(state.elements.map(element=>[element.id,element]));for(const element of elements)map.set(element.id,element);state={...state,elements:[...map.values()]};emit();},
   undo():void{const command=state.history.at(-1);if(!command)return;state={...state,history:state.history.slice(0,-1),future:[...state.future,command],animations:state.animations.map(animation=>animation.id===command.id?applySnapshot(animation,command.before):animation)};emit();},
   redo():void{const command=state.future.at(-1);if(!command)return;state={...state,future:state.future.slice(0,-1),history:[...state.history,command],animations:state.animations.map(animation=>animation.id===command.id?applySnapshot(animation,command.after):animation)};emit();}
