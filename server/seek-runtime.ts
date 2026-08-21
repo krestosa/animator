@@ -10,15 +10,15 @@ export const seekRuntimeSource = String.raw`(()=>{
   const mutationReplay=()=>window.__ANIMATOR_MUTATION_REPLAY__;
   const documentAnimations=()=>{try{return document.getAnimations({subtree:true});}catch{return document.getAnimations();}};
   const connected=animation=>{const target=animation?.effect?.target;return !(target instanceof Element)||target.isConnected;};
-  const captureAnimation=animation=>{if(!animation||animation.__animatorMirror)return animation;registry.add(animation);remember(animation);if(controlled&&!active.includes(animation))active.push(animation);return animation;};
-  const capture=()=>{if(controlled)return;for(const animation of documentAnimations())captureAnimation(animation);};
-  const refreshActive=()=>{capture();active=[...registry].filter(connected);};
+  const captureAnimation=animation=>{if(!animation||animation.__animatorMirror||animation.__animatorMutationMirror)return animation;registry.add(animation);remember(animation);if(controlled&&!active.includes(animation))active.push(animation);return animation;};
+  const capture=(force=false)=>{if(controlled&&!force)return;for(const animation of documentAnimations())captureAnimation(animation);};
+  const refreshActive=(force=false)=>{capture(force);active=[...registry].filter(connected);};
   const all=()=>controlled?active.filter(connected):(capture(),[...registry].filter(connected));
   Element.prototype.animate=function(keyframes,options){const animation=nativeAnimate.call(this,keyframes,options);captureAnimation(animation);return animation;};
   window.requestAnimationFrame=function(callback){if(!controlled)return nativeRAF(callback);const id=++virtualRafId;suspendedRafs.set(id,callback);return id;};
   window.cancelAnimationFrame=function(id){if(suspendedRafs.delete(id))return;nativeCancelRAF(id);};
-  document.addEventListener('animationstart',()=>queueMicrotask(capture),true);
-  document.addEventListener('transitionrun',()=>queueMicrotask(capture),true);
+  document.addEventListener('animationstart',()=>queueMicrotask(()=>capture(true)),true);
+  document.addEventListener('transitionrun',()=>queueMicrotask(()=>capture(true)),true);
   function remember(animation){
     let value=meta.get(animation);if(value)return value;
     const current=Number(animation.currentTime),playback=Math.abs(Number(animation.playbackRate))||1;let timing=null,frames=[],target=null;
@@ -44,7 +44,7 @@ export const seekRuntimeSource = String.raw`(()=>{
   const fallbackTick=()=>{fallbackRaf=0;applyClock();if(playing)fallbackRaf=nativeRAF(fallbackTick);};
   const startClock=()=>{playOriginTime=masterTime;playOriginPerf=performance.now();lastAppliedPerf=0;if(clock)clock.postMessage({type:'start',fps:FPS});else if(!fallbackRaf)fallbackRaf=nativeRAF(fallbackTick);};
   try{clock=new Worker('/__animator/clock-worker.js',{name:'animator-playback-clock'});clock.addEventListener('message',event=>{if(event.data?.type==='tick')applyClock();});clock.addEventListener('error',()=>{try{clock?.terminate();}catch{}clock=null;if(playing&&!fallbackRaf)fallbackRaf=nativeRAF(fallbackTick);},{once:true});}catch{clock=null;}
-  const enter=time=>{stopClock();refreshActive();controlled=true;playing=false;masterTime=Math.max(0,Number(time)||0);masterFrame=Math.round(masterTime/FRAME_MS);for(const animation of active)ensureMirror(animation);recomputeEnd();seekAll(masterTime);postState(true);post('DIAGNOSTIC',{level:'info',message:'Timeline owns '+active.length+' animation instance(s); playback clock '+(clock?'worker-backed':'main-thread fallback')});};
+  const enter=time=>{stopClock();refreshActive(true);controlled=true;playing=false;masterTime=Math.max(0,Number(time)||0);masterFrame=Math.round(masterTime/FRAME_MS);for(const animation of active)ensureMirror(animation);recomputeEnd();seekAll(masterTime);postState(true);post('DIAGNOSTIC',{level:'info',message:'Timeline owns '+active.length+' animation instance(s); playback clock '+(clock?'worker-backed':'main-thread fallback')});};
   const scrub=time=>{if(!controlled)enter(time);else{stopClock();playing=false;masterTime=Math.max(0,Number(time)||0);masterFrame=Math.round(masterTime/FRAME_MS);seekAll(masterTime);postState(true);}};
   const seekFrame=frame=>{const next=Math.max(0,Math.round(Number(frame)||0));if(!controlled)enter(next*FRAME_MS);else{stopClock();playing=false;masterFrame=next;masterTime=masterFrame*FRAME_MS;seekAll(masterTime);postState(true);}};
   const stepFrame=delta=>{const base=controlled?masterFrame:Math.round(masterTime/FRAME_MS);seekFrame(base+Math.trunc(Number(delta)||0));};
@@ -52,16 +52,17 @@ export const seekRuntimeSource = String.raw`(()=>{
   const pause=()=>{if(!controlled)enter(masterTime);stopClock();playing=false;seekAll(masterTime);postState(true);};
   const restart=()=>{if(!controlled)enter(0);else seekFrame(0);playing=true;startClock();postState(true);};
   const resumeSuspendedRafs=()=>{const callbacks=[...suspendedRafs.values()];suspendedRafs.clear();for(const callback of callbacks)nativeRAF(callback);};
-  const release=()=>{stopClock();playing=false;for(const animation of active){const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}mirrors.delete(animation);const info=remember(animation),local=masterTime-info.start;try{animation.pause();const end=endOf(animation);animation.currentTime=local<0?null:Number.isFinite(end)?Math.min(local,end):local;animation.play();}catch{}}controlled=false;mutationReplay()?.release?.();resumeSuspendedRafs();postState(true);post('DIAGNOSTIC',{level:'info',message:'Live capture resumed'});};
-  const restore=()=>{stopClock();playing=false;for(const animation of active){const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}mirrors.delete(animation);const original=snapshots.get(animation);if(!original)continue;try{if(animation.effect&&original.timing)animation.effect.updateTiming(original.timing);if(animation.effect&&original.frames)animation.effect.setKeyframes(original.frames);animation.playbackRate=original.rate;animation.currentTime=original.currentTime;if(original.playState==='running')animation.play();else if(original.playState==='paused')animation.pause();}catch{}}controlled=false;mutationReplay()?.release?.();resumeSuspendedRafs();postState(true);};
+  const release=()=>{stopClock();playing=false;for(const animation of active){const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}mirrors.delete(animation);const info=remember(animation),local=masterTime-info.start;try{animation.pause();const end=endOf(animation);animation.currentTime=local<0?null:Number.isFinite(end)?Math.min(local,end):local;animation.play();}catch{}}controlled=false;mutationReplay()?.release?.();resumeSuspendedRafs();capture(true);postState(true);post('DIAGNOSTIC',{level:'info',message:'Live capture resumed'});};
+  const restore=()=>{stopClock();playing=false;for(const animation of active){const mirror=mirrors.get(animation);try{mirror?.cancel();}catch{}mirrors.delete(animation);const original=snapshots.get(animation);if(!original)continue;try{if(animation.effect&&original.timing)animation.effect.updateTiming(original.timing);if(animation.effect&&original.frames)animation.effect.setKeyframes(original.frames);animation.playbackRate=original.rate;animation.currentTime=original.currentTime;if(original.playState==='running')animation.play();else if(original.playState==='paused')animation.pause();}catch{}}controlled=false;mutationReplay()?.release?.();resumeSuspendedRafs();capture(true);postState(true);};
   const highlightAnimation=id=>{const animation=all().find(item=>item.__animatorId===id);const target=animation?.effect?.target;if(!(target instanceof Element))return;const rect=target.getBoundingClientRect();if(!highlight){highlight=document.createElement('div');Object.assign(highlight.style,{position:'fixed',pointerEvents:'none',zIndex:'2147483646',border:'2px solid #58a6ff',background:'rgba(88,166,255,.08)',boxSizing:'border-box',transition:'opacity .15s'});document.documentElement.appendChild(highlight);}Object.assign(highlight.style,{display:'block',opacity:'1',left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});setTimeout(()=>{if(highlight)highlight.style.opacity='0';},900);};
   addEventListener('message',event=>{const m=event.data;if(!m||m.source!==IN||typeof m.type!=='string')return;
     if(m.type==='SCRUB_TIMELINE'){scrub(m.time);return;}if(m.type==='SEEK_FRAME'){seekFrame(m.frame);return;}if(m.type==='STEP_FRAME'){stepFrame(m.delta);return;}
+    if(m.type==='RECALCULATE_VIEWPORT'){refreshActive(true);recomputeEnd();if(controlled){for(const animation of active)ensureMirror(animation);seekAll(masterTime);}postState(true);return;}
     if(m.type==='SET_ANIMATION_TIME'){const selected=all().find(animation=>animation.__animatorId===m.id);scrub(selected?remember(selected).start+Math.max(0,Number(m.time)||0):Math.max(0,Number(m.time)||0));return;}
     if(m.type==='PLAY_ALL'||m.type==='PLAY_ANIMATION'){play();return;}if(m.type==='PAUSE_ALL'||m.type==='PAUSE_ANIMATION'){pause();return;}if(m.type==='RESTART_ALL'){restart();return;}if(m.type==='RELEASE_TIMELINE'){release();return;}
     if(m.type==='RESTART_ANIMATION'){const selected=all().find(animation=>animation.__animatorId===m.id);scrub(selected?remember(selected).start:0);play();return;}
     if(m.type==='SET_ALL_PLAYBACK_RATE'||m.type==='SET_PLAYBACK_RATE'){const next=Number(m.rate);if(Number.isFinite(next)&&next>0){if(playing){applyClock();rate=next;startClock();}else rate=next;}return;}
     if(m.type==='SET_LOOP_ALL'){loop=!!m.enabled;return;}if(m.type==='APPLY_OVERRIDE'){applyGroup(m);return;}if(m.type==='HIGHLIGHT_ANIMATION'){highlightAnimation(m.id);return;}if(m.type==='CLEAR_OVERRIDES'){restore();return;}
   });
-  capture();nativeRAF(capture);setInterval(()=>{if(!controlled)capture();},200);
+  capture(true);nativeRAF(()=>capture(true));setInterval(()=>{if(!controlled)capture();},200);
 })();`;
