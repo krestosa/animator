@@ -1,5 +1,6 @@
-import { sendCommand } from '../preview/bridge';
+import { RECORDING_STATE_EVENT, sendCommand } from '../preview/bridge';
 import { store } from '../state/store';
+import type { PreviewMessage } from '../types/domain';
 
 export function mountRecordViewHistory(root:HTMLElement):()=>void{
   const record=root.querySelector<HTMLElement>('[data-action="record"]');
@@ -13,7 +14,7 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
   const detach=controls.querySelector<HTMLButtonElement>('[data-view-history-detach]');
   if(!toggle||!detach){controls.remove();return()=>{};}
 
-  let review=false,detached=false,lastRecording=store.get().recording,lastProjectId=store.get().project?.id,lastFrame:HTMLIFrameElement|null=null;
+  let review=false,detached=false,lastRecording=store.get().recording,lastProjectId=store.get().project?.id,lastFrame:HTMLIFrameElement|null=null,confirmedRecording=true;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const currentMode=()=>!review?'off':detached?'detached':'attached';
   const sendState=(reset=false):void=>{
@@ -22,8 +23,8 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
     sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:recording?'off':currentMode()});
   };
   const render=():void=>{
-    const recording=store.get().recording;
-    toggle.hidden=recording;detach.hidden=recording;
+    const recording=store.get().recording,available=!recording&&!confirmedRecording;
+    toggle.hidden=!available;detach.hidden=!available;
     toggle.classList.toggle('active',review);toggle.setAttribute('aria-pressed',String(review));
     detach.disabled=!review;detach.classList.toggle('active',review&&detached);detach.setAttribute('aria-pressed',String(review&&detached));
     toggle.title=review?'Disable recorded view playback':'Review scroll and pointer history from the completed recording';
@@ -37,19 +38,20 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
   };
   const sync=():void=>{
     const state=store.get(),recording=state.recording,projectId=state.project?.id;bindFrame();
-    if(projectId!==lastProjectId){lastProjectId=projectId;review=false;detached=false;lastRecording=recording;sendState(true);render();return;}
-    if(recording!==lastRecording){lastRecording=recording;review=false;detached=false;sendState(recording);}
+    if(projectId!==lastProjectId){lastProjectId=projectId;review=false;detached=false;lastRecording=recording;confirmedRecording=true;sendState(true);render();return;}
+    if(recording!==lastRecording){lastRecording=recording;review=false;detached=false;if(recording)confirmedRecording=true;sendState(recording);}
     render();
   };
+  const onRecordingState=(event:Event):void=>{const detail=(event as CustomEvent<Extract<PreviewMessage,{type:'RECORDING_STATE'}>>).detail;if(!detail)return;confirmedRecording=detail.enabled;if(detail.enabled){review=false;detached=false;}render();};
   const click=(event:MouseEvent):void=>{
     const target=(event.target as Element|null)?.closest<HTMLElement>('[data-view-history-toggle],[data-view-history-detach]');
-    if(!target||store.get().recording)return;
+    if(!target||store.get().recording||confirmedRecording)return;
     event.preventDefault();event.stopImmediatePropagation();
     if(target.hasAttribute('data-view-history-toggle')){review=!review;if(!review)detached=false;}
     else if(review)detached=!detached;
     render();sendState(false);
   };
   const device=root.querySelector<HTMLElement>('[data-device]');const observer=new MutationObserver(bindFrame);if(device)observer.observe(device,{childList:true});
-  const unsubscribe=store.subscribe(sync);root.addEventListener('click',click,true);bindFrame();sendState(true);render();
-  return()=>{unsubscribe();sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:false});sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:'off'});lastFrame?.removeEventListener('load',onFrameLoad);observer.disconnect();root.removeEventListener('click',click,true);controls.remove();};
+  const unsubscribe=store.subscribe(sync);root.addEventListener('click',click,true);window.addEventListener(RECORDING_STATE_EVENT,onRecordingState);bindFrame();sendState(true);render();
+  return()=>{unsubscribe();sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:false});sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:'off'});lastFrame?.removeEventListener('load',onFrameLoad);observer.disconnect();root.removeEventListener('click',click,true);window.removeEventListener(RECORDING_STATE_EVENT,onRecordingState);controls.remove();};
 }
