@@ -15,7 +15,7 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
   if(!toggle||!detach){controls.remove();return()=>{};}
 
   let review=false,detached=false,lastRecording=store.get().recording,lastProjectId=store.get().project?.id,lastFrame:HTMLIFrameElement|null=null,confirmedRecording=true,recordingCycleStarted=!!store.get().project&&store.get().recording,completedRecording=false;
-  const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
+  const frame=()=>root.querySelector<HTMLIFrameElement>('[data-browser-snapshot-frame],[data-preview-frame]');
   const currentMode=()=>!review?'off':detached?'detached':'attached';
   const sendState=(reset=false):void=>{
     const recording=store.get().recording;
@@ -51,7 +51,7 @@ export function mountRecordViewHistory(root:HTMLElement):()=>void{
     else if(review)detached=!detached;
     render();sendState(false);
   };
-  const device=root.querySelector<HTMLElement>('[data-device]');const observer=new MutationObserver(bindFrame);if(device)observer.observe(device,{childList:true});
+  const device=root.querySelector<HTMLElement>('[data-device]');const observer=new MutationObserver(bindFrame);if(device)observer.observe(device,{childList:true,subtree:true});
   const unsubscribe=store.subscribe(sync);root.addEventListener('click',click,true);window.addEventListener(RECORDING_STATE_EVENT,onRecordingState);bindFrame();sendState(true);render();
   return()=>{unsubscribe();sendCommand(frame(),{type:'SET_VIEW_HISTORY_CAPTURE',enabled:false});sendCommand(frame(),{type:'SET_VIEW_HISTORY_MODE',mode:'off'});lastFrame?.removeEventListener('load',onFrameLoad);observer.disconnect();root.removeEventListener('click',click,true);window.removeEventListener(RECORDING_STATE_EVENT,onRecordingState);controls.remove();};
 }
