@@ -24,7 +24,7 @@ export async function openBrowserSession(input:string,width=1100,height=700):Pro
   const page=await context.newPage();
   const session:BrowserSession={id,browser,context,page,events:[],width:clamp(width,320,3840),height:clamp(height,240,2160),closed:false,sticky:new Map(),navigationVersion:0};sessions.set(id,session);
   await page.exposeBinding('__animatorEmit',(_source,payload:unknown)=>{if(payload&&typeof payload==='object')pushEvent(session,payload as BrowserEvent);});
-  const forwarder=`(()=>{if(window.__ANIMATOR_BROWSER_FORWARDER__)return;window.__ANIMATOR_BROWSER_FORWARDER__=true;addEventListener('message',event=>{const value=event.data;if(event.source===window&&value&&value.source==='animator-preview'&&typeof window.__animatorEmit==='function'){try{window.__animatorEmit(value);}catch{}}});})();`;
+  const forwarder=`(()=>{if(window.__ANIMATOR_BROWSER_FORWARDER__)return;window.__ANIMATOR_BROWSER_FORWARDER__=true;addEventListener('message',event=>{const value=event.data;if(value&&value.source==='animator-preview'&&typeof window.__animatorEmit==='function'){try{window.__animatorEmit(value);}catch{}}});})();`;
   await page.addInitScript({content:forwarder+gateRuntimeSource+runtimeSource+recordResumeRuntimeSource+seekRuntimeSource+mutationRuntimeSource+auxiliaryRuntimeSource});
   page.on('framenavigated',frame=>{
     if(frame!==page.mainFrame())return;
@@ -62,6 +62,10 @@ function rememberSticky(session:BrowserSession,command:BrowserCommand):void{
 }
 async function applyBrowserCommand(session:BrowserSession,command:BrowserCommand):Promise<void>{
   const type=String(command.type||''),message={...command};
+  if(type==='SET_COLOR_SCHEME'){
+    const colorScheme=message.mode==='dark'?'dark':message.mode==='light'?'light':null;
+    await session.page.emulateMedia({colorScheme});
+  }
   if(type==='SET_RECORDING'){
     if(message.requestedAt==null)message.requestedAt=Date.now();
     if(message.enabled===true)await postToPage(session.page,{source:'animator-timeline',type:'RELEASE_TIMELINE'});
