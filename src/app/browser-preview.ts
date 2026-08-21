@@ -41,7 +41,7 @@ export function mountBrowserPreview(root:HTMLElement):()=>void{
   const removeIframes=():void=>device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());
   const pollState=async():Promise<void>=>{
     if(disposed||!sessionId||!surface)return;
-    try{const response=await fetch(endpoint('/state'),{cache:'no-store'});if(response.ok){const state=await response.json() as{url:string;title:string;width:number;height:number;engine:string;profile:string};lastWidth=state.width;lastHeight=state.height;surface.title=`${state.title||'Browser preview'} — ${state.url}`;surface.dataset.browserEngine=state.engine;surface.dataset.browserProfile=state.profile;surface.dataset.browserWidth=String(state.width);surface.dataset.browserHeight=String(state.height);}}
+    try{const response=await fetch(endpoint('/state'),{cache:'no-store'});if(response.ok){const state=await response.json() as{url:string;title:string;width:number;height:number;engine:string;profile:string};lastWidth=state.width;lastHeight=state.height;surface.title=`${state.title||'Browser preview'} — ${state.url}`;surface.dataset.browserEngineActive=state.engine;surface.dataset.browserProfileActive=state.profile;surface.dataset.browserWidth=String(state.width);surface.dataset.browserHeight=String(state.height);}}
     catch{}finally{if(!disposed&&sessionId)stateTimer=window.setTimeout(()=>void pollState(),750);}
   };
   const mount=():void=>{
