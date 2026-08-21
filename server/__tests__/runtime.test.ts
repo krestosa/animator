@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { auxiliaryRuntimeSource } from '../aux-runtime.js';
+import { clockWorkerSource } from '../clock-worker.js';
 import { mutationRuntimeSource } from '../mutation-runtime.js';
 import { runtimeSource } from '../runtime.js';
 import { seekRuntimeSource } from '../seek-runtime.js';
@@ -10,30 +11,40 @@ describe('preview runtime',()=>{
     expect(()=>new Function(seekRuntimeSource)).not.toThrow();
     expect(()=>new Function(mutationRuntimeSource)).not.toThrow();
     expect(()=>new Function(auxiliaryRuntimeSource)).not.toThrow();
+    expect(()=>new Function(clockWorkerSource)).not.toThrow();
   });
 
-  it('keeps instrumentation and DOM replay capabilities',()=>{
+  it('keeps passive instrumentation for DOM diagnostics',()=>{
     expect(runtimeSource).toContain('replayAttributes');
     expect(runtimeSource).toContain('replayNodes');
     expect(runtimeSource).toContain('MutationObserver');
   });
 
-  it('uses one dedicated timeline source with persistent mirrored animations',()=>{
+  it('uses a worker-backed dedicated timeline with exact frame stepping',()=>{
     expect(seekRuntimeSource).toContain("IN='animator-timeline'");
     expect(seekRuntimeSource).toContain("post('TIMELINE_STATE'");
     expect(seekRuntimeSource).toContain('registry=new Set()');
     expect(seekRuntimeSource).toContain('ensureMirror');
     expect(seekRuntimeSource).toContain('new KeyframeEffect');
     expect(seekRuntimeSource).toContain('SCRUB_TIMELINE');
-    expect(seekRuntimeSource).toContain('RELEASE_TIMELINE');
-    expect(seekRuntimeSource).toContain('suspendedRafs');
-    expect(seekRuntimeSource).toContain('HIGHLIGHT_ANIMATION');
-    expect(seekRuntimeSource).toContain('applyGroup');
+    expect(seekRuntimeSource).toContain('STEP_FRAME');
+    expect(seekRuntimeSource).toContain('SEEK_FRAME');
+    expect(seekRuntimeSource).toContain("new Worker('/__animator/clock-worker.js'");
+    expect(seekRuntimeSource).not.toContain('getComputedStyle(target)');
+    expect(seekRuntimeSource).not.toContain('replayAttributes(time)');
   });
 
-  it('exposes javascript style motion as selectable runtime animation tracks',()=>{
+  it('replays only animated inline style properties for javascript motion',()=>{
     expect(mutationRuntimeSource).toContain("type:'runtime-style'");
     expect(mutationRuntimeSource).toContain('MutationObserver');
+    expect(mutationRuntimeSource).toContain('style.setProperty');
+    expect(mutationRuntimeSource).toContain('style.removeProperty');
+    expect(mutationRuntimeSource).toContain('frameIndexAt');
     expect(mutationRuntimeSource).toContain('HIGHLIGHT_ANIMATION');
+  });
+
+  it('keeps the playback clock independent from the preview main thread',()=>{
+    expect(clockWorkerSource).toContain("postMessage({type:'tick'");
+    expect(clockWorkerSource).toContain('setInterval');
   });
 });
