@@ -32,12 +32,6 @@ export function mountMotionCatalog(root:HTMLElement):()=>void{
   };
   const scroll=(event:Event):void=>{if(event.target instanceof Element&&event.target.matches('.motionRows'))schedule();};
   const uiChange=(event:Event):void=>{const target=event.target as Element|null;if(target?.matches('[data-motion-search],[data-motion-filter],[data-filter]'))requestAnimationFrame(()=>schedule(true));};
-  const select=(event:MouseEvent):void=>{
-    const row=(event.target as Element|null)?.closest<HTMLElement>('.motionRow[data-animation-id]');if(!row)return;const id=row.dataset.animationId;if(!id)return;
-    const animation=store.get().animations.find(item=>item.id===id);if(!animation)return;
-    store.set({selectedAnimationId:animation.id,selectedElementId:animation.elementId.startsWith('static:')?store.get().selectedElementId:animation.elementId});
-    sendCommand(frame(),{type:'HIGHLIGHT_ANIMATION',id:animation.id,reveal:false});
-  };
   const inspect=(event:MouseEvent):void=>{
     const button=(event.target as Element|null)?.closest<HTMLButtonElement>('[data-motion-inspect]');if(!button)return;const id=button.dataset.motionInspect;if(!id)return;
     const animation=store.get().animations.find(item=>item.id===id);if(!animation)return;event.preventDefault();event.stopPropagation();
@@ -48,8 +42,8 @@ export function mountMotionCatalog(root:HTMLElement):()=>void{
     window.dispatchEvent(new CustomEvent<InspectionDetail>(ANIMATION_INSPECT_EVENT,{detail:{id:animation.id,elementId:animation.elementId,origin}}));
   };
   const unsubscribe=store.subscribe(()=>schedule());
-  root.addEventListener('scroll',scroll,true);root.addEventListener('input',uiChange);root.addEventListener('change',uiChange);root.addEventListener('click',uiChange);root.addEventListener('click',select);root.addEventListener('click',inspect);schedule(true);
-  return()=>{disposed=true;if(raf)cancelAnimationFrame(raf);unsubscribe();root.removeEventListener('scroll',scroll,true);root.removeEventListener('input',uiChange);root.removeEventListener('change',uiChange);root.removeEventListener('click',uiChange);root.removeEventListener('click',select);root.removeEventListener('click',inspect);};
+  root.addEventListener('scroll',scroll,true);root.addEventListener('input',uiChange);root.addEventListener('change',uiChange);root.addEventListener('click',uiChange);root.addEventListener('click',inspect);schedule(true);
+  return()=>{disposed=true;if(raf)cancelAnimationFrame(raf);unsubscribe();root.removeEventListener('scroll',scroll,true);root.removeEventListener('input',uiChange);root.removeEventListener('change',uiChange);root.removeEventListener('click',uiChange);root.removeEventListener('click',inspect);};
 }
 
 function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
