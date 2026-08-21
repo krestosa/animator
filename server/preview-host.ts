@@ -152,8 +152,13 @@ function stopChild(child:ChildProcess):void{
 async function waitForHttp(port:number,timeoutMs:number,stopped:()=>boolean):Promise<boolean>{
   const deadline=Date.now()+timeoutMs;
   while(Date.now()<deadline&&!stopped()){
-    const ok=await new Promise<boolean>(resolve=>{const req=http.get({hostname:'127.0.0.1',port,path:'/'},res=>{res.resume();resolve((res.statusCode??500)<500);});req.setTimeout(500,()=>{req.destroy();resolve(false);});req.on('error',()=>resolve(false);});
-    if(ok)return true;await new Promise(resolve=>setTimeout(resolve,150));
+    const ok=await new Promise<boolean>(resolve=>{
+      const req=http.get({hostname:'127.0.0.1',port,path:'/'},res=>{res.resume();resolve((res.statusCode??500)<500);});
+      req.setTimeout(500,()=>{req.destroy();resolve(false);});
+      req.on('error',()=>resolve(false));
+    });
+    if(ok)return true;
+    await new Promise(resolve=>setTimeout(resolve,150));
   }
   return false;
 }
