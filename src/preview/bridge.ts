@@ -16,6 +16,7 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
     else if(msg.type==='SELECT_ELEMENT'){store.upsertElements([msg.element]);store.set({selectedElementId:msg.element.id,picker:false});}
     else if(msg.type==='ANIMATION') store.addAnimation(msg.animation);
     else if(msg.type==='EVENT') store.addEvent(msg.event);
+    else if(msg.type==='EVENTS') store.addEvents(msg.events);
     else if(msg.type==='TIMELINE_STATE') {
       window.dispatchEvent(new CustomEvent(TIMELINE_STATE_EVENT,{detail:msg}));
       const stamp=performance.now();
