@@ -14,9 +14,9 @@ export function connectPreview(iframe:HTMLIFrameElement):()=>void {
     const msg=event.data;
     if(msg.type==='ELEMENTS') store.upsertElements(msg.elements);
     else if(msg.type==='SELECT_ELEMENT'){store.upsertElements([msg.element]);store.set({selectedElementId:msg.element.id,picker:false});}
-    else if(msg.type==='ANIMATION') store.addAnimation(msg.animation);
-    else if(msg.type==='EVENT') store.addEvent(msg.event);
-    else if(msg.type==='EVENTS') store.addEvents(msg.events);
+    else if(msg.type==='ANIMATION') { if(store.get().recording) store.addAnimation(msg.animation); }
+    else if(msg.type==='EVENT') { if(store.get().recording) store.addEvent(msg.event); }
+    else if(msg.type==='EVENTS') { if(store.get().recording) store.addEvents(msg.events); }
     else if(msg.type==='TIMELINE_STATE') {
       window.dispatchEvent(new CustomEvent(TIMELINE_STATE_EVENT,{detail:msg}));
       const stamp=performance.now();
@@ -34,11 +34,11 @@ type EditorCommandInput = EditorCommand extends infer Command ? Command extends 
 const timelineCommands=new Set<string>([
   'SET_ANIMATION_TIME','SCRUB_TIMELINE','SEEK_FRAME','STEP_FRAME','PLAY_ALL','PAUSE_ALL','RESTART_ALL','RELEASE_TIMELINE','SET_LOOP_ALL',
   'SET_ALL_PLAYBACK_RATE','SET_PLAYBACK_RATE','PLAY_ANIMATION','PAUSE_ANIMATION','RESTART_ANIMATION',
-  'APPLY_OVERRIDE','HIGHLIGHT_ANIMATION','SET_SOLO_ANIMATION','CLEAR_SOLO_ANIMATION','SET_FOCUS_ANIMATION'
+  'APPLY_OVERRIDE','HIGHLIGHT_ANIMATION','SET_SOLO_ANIMATION','CLEAR_SOLO_ANIMATION','SET_FOCUS_ANIMATION','SET_MAGNIFY_ANIMATION'
 ]);
 export function sendCommand(iframe:HTMLIFrameElement|null, command:EditorCommandInput):void {
   const target=iframe?.contentWindow;if(!target)return;
-  if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){
+  if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'||command.type==='SET_RECORDING'){
     target.postMessage({source:'animator-timeline',...command},'*');
     target.postMessage({source:'animator-editor',...command},'*');
     return;
