@@ -1,5 +1,5 @@
-import type {DetectionConfidence,MotionTrack,SourceReference} from './motion';
-export type {DetectionConfidence,SourceReference} from './motion';
+import type {DetectionConfidence,MotionTrack,SourceReference} from './motion.js';
+export type {DetectionConfidence,SourceReference} from './motion.js';
 
 export type AnimationType = 'css-animation' | 'css-transition' | 'web-animation' | 'javascript' | 'raf' | 'runtime-style' | 'gsap' | 'framer-motion' | 'scroll-timeline' | 'svg' | 'canvas' | 'unknown';
 export type BrowserEngine = 'chromium' | 'firefox' | 'webkit';
