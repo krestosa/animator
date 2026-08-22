@@ -1,5 +1,4 @@
-import {detectedAnimationToMotionTrack,type MotionKeyframe,type MotionTrack} from '../core/motion';
-import type {DetectedAnimation} from '../types/domain';
+import {type MotionKeyframe,type MotionTrack} from '../core/motion';
 
 const safe=(value:string)=>value.replace(/[^a-zA-Z0-9_-]/g,'-');
 const frameObject=(frame:MotionKeyframe):Record<string,string|number|null>=>({...frame.values,...(frame.offset!==undefined?{offset:frame.offset}:{}),...(frame.easing!==undefined?{easing:frame.easing}:{}),...(frame.composite!==undefined?{composite:frame.composite}:{})});
@@ -16,8 +15,3 @@ export function generateMotionTs(track:MotionTrack):string{
 }
 export function generateMotionUnifiedDiff(track:MotionTrack):string{const css=generateMotionCss(track).split('\n').map(line=>`+${line}`).join('\n'),target=track.source.reference?.file??'.animator/animator-overrides.css';return `--- ${target}\n+++ .animator/animator-overrides.css\n@@ proposed non-destructive override @@\n${css}`;}
 export function generateMotionOverrideFiles(tracks:MotionTrack[]){return{css:tracks.map(generateMotionCss).join('\n\n'),ts:tracks.map(generateMotionTs).join('\n\n')};}
-
-export function generateCss(animation:DetectedAnimation):string{return generateMotionCss(detectedAnimationToMotionTrack(animation));}
-export function generateTs(animation:DetectedAnimation):string{return generateMotionTs(detectedAnimationToMotionTrack(animation));}
-export function generateUnifiedDiff(animation:DetectedAnimation):string{return generateMotionUnifiedDiff(detectedAnimationToMotionTrack(animation));}
-export function generateOverrideFiles(animations:DetectedAnimation[]){return generateMotionOverrideFiles(animations.map(detectedAnimationToMotionTrack));}
