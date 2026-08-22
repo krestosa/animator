@@ -7,9 +7,9 @@
     "animator": "./bin/animator.mjs"
   },
   "scripts": {
-    "dev": "tsx watch server/index.ts",
+    "dev": "tsx watch --import ./server/ssd-safety.ts server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
-    "start": "node server-dist/server/index.js --production",
+    "start": "node --import ./server-dist/server/ssd-safety.js server-dist/server/index.js --production",
     "animator": "node ./bin/animator.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
