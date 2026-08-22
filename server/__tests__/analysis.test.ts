@@ -15,11 +15,13 @@ describe('analysis',()=>{
     fs.writeFileSync(path.join(dir,'a.css'),'@media (max-width: 700px){.box{animation: fade 200ms ease, slide 0.5s 100ms linear;transition: opacity 120ms ease, transform 240ms linear}}');
     fs.writeFileSync(path.join(dir,'b.css'),'@keyframes fade{from{opacity:0}to{opacity:1}}@keyframes slide{from{transform:translateX(10px)}to{transform:translateX(0)}}');
     fs.writeFileSync(path.join(dir,'main.ts'),"const run=()=>el.animate([{opacity:0},{opacity:1}],{duration:300}); requestAnimationFrame(()=>run());");
-    const result=analyzeProject({id:'x',root:dir,entries:[],selectedEntry:'',tree:[]});
-    expect(result.animations).toHaveLength(2);
-    expect(result.animations.map(animation=>animation.name)).toEqual(['fade','slide']);
-    expect(result.animations[1]?.delay).toBe(100);
-    const first=result.animations[0],media=first?.source?.media;expect(first).toBeDefined();expect(media).toBeDefined();expect(media).toContain('max-width');
+    const result=analyzeProject({id:'x',root:dir,entries:[],selectedEntry:'',tree:[]}),css=result.animations.filter(animation=>animation.type==='css-animation');
+    expect(css).toHaveLength(2);
+    expect(css.map(animation=>animation.name)).toEqual(['fade','slide']);
+    expect(css[1]?.delay).toBe(100);
+    const first=css[0],media=first?.source?.media;expect(first).toBeDefined();expect(media).toBeDefined();expect(media).toContain('max-width');
+    expect(result.animations.some(animation=>animation.type==='web-animation')).toBe(true);
+    expect(result.animations.some(animation=>animation.type==='raf')).toBe(true);
     expect(result.transitions[0]?.properties).toEqual(['opacity','transform']);
     expect(result.candidates.some(candidate=>candidate.functionName==='run')).toBe(true);
   });
