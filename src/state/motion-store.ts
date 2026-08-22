@@ -1,8 +1,11 @@
-import { detectedAnimationToMotionTrack,detectedAnimationsToMotionTracks,type MotionTrack } from '../core/motion';
+import { detectedAnimationToMotionTrack,detectedAnimationsToMotionTracks,motionTracksToDetectedAnimations,type MotionTrack } from '../core/motion';
 import type { DetectedAnimation } from '../types/domain';
 
-export type MotionState={animations:DetectedAnimation[];motionTracks:MotionTrack[];selectedAnimationId:string|undefined};
-export const emptyMotionState=():MotionState=>({animations:[],motionTracks:[],selectedAnimationId:undefined});
-export const syncMotionTracks=(animations:DetectedAnimation[]):MotionTrack[]=>detectedAnimationsToMotionTracks(animations);
-export const replaceMotionAnimations=(state:MotionState,animations:DetectedAnimation[]):MotionState=>({...state,animations,motionTracks:syncMotionTracks(animations)});
-export const updateMotionAnimation=(state:MotionState,id:string,animation:DetectedAnimation):MotionState=>({...state,animations:state.animations.map(item=>item.id===id?animation:item),motionTracks:state.motionTracks.map(track=>track.id===id?detectedAnimationToMotionTrack(animation):track)});
+export type MotionState={motionTracks:MotionTrack[];selectedAnimationId:string|undefined};
+export const emptyMotionState=():MotionState=>({motionTracks:[],selectedAnimationId:undefined});
+export const ingestDetectedAnimations=(animations:DetectedAnimation[]):MotionTrack[]=>detectedAnimationsToMotionTracks(animations);
+export const legacyAnimations=(state:MotionState):DetectedAnimation[]=>motionTracksToDetectedAnimations(state.motionTracks);
+export const replaceMotionTracks=(state:MotionState,motionTracks:MotionTrack[]):MotionState=>({...state,motionTracks});
+export const replaceDetectedAnimations=(state:MotionState,animations:DetectedAnimation[]):MotionState=>replaceMotionTracks(state,ingestDetectedAnimations(animations));
+export const updateMotionTrack=(state:MotionState,id:string,track:MotionTrack):MotionState=>({...state,motionTracks:state.motionTracks.map(item=>item.id===id?track:item)});
+export const updateDetectedAnimation=(state:MotionState,id:string,animation:DetectedAnimation):MotionState=>updateMotionTrack(state,id,detectedAnimationToMotionTrack(animation));
