@@ -2,7 +2,7 @@ import type {MotionTrack} from '../core/motion';
 import type {DetectedAnimation} from '../types/domain';
 
 type AnimationLike=MotionTrack|DetectedAnimation;
-export interface AnimationGroup<T extends AnimationLike=AnimationLike>{key:string;representative:T;instances:T[];}
+export interface AnimationGroup<T extends AnimationLike=DetectedAnimation>{key:string;representative:T;instances:T[];}
 
 export function animationGroupKey<T extends AnimationLike>(animation:T):string{
   const type=kind(animation),name=cleanName(animation.name);
