@@ -5,9 +5,15 @@ import type { LoadedProject } from './project.js';
 import { resolveInside } from './project.js';
 
 export function writeOverrides(project:LoadedProject, css:string, ts:string){
-  const dir=path.join(project.root,'.animator'); fs.mkdirSync(dir,{recursive:true});
-  const cssPath=path.join(dir,'animator-overrides.css'); const tsPath=path.join(dir,'animator-overrides.ts');
-  fs.writeFileSync(cssPath,css); fs.writeFileSync(tsPath,ts); return {cssPath,tsPath};
+  const dir=path.join(project.root,'.animator');
+  const cssPath=path.join(dir,'animator-overrides.css');
+  const tsPath=path.join(dir,'animator-overrides.ts');
+  const cssChanged=fileContentDiffers(cssPath,css);
+  const tsChanged=fileContentDiffers(tsPath,ts);
+  if(cssChanged||tsChanged)fs.mkdirSync(dir,{recursive:true});
+  if(cssChanged)fs.writeFileSync(cssPath,css);
+  if(tsChanged)fs.writeFileSync(tsPath,ts);
+  return {cssPath,tsPath,changed:cssChanged||tsChanged,cssChanged,tsChanged};
 }
 
 export interface CssAnimationEdit { file:string; selector:string; duration?:number; delay?:number; easing?:string; }
@@ -23,9 +29,11 @@ export function previewCssAnimationEdit(project:LoadedProject,edit:CssAnimationE
   if(!matched) throw new Error(`Selector not found in ${edit.file}: ${edit.selector}`);
   return {before,after:root.toString(),file:edit.file};
 }
-export function applyCssAnimationEdit(project:LoadedProject,edit:CssAnimationEdit):{file:string;backup:string}{
+export function applyCssAnimationEdit(project:LoadedProject,edit:CssAnimationEdit):{file:string;backup:string;changed:boolean}{
   const preview=previewCssAnimationEdit(project,edit); const file=resolveInside(project.root,preview.file); const backup=`${file}.animator-backup`;
+  if(preview.after===preview.before)return {file:preview.file,backup:path.relative(project.root,backup).split(path.sep).join('/'),changed:false};
   if(!fs.existsSync(backup)) fs.copyFileSync(file,backup);
-  fs.writeFileSync(file,preview.after,'utf8'); return {file:preview.file,backup:path.relative(project.root,backup).split(path.sep).join('/')};
+  fs.writeFileSync(file,preview.after,'utf8'); return {file:preview.file,backup:path.relative(project.root,backup).split(path.sep).join('/'),changed:true};
 }
+function fileContentDiffers(file:string,next:string):boolean{try{return fs.readFileSync(file,'utf8')!==next;}catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==='ENOENT')return true;throw error;}}
 function setDeclaration(rule:postcss.Rule,prop:string,value:string):void{const existing=rule.nodes.find(node=>node.type==='decl'&&node.prop===prop);if(existing?.type==='decl')existing.value=value;else rule.append({prop,value});}
