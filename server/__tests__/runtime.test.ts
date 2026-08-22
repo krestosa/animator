@@ -76,7 +76,8 @@ describe('preview runtime',()=>{
   });
 
   it('replays and recalculates only animated inline style properties for javascript motion',()=>{
-    expect(mutationRuntimeSource).toContain("type:'runtime-style'");
+    expect(mutationRuntimeSource).toContain("post('MOTION_TRACK'");
+    expect(mutationRuntimeSource).toContain("kind:'runtime-style'");
     expect(mutationRuntimeSource).toContain('MutationObserver');
     expect(mutationRuntimeSource).toContain('style.setProperty');
     expect(mutationRuntimeSource).toContain('style.removeProperty');
