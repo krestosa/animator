@@ -85,4 +85,4 @@ export class RecordingDataset{
 
 export type RecordingState={recordingDataset:RecordingDataset;recording:boolean};
 export const emptyRecordingState=():RecordingState=>({recordingDataset:new RecordingDataset(),recording:true});
-export const replaceRecordedEvents=(state:RecordingState,events:TimelineEvent[]):RecordingState=>{const recordingDataset=new RecordingDataset(events);return{...state,recordingDataset};};
+export const replaceRecordedEvents=(state:RecordingState,events:TimelineEvent[]):RecordingState=>({recordingDataset:new RecordingDataset(events),recording:state.recording});
