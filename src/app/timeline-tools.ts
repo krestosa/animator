@@ -1,7 +1,7 @@
 import { sendCommand } from '../preview/bridge';
 import { TIMELINE_FRAME_MS,clampTimelineZoom,fitTimelineZoom,frameTimelineZoom,stepTimelineZoom,timelineTimeToPx,timelineTimingStart } from '../core/timeline';
 import { store } from '../state/store';
-import { ANIMATION_CLEAR_INSPECTION_EVENT, ANIMATION_INSPECT_EVENT } from './timeline-v2';
+import { ANIMATION_CLEAR_INSPECTION_EVENT, ANIMATION_INSPECT_EVENT, TIMELINE_VIRTUALIZATION_EVENT } from './timeline-v2';
 import type { DetectedAnimation } from '../types/domain';
 
 const FRAME_MS=TIMELINE_FRAME_MS;
@@ -38,19 +38,14 @@ export function mountTimelineTools(root:HTMLElement):()=>void{
     focusMode=enabled;if(!enabled)focusedAnimationId=undefined;
     const button=tools.querySelector<HTMLButtonElement>('[data-focus-mode]');button?.classList.toggle('active',enabled);button?.setAttribute('aria-pressed',String(enabled));
   };
-  const leaveSoloInspection=():void=>{
-    if(!isolatedAnimationId)return;sendCommand(frame(),{type:'CLEAR_SOLO_ANIMATION'});isolatedAnimationId=undefined;window.dispatchEvent(new Event(ANIMATION_CLEAR_INSPECTION_EVENT));
-  };
+  const leaveSoloInspection=():void=>{if(!isolatedAnimationId)return;sendCommand(frame(),{type:'CLEAR_SOLO_ANIMATION'});isolatedAnimationId=undefined;window.dispatchEvent(new Event(ANIMATION_CLEAR_INSPECTION_EVENT));};
   const clearIsolation=():void=>{leaveSoloInspection();isolatedElementId=undefined;isolation='all';applyIsolation();requestAnimationFrame(()=>centerPlayhead());};
   const clearInspection=():void=>{if(focusMode)setFocusMode(false);clearIsolation();};
   const resetForProject=():void=>{focusMode=false;focusedAnimationId=undefined;isolatedAnimationId=undefined;isolatedElementId=undefined;isolation='all';const focus=tools.querySelector<HTMLButtonElement>('[data-focus-mode]');focus?.classList.remove('active');focus?.setAttribute('aria-pressed','false');window.dispatchEvent(new Event(ANIMATION_CLEAR_INSPECTION_EVENT));};
   const setIsolation=(mode:Isolation):void=>{
     if(mode==='all'){clearIsolation();return;}
     if(mode==='animation'){const animation=selectedAnimation();if(animation){beginInspection(animation);return;}isolation='animation';applyIsolation();return;}
-    if(mode==='element'){
-      const animation=selectedAnimation();isolatedElementId=animation?.elementId??store.get().selectedElementId;
-      leaveSoloInspection();isolation='element';applyIsolation();return;
-    }
+    if(mode==='element'){const animation=selectedAnimation();isolatedElementId=animation?.elementId??store.get().selectedElementId;leaveSoloInspection();isolation='element';applyIsolation();return;}
   };
   const validateTargets=():void=>{
     const state=store.get();
@@ -59,7 +54,7 @@ export function mountTimelineTools(root:HTMLElement):()=>void{
     if(focusMode&&focusedAnimationId&&!state.animations.some(animation=>animation.id===focusedAnimationId))setFocusMode(false);
   };
   const applyIsolation=():void=>{
-    const view=viewport();if(!view)return;const state=store.get();let ids:Set<string>|undefined;
+    const view=viewport();if(!view)return;const previous=view.dataset.timelineIsolation??'all';view.dataset.timelineIsolation=isolation;if(previous!==isolation)window.dispatchEvent(new Event(TIMELINE_VIRTUALIZATION_EVENT));const state=store.get();let ids:Set<string>|undefined;
     if(isolation==='animation')ids=new Set(isolatedAnimationId?[isolatedAnimationId]:[]);
     else if(isolation==='element')ids=new Set(isolatedElementId?state.animations.filter(animation=>animation.elementId===isolatedElementId).map(animation=>animation.id):[]);
     const isolated=!!ids;
