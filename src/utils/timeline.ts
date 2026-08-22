@@ -1,8 +1,9 @@
+import type { MotionTrack } from '../core/motion';
 import { timelineTimingDuration,timelineTimingStart } from '../core/timeline';
-import type { DetectedAnimation, TimelineEvent } from '../types/domain';
-export function timelineDuration(animations:DetectedAnimation[], events:TimelineEvent[]): number {
+import type { TimelineEvent } from '../types/domain';
+export function timelineDuration(tracks:MotionTrack[], events:TimelineEvent[]): number {
   let end=1000;
-  for(const animation of animations)end=Math.max(end,timelineTimingStart(animation.startTime,animation.delay)+timelineTimingDuration(animation.duration,animation.iterations));
+  for(const track of tracks)end=Math.max(end,timelineTimingStart(track.timing.start,track.timing.delay)+timelineTimingDuration(track.timing.duration,track.timing.iterations));
   for(const event of events)end=Math.max(end,event.at);
   return end;
 }
