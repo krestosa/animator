@@ -16,7 +16,7 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   mouseButton.type='button';mouseButton.dataset.webInteraction='';mouseButton.className='webMouseToggle active';mouseButton.textContent='↖';mouseButton.setAttribute('aria-pressed','true');mouseButton.title='Mouse interaction with preview: on';
   const reset=focusGroup.querySelector('[data-inspection-clear]');focusGroup.insertBefore(mouseButton,reset);
 
-  let cameraActive=false,mouseEnabled=true,raf=0,lastFrame:HTMLIFrameElement|null=null,cameraElementId:string|undefined,cameraAnimationId:string|undefined,lastProjectId=store.get().project?.id;
+  let cameraActive=false,mouseEnabled=true,raf=0,lastFrame:HTMLIFrameElement|null=null,cameraElementId:string|undefined,cameraAnimationId:string|undefined,lastProjectContext=projectContext();
   let dragging=false,dragPointerId=-1,lastDragX=0,lastDragY=0;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const stage=()=>root.querySelector<HTMLElement>('.stage');
@@ -98,11 +98,13 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
     if(target?.closest('[data-inspection-clear]'))setCamera(false);
   };
   const key=(event:KeyboardEvent):void=>{if(event.key==='Escape'&&cameraActive){event.preventDefault();setCamera(false);}};
-  const stateChanged=():void=>{const projectId=store.get().project?.id;if(projectId!==lastProjectId){lastProjectId=projectId;if(cameraActive)setCamera(false);else{cameraElementId=undefined;cameraAnimationId=undefined;}}updateMouse();scheduleCamera();};
+  const stateChanged=():void=>{const context=projectContext();if(context!==lastProjectContext){lastProjectContext=context;endDrag();if(cameraActive)setCamera(false);else{cameraElementId=undefined;cameraAnimationId=undefined;}}updateMouse();scheduleCamera();};
   const unsubscribe=store.subscribe(stateChanged);
   const frameObserver=new MutationObserver(()=>{updateMouse();scheduleCamera();});frameObserver.observe(previewDevice,{childList:true});
   const resize=new ResizeObserver(scheduleCamera);resize.observe(previewDevice);
 
   tools.addEventListener('click',intercept,true);root.addEventListener('wheel',wheel,{capture:true,passive:false});root.addEventListener('pointerdown',pointerDown,true);root.addEventListener('pointermove',pointerMove,true);root.addEventListener('pointerup',pointerEnd,true);root.addEventListener('pointercancel',pointerEnd,true);window.addEventListener('keydown',key);updateMouse();
   return()=>{if(raf)cancelAnimationFrame(raf);endDrag();postInput({type:'SET_INPUT_LOCK',enabled:false});setCamera(false);unsubscribe();frameObserver.disconnect();resize.disconnect();tools.removeEventListener('click',intercept,true);root.removeEventListener('wheel',wheel,true);root.removeEventListener('pointerdown',pointerDown,true);root.removeEventListener('pointermove',pointerMove,true);root.removeEventListener('pointerup',pointerEnd,true);root.removeEventListener('pointercancel',pointerEnd,true);window.removeEventListener('keydown',key);mouseButton.remove();};
+
+  function projectContext():string{const project=store.get().project;return project?`${project.id}:${project.selectedEntry}`:'';}
 }
