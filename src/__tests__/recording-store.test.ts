@@ -1,5 +1,5 @@
 import { describe,expect,it } from 'vitest';
-import { COMPATIBILITY_EVENT_WINDOW,RecordingDataset,RECORDING_CHUNK_SIZE } from '../state/recording-store';
+import { COMPATIBILITY_EVENT_WINDOW,RecordingDataset,RECORDING_CHUNK_SIZE,replaceRecordedEvents } from '../state/recording-store';
 import type { TimelineEvent } from '../types/domain';
 
 const event=(index:number,kind=index%2?'pointer':'scroll',elementId=index%3?'el-a':'el-b'):TimelineEvent=>({id:`e-${index}`,at:index*10,kind,elementId,label:`event ${index}`});
@@ -35,5 +35,13 @@ describe('RecordingDataset',()=>{
     dataset.append([event(2)]);
     expect(dataset.snapshot()).not.toBe(first);
     expect(dataset.snapshot().map(item=>item.id)).toEqual(['e-1','e-2']);
+  });
+
+  it('returns an isolated recording patch instead of leaking wider store fields',()=>{
+    const wider={recordingDataset:new RecordingDataset([event(1)]),recording:false,project:{id:'should-not-leak'},motionTracks:['should-not-leak']};
+    const patch=replaceRecordedEvents(wider,[event(2)]);
+    expect(Object.keys(patch).sort()).toEqual(['recording','recordingDataset']);
+    expect(patch.recording).toBe(false);
+    expect(patch.recordingDataset.snapshot().map(item=>item.id)).toEqual(['e-2']);
   });
 });
