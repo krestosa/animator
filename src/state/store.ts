@@ -2,12 +2,12 @@ import {detectedAnimationToMotionTrack,motionTrackToDetectedAnimation,type Motio
 import type {DetectedAnimation,ProjectDescriptor,RuntimeElement,StaticAnalysis,TimelineEvent} from '../types/domain';
 import {emptyEditorState,mergeElements,projectContext,type EditorState} from './editor-store';
 import {applyMotionCommand,commandForTrackChange,emptyHistory,recordHistory,redoHistory,undoHistory,type HistoryEntry,type HistoryState} from './history-store';
-import {emptyMotionState,ingestDetectedAnimations,patchMotionTrack,updateMotionTrack,type MotionState,type MotionTrackPatch} from './motion-store';
+import {emptyMotionState,patchMotionTrack,updateMotionTrack,type MotionState,type MotionTrackPatch} from './motion-store';
 import {emptyRecordingState,replaceRecordedEvents,type RecordingQuery,type RecordingState} from './recording-store';
 
 type CanonicalAnimatorState=EditorState&MotionState&RecordingState&HistoryState;
 export type AnimatorState=CanonicalAnimatorState&{readonly events:TimelineEvent[]};
-type StorePatch=Partial<AnimatorState>&{animations?:DetectedAnimation[]};
+type StorePatch=Partial<AnimatorState>;
 
 let state:CanonicalAnimatorState={...emptyEditorState(),...emptyMotionState(),...emptyRecordingState(),...emptyHistory()};
 let eventDatasetRef=state.recordingDataset,eventVersion=-1,eventCache:TimelineEvent[]=[];
@@ -24,10 +24,9 @@ export const store={
   touch():void{emit();},
   set(patch:StorePatch):void{
     const projectChanged=Object.prototype.hasOwnProperty.call(patch,'project')&&projectContext(patch.project)!==projectContext(state.project);
-    const {animations,events,...canonicalPatch}=patch;
-    const motionPatch=animations!==undefined?{motionTracks:ingestDetectedAnimations(animations)}:{};
+    const {events,...canonicalPatch}=patch;
     const recordingPatch=events!==undefined?replaceRecordedEvents(state,events):{};
-    state={...state,...canonicalPatch,...motionPatch,...recordingPatch,...(projectChanged?emptyHistory():{})};emit();
+    state={...state,...canonicalPatch,...recordingPatch,...(projectChanged?emptyHistory():{})};emit();
   },
   getMotionTrack(id:string|undefined):MotionTrack|undefined{return id?state.motionTracks.find(track=>track.id===id):undefined;},
   updateMotionTrack(id:string,patch:MotionTrackPatch,record=true):void{
