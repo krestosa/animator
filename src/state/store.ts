@@ -3,16 +3,21 @@ import type { DetectedAnimation,ProjectDescriptor,RuntimeElement,StaticAnalysis,
 import { emptyEditorState,mergeElements,projectContext,type EditorState } from './editor-store';
 import { applyTrackSnapshot,emptyHistory,recordHistory,redoHistory,sameSnapshot,snapshotTrack,undoHistory,type HistoryEntry,type HistoryState } from './history-store';
 import { emptyMotionState,ingestDetectedAnimations,legacyAnimations,replaceDetectedAnimations,updateDetectedAnimation,type MotionState } from './motion-store';
-import { appendRecordedEvents,emptyRecordingState,type RecordingState } from './recording-store';
+import { emptyRecordingState,replaceRecordedEvents,type RecordingQuery,type RecordingState } from './recording-store';
 
 type CanonicalAnimatorState=EditorState&MotionState&RecordingState&HistoryState;
-export type AnimatorState=CanonicalAnimatorState&{readonly animations:DetectedAnimation[]};
+export type AnimatorState=CanonicalAnimatorState&{readonly animations:DetectedAnimation[];readonly events:TimelineEvent[]};
 
 let state:CanonicalAnimatorState={...emptyEditorState(),...emptyMotionState(),...emptyRecordingState(),...emptyHistory()};
 let legacyTrackRef:MotionTrack[]|undefined,legacyCache:DetectedAnimation[]=[];
+let eventDatasetRef=state.recordingDataset,eventVersion=-1,eventCache:TimelineEvent[]=[];
 const listeners=new Set<()=>void>();
 const emit=():void=>{for(const listener of listeners)listener();};
-const compatibilityView=():AnimatorState=>{if(legacyTrackRef!==state.motionTracks){legacyTrackRef=state.motionTracks;legacyCache=legacyAnimations(state);}return{...state,animations:legacyCache};};
+const compatibilityView=():AnimatorState=>{
+  if(legacyTrackRef!==state.motionTracks){legacyTrackRef=state.motionTracks;legacyCache=legacyAnimations(state);}
+  if(eventDatasetRef!==state.recordingDataset||eventVersion!==state.recordingDataset.version){eventDatasetRef=state.recordingDataset;eventVersion=state.recordingDataset.version;eventCache=state.recordingDataset.snapshot();}
+  return{...state,animations:legacyCache,events:eventCache};
+};
 
 export const store={
   get:():AnimatorState=>compatibilityView(),
@@ -20,9 +25,10 @@ export const store={
   touch():void{emit();},
   set(patch:Partial<AnimatorState>):void{
     const projectChanged=Object.prototype.hasOwnProperty.call(patch,'project')&&projectContext(patch.project)!==projectContext(state.project);
-    const {animations,...canonicalPatch}=patch;
+    const {animations,events,...canonicalPatch}=patch;
     const motionPatch=animations!==undefined?{motionTracks:ingestDetectedAnimations(animations)}:{};
-    state={...state,...canonicalPatch,...motionPatch,...(projectChanged?emptyHistory():{})};emit();
+    const recordingPatch=events!==undefined?replaceRecordedEvents(state,events):{};
+    state={...state,...canonicalPatch,...motionPatch,...recordingPatch,...(projectChanged?emptyHistory():{})};emit();
   },
   updateAnimation(id:string,patch:Partial<DetectedAnimation>,record=true):void{
     const currentTrack=state.motionTracks.find(track=>track.id===id);if(!currentTrack)return;
@@ -35,8 +41,10 @@ export const store={
     const next=index>=0?animations.map(item=>item.id===normalized.id?mergeRuntimeReport(item,normalized,state.analysis):item):[...animations,normalized];
     state={...state,...replaceDetectedAnimations(state,next),selectedAnimationId:shouldSelect?normalized.id:fallbackSelection};emit();
   },
-  addEvent(event:TimelineEvent):void{state={...state,events:appendRecordedEvents(state.events,[event])};emit();},
-  addEvents(events:TimelineEvent[]):void{const next=appendRecordedEvents(state.events,events);if(next===state.events)return;state={...state,events:next};emit();},
+  addEvent(event:TimelineEvent):void{if(state.recordingDataset.append([event]))emit();},
+  addEvents(events:TimelineEvent[]):void{if(state.recordingDataset.append(events))emit();},
+  queryEvents(query:RecordingQuery={}):TimelineEvent[]{return state.recordingDataset.query(query);},
+  recordingStats(){return state.recordingDataset.stats();},
   upsertElements(elements:RuntimeElement[]):void{state={...state,elements:mergeElements(state.elements,elements)};emit();},
   undo():void{const result=undoHistory(state);if(!result.entry)return;state=applyHistory(result.entry,result.state,'before');emit();},
   redo():void{const result=redoHistory(state);if(!result.entry)return;state=applyHistory(result.entry,result.state,'after');emit();}
