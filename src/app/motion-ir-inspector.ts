@@ -1,5 +1,7 @@
 import type { MotionKeyframe,MotionTrack,MotionValue } from '../core/motion';
 import {buildTransform,parseTransform,type TransformParts} from '../editor/motion';
+import {presets} from '../presets/presets';
+import {deleteCustomPreset,loadCustomPresets,saveCustomMotionPreset} from '../presets/custom';
 import {sendCommand} from '../preview/bridge';
 import {store,type MotionTrackPatch} from '../state/store';
 import type { DetectedAnimation } from '../types/domain';
@@ -17,15 +19,20 @@ export function mountMotionIrInspector(root:HTMLElement):()=>void{
  const current=()=>selectMotionTrack(store.get().motionTracks,store.get().selectedAnimationId);
  const preview=(track:MotionTrack,patch:InspectorMotionPatch={})=>{const value=motionTrackPreview(track,patch);sendCommand(frame(),{type:'APPLY_OVERRIDE',animationId:track.id,duration:value.duration,delay:value.delay,easing:value.easing,keyframes:value.keyframes});};
  const commit=(track:MotionTrack,patch:MotionTrackPatch)=>{store.updateMotionTrack(track.id,patch);const updated=store.getMotionTrack(track.id);if(updated)preview(updated);};
- const click=(event:MouseEvent)=>{const target=(event.target as Element|null)?.closest<HTMLElement>('[data-action],[data-duplicate-kf],[data-delete-kf]');if(!target)return;const track=current();if(!track)return;const action=target.dataset.action;let frames:MotionKeyframe[]|undefined;
+ const click=(event:MouseEvent)=>{const target=(event.target as Element|null)?.closest<HTMLElement>('[data-action],[data-duplicate-kf],[data-delete-kf],[data-delete-preset]');if(!target)return;const action=target.dataset.action;
+  if(target.dataset.deletePreset!==undefined){event.preventDefault();event.stopImmediatePropagation();deleteCustomPreset(target.dataset.deletePreset);store.touch();return;}
+  const track=current();if(!track)return;let frames:MotionKeyframe[]|undefined;
   if(action==='add-keyframe')frames=addMotionKeyframe(normalizedMotionKeyframes(track));
   else if(action==='add-property'){const name=prompt('CSS property to animate')?.trim();if(name)frames=addMotionProperty(normalizedMotionKeyframes(track),name);else return;}
+  else if(action==='save-preset'){const label=prompt('Preset name',track.name??'Custom preset');if(label===null)return;event.preventDefault();event.stopImmediatePropagation();saveCustomMotionPreset(label,track);store.touch();return;}
   else if(target.dataset.duplicateKf!==undefined)frames=duplicateMotionKeyframe(normalizedMotionKeyframes(track),Number(target.dataset.duplicateKf));
   else if(target.dataset.deleteKf!==undefined)frames=deleteMotionKeyframe(normalizedMotionKeyframes(track),Number(target.dataset.deleteKf));
   else return;
   event.preventDefault();event.stopImmediatePropagation();commit(track,{keyframes:frames});
  };
- const change=(event:Event)=>{const target=event.target;if(!(target instanceof HTMLInputElement))return;const track=current();if(!track)return;let patch:MotionTrackPatch|undefined;
+ const change=(event:Event)=>{const target=event.target;
+  if(target instanceof HTMLSelectElement&&target.matches('[data-preset]')){const track=current();if(!track||!target.value)return;const preset=[...presets,...loadCustomPresets()].find(item=>item.id===target.value);if(!preset)return;event.stopImmediatePropagation();commit(track,{timing:{duration:preset.duration,easing:preset.easing},keyframes:legacyKeyframesToMotion(preset.keyframes)});target.value='';return;}
+  if(!(target instanceof HTMLInputElement))return;const track=current();if(!track)return;let patch:MotionTrackPatch|undefined;
   if(target.matches('[data-duration-range],[data-duration-number]'))patch={timing:{duration:Number(target.value)}};
   else if(target.matches('[data-delay]'))patch={timing:{delay:Number(target.value)}};
   else if(target.matches('[data-easing-text]'))patch={timing:{easing:target.value}};
