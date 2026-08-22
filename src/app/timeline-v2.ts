@@ -1,4 +1,5 @@
 import { groupAnimations, type AnimationGroup } from '../editor/grouping';
+import { TimelineEngine,timelineRulerMarks,timelineTimeFromPointer,timelineTimeToPx,timelineTimingDuration,timelineTimingStart,timelineVisibleRange } from '../core/timeline';
 import { sendCommand, TIMELINE_STATE_EVENT } from '../preview/bridge';
 import { store } from '../state/store';
 import type { AnimationType, DetectedAnimation, PreviewMessage, RuntimeElement, TimelineEvent } from '../types/domain';
@@ -19,8 +20,8 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
   viewport.className='timelineV2Viewport';
   viewport.dataset.timelineV2='';
   timeline.append(viewport);
-  const expanded=new Set<string>(),expandedDetails=new Set<string>();
-  let structuralSignature='',eventSignature='',drag:DragState|undefined,raf=0,livePxPerMs=.1,viewOriginMs=0,inspectedAnimationId:string|undefined,stableDuration=1000,lastProject='';
+  const expanded=new Set<string>(),expandedDetails=new Set<string>(),engine=new TimelineEngine();
+  let structuralSignature='',eventSignature='',drag:DragState|undefined,raf=0,livePxPerMs=.1,viewOriginMs=0,inspectedAnimationId:string|undefined,lastProject='';
 
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(render);};
@@ -28,27 +29,23 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
     raf=0;
     if(drag){viewport.style.setProperty('--timeline-playhead',`${Math.max(0,(store.get().playhead-drag.origin)*drag.pxPerMs)}px`);return;}
     const state=store.get(),projectKey=state.project?.id??'';
-    if(projectKey!==lastProject){lastProject=projectKey;stableDuration=1000;viewOriginMs=0;inspectedAnimationId=undefined;expanded.clear();expandedDetails.clear();structuralSignature='';eventSignature='';}
+    if(projectKey!==lastProject){lastProject=projectKey;engine.reset();viewOriginMs=0;inspectedAnimationId=undefined;expanded.clear();expandedDetails.clear();structuralSignature='';eventSignature='';}
     const groups=groupAnimations(state.animations,state.selectedAnimationId),elements=new Map(state.elements.map(element=>[element.id,element]));
     const inspected=inspectedAnimationId?state.animations.find(animation=>animation.id===inspectedAnimationId):undefined;
     if(inspectedAnimationId&&!inspected){inspectedAnimationId=undefined;viewOriginMs=0;}
-    const origin=inspected?animationStart(inspected):viewOriginMs;if(inspected)viewOriginMs=origin;
-    const measured=inspected?Math.max(100,animationLength(inspected)):timelineEnd(groups);
-    const duration=inspected?measured:(stableDuration=Math.max(stableDuration,Math.ceil(measured/250)*250));
-    const pxPerMs=Math.max(.05,state.zoom/10);livePxPerMs=pxPerMs;
-    const canvasWidth=Math.max(720,Math.ceil(duration*pxPerMs+180));
-    const step=rulerStep(pxPerMs),major=Math.max(40,step*pxPerMs),minor=Math.max(8,major/5);
+    const metrics=engine.measure({tracks:state.motionTracks,events:state.events,zoom:state.zoom,playhead:state.playhead,origin:viewOriginMs,...(inspected?{isolatedTrackId:inspected.id}:{})});
+    const {origin,duration,pxPerMs,canvasWidth,gridMajorPx,gridMinorPx}=metrics;if(inspected)viewOriginMs=origin;livePxPerMs=pxPerMs;
     viewport.style.setProperty('--timeline-canvas-width',`${canvasWidth}px`);
-    viewport.style.setProperty('--timeline-playhead',`${Math.max(0,(state.playhead-origin)*pxPerMs)}px`);
-    viewport.style.setProperty('--timeline-grid-major',`${major}px`);
-    viewport.style.setProperty('--timeline-grid-minor',`${minor}px`);
+    viewport.style.setProperty('--timeline-playhead',`${metrics.playheadPx}px`);
+    viewport.style.setProperty('--timeline-grid-major',`${gridMajorPx}px`);
+    viewport.style.setProperty('--timeline-grid-minor',`${gridMinorPx}px`);
     viewport.dataset.pxPerMs=String(pxPerMs);viewport.dataset.duration=String(duration);viewport.dataset.originMs=String(origin);
     const signature=[state.zoom,state.selectedAnimationId??'',inspectedAnimationId??'',origin,duration,groups.map(group=>groupSignature(group)).join('|'),[...expanded].sort().join(','),[...expandedDetails].sort().join(',')].join('::');
     if(signature!==structuralSignature){
       structuralSignature=signature;eventSignature='';
       viewport.innerHTML=`<div class="v2Row v2RulerRow"><div class="v2Label v2Corner"><span>${inspected?'Isolated motion':'Animation lanes'}</span><small>${groups.length}</small></div><div class="v2Motion v2RulerMotion" data-v2-scrub-rail>${ruler(duration,pxPerMs)}</div></div>${groups.map(group=>groupRows(group,elements,expanded,expandedDetails,state.selectedAnimationId,pxPerMs,origin)).join('')}<div class="v2Row v2EventRow"><div class="v2Label"><span class="v2LaneIcon event"></span><span class="v2GroupTitle">Events</span><small data-v2-event-count>0</small></div><div class="v2Motion" data-v2-event-motion></div></div>`;
     }
-    updateEvents(viewport,state.events,pxPerMs,origin,duration);
+    updateEvents(viewport,pxPerMs,origin,duration);
   };
 
   const liveState=(event:Event):void=>{if(drag)return;const detail=(event as CustomEvent<TimelineStateMessage>).detail;if(!detail)return;viewport.style.setProperty('--timeline-playhead',`${Math.max(0,(detail.time-viewOriginMs)*livePxPerMs)}px`);};
@@ -68,23 +65,24 @@ export function mountTimelineV2(root:HTMLElement):()=>void {
     const id=target.dataset.v2Inspect??target.dataset.v2Instance??target.dataset.v2Group;if(!id)return;
     const animation=store.get().animations.find(item=>item.id===id);if(!animation)return;selectAnimation(animation,!!target.dataset.v2Inspect);event.stopPropagation();
   };
-  const scrubWith=(event:PointerEvent,state:DragState):void=>{if(viewport.scrollLeft!==state.scrollLeft)viewport.scrollLeft=state.scrollLeft;const local=Math.max(0,Math.min(state.duration,(event.clientX-state.rectLeft)/state.pxPerMs)),time=state.origin+local;viewport.style.setProperty('--timeline-playhead',`${local*state.pxPerMs}px`);store.set({playhead:time});sendCommand(frame(),{type:'SCRUB_TIMELINE',time});};
-  const canStartScrub=(event:PointerEvent,motion:HTMLElement):boolean=>{if(motion.matches('[data-v2-scrub-rail]'))return true;const rect=motion.getBoundingClientRect(),pxPerMs=Number(viewport.dataset.pxPerMs??.1),origin=Number(viewport.dataset.originMs??0),playheadX=Math.max(0,(store.get().playhead-origin)*pxPerMs);return Math.abs((event.clientX-rect.left)-playheadX)<=7;};
+  const scrubWith=(event:PointerEvent,state:DragState):void=>{if(viewport.scrollLeft!==state.scrollLeft)viewport.scrollLeft=state.scrollLeft;const metrics={origin:state.origin,duration:state.duration,pxPerMs:state.pxPerMs,rulerStep:100},time=timelineTimeFromPointer(event.clientX,state.rectLeft,metrics),local=timelineTimeToPx(time,state.origin,state.pxPerMs);viewport.style.setProperty('--timeline-playhead',`${local}px`);store.set({playhead:time});sendCommand(frame(),{type:'SCRUB_TIMELINE',time});};
+  const canStartScrub=(event:PointerEvent,motion:HTMLElement):boolean=>{if(motion.matches('[data-v2-scrub-rail]'))return true;const rect=motion.getBoundingClientRect(),pxPerMs=Number(viewport.dataset.pxPerMs??.1),origin=Number(viewport.dataset.originMs??0),playheadX=timelineTimeToPx(store.get().playhead,origin,pxPerMs);return Math.abs((event.clientX-rect.left)-playheadX)<=7;};
   const down=(event:PointerEvent):void=>{const motion=(event.target as Element|null)?.closest<HTMLElement>('.v2Motion');if(!motion||!canStartScrub(event,motion))return;const rect=motion.getBoundingClientRect(),pxPerMs=Math.max(.0001,Number(viewport.dataset.pxPerMs??.1));drag={motion,pointerId:event.pointerId,rectLeft:rect.left,pxPerMs,duration:Math.max(0,Number(viewport.dataset.duration??0)),origin:Math.max(0,Number(viewport.dataset.originMs??0)),scrollLeft:viewport.scrollLeft};viewport.classList.add('isScrubbing');viewport.setPointerCapture(event.pointerId);scrubWith(event,drag);event.preventDefault();};
   const move=(event:PointerEvent):void=>{if(drag&&drag.pointerId===event.pointerId&&viewport.hasPointerCapture(event.pointerId))scrubWith(event,drag);};
   const up=(event:PointerEvent):void=>{if(!drag||drag.pointerId!==event.pointerId)return;if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);drag=undefined;viewport.classList.remove('isScrubbing');structuralSignature='';eventSignature='';schedule();};
-  const keepScrollStable=():void=>{if(drag&&viewport.scrollLeft!==drag.scrollLeft)viewport.scrollLeft=drag.scrollLeft;};
+  const keepScrollStable=():void=>{if(drag&&viewport.scrollLeft!==drag.scrollLeft)viewport.scrollLeft=drag.scrollLeft;else if(!drag)schedule();};
   const clearInspection=():void=>{if(!inspectedAnimationId&&viewOriginMs===0)return;inspectedAnimationId=undefined;viewOriginMs=0;structuralSignature='';eventSignature='';schedule();};
 
   viewport.addEventListener('click',click);viewport.addEventListener('pointerdown',down);viewport.addEventListener('pointermove',move);viewport.addEventListener('pointerup',up);viewport.addEventListener('pointercancel',up);viewport.addEventListener('scroll',keepScrollStable);window.addEventListener(TIMELINE_STATE_EVENT,liveState);window.addEventListener(ANIMATION_INSPECT_EVENT,syncInspection);window.addEventListener(ANIMATION_CLEAR_INSPECTION_EVENT,clearInspection);
   const unsubscribe=store.subscribe(schedule);render();
   return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);viewport.removeEventListener('click',click);viewport.removeEventListener('pointerdown',down);viewport.removeEventListener('pointermove',move);viewport.removeEventListener('pointerup',up);viewport.removeEventListener('pointercancel',up);viewport.removeEventListener('scroll',keepScrollStable);window.removeEventListener(TIMELINE_STATE_EVENT,liveState);window.removeEventListener(ANIMATION_INSPECT_EVENT,syncInspection);window.removeEventListener(ANIMATION_CLEAR_INSPECTION_EVENT,clearInspection);viewport.remove();legacy.classList.remove('legacyTimeline');};
 
-  function updateEvents(view:HTMLElement,events:TimelineEvent[],pxPerMs:number,origin:number,duration:number):void{
-    const recent=events.slice(-400),next=`${pxPerMs}:${origin}:${duration}:${recent.map(item=>`${item.id}:${item.at}`).join(',')}`;if(next===eventSignature)return;eventSignature=next;
+  function updateEvents(view:HTMLElement,pxPerMs:number,origin:number,duration:number):void{
+    const rawLabel=getComputedStyle(view).getPropertyValue('--timeline-label-width'),parsedLabel=Number.parseFloat(rawLabel),labelWidth=Number.isFinite(parsedLabel)?parsedLabel:184;
+    const range=timelineVisibleRange(view.scrollLeft,view.clientWidth,labelWidth,{origin,duration,pxPerMs},160),stats=store.recordingStats(),visible=store.queryEvents({start:range.start,end:range.end,limit:1000});
+    const next=`${pxPerMs}:${origin}:${duration}:${Math.round(range.start)}:${Math.round(range.end)}:${stats.version}`;if(next===eventSignature)return;eventSignature=next;
     const motion=view.querySelector<HTMLElement>('[data-v2-event-motion]'),count=view.querySelector<HTMLElement>('[data-v2-event-count]');if(!motion||!count)return;
-    const visible=recent.filter(item=>item.at>=origin&&item.at<=origin+duration),clusters=clusterEvents(visible,pxPerMs);
-    count.textContent=visible.length===events.length?String(events.length):`${visible.length}/${events.length}`;
+    const clusters=clusterEvents(visible,pxPerMs);count.textContent=visible.length===stats.count?String(stats.count):`${visible.length}/${stats.count}`;
     motion.innerHTML=clusters.map(cluster=>{const x=Math.max(0,(cluster.at-origin)*pxPerMs),many=cluster.events.length>1,title=cluster.events.slice(0,4).map(item=>item.label).join(' · ')+(cluster.events.length>4?` · +${cluster.events.length-4}`:'');return `<i class="v2Event${many?' cluster':''}" style="left:${x}px" title="${attr(title)}">${many?cluster.events.length:''}</i>`;}).join('');
   }
 }
@@ -117,16 +115,14 @@ function clusterEvents(events:TimelineEvent[],pxPerMs:number):EventCluster[]{
   for(const event of sorted){const last=clusters.at(-1);if(last&&event.at-last.at<=thresholdMs){last.events.push(event);last.at=last.events.reduce((sum,item)=>sum+item.at,0)/last.events.length;}else clusters.push({at:event.at,events:[event]});}
   return clusters;
 }
-function animationStart(animation:DetectedAnimation):number{return Math.max(0,animation.startTime+Math.max(0,Number(animation.delay)||0));}
-function animationLength(animation:DetectedAnimation):number{const iterations=Number.isFinite(animation.iterations)&&Number(animation.iterations)>0?Number(animation.iterations):1;return Math.max(1,(animation.duration??100)*iterations);}
+function animationStart(animation:DetectedAnimation):number{return timelineTimingStart(animation.startTime,animation.delay);}
+function animationLength(animation:DetectedAnimation):number{return timelineTimingDuration(animation.duration,animation.iterations);}
 function componentName(animation:DetectedAnimation,elements:Map<string,RuntimeElement>):string {const element=elements.get(animation.elementId);if(element){if(element.domId)return `#${element.domId}`;if(element.classes.length)return `${element.tag}.${element.classes.slice(0,4).join('.')}`;return element.text?`${element.tag} · ${element.text.slice(0,48)}`:element.tag;}return animation.source?.selector??animation.elementId.replace(/^static:/,'source:');}
 function componentDetail(animation:DetectedAnimation,elements:Map<string,RuntimeElement>):string {const element=elements.get(animation.elementId);if(element){if(element.domId)return `#${element.domId}`;if(element.classes.length)return `.${element.classes.slice(0,3).join('.')}`;return element.text?.slice(0,48)??'';}return animation.source?.file?`${animation.source.file}:${animation.source.line??'?'}${animation.source.selector?` · ${animation.source.selector}`:''}`:animation.confidence;}
 function humanType(type:AnimationType):string{return({'css-animation':'CSS animation','css-transition':'Transition','web-animation':'WAAPI','javascript':'JavaScript','raf':'rAF','runtime-style':'Style write','unknown':'Unknown'} as const)[type];}
 function needsDisclosure(primary:string,secondary:string):boolean{return primary.length>30||secondary.length>54||primary.length+secondary.length>72;}
-function ruler(duration:number,pxPerMs:number):string {const step=rulerStep(pxPerMs),marks:string[]=[];for(let time=0;time<=duration+step;time+=step)marks.push(`<span style="left:${time*pxPerMs}px">${formatTime(time)}</span>`);return marks.join('');}
-function timelineEnd(groups:AnimationGroup[]):number {let end=1000;for(const group of groups)for(const animation of group.instances)end=Math.max(end,animationStart(animation)+animationLength(animation));return end;}
+function ruler(duration:number,pxPerMs:number):string {return timelineRulerMarks(duration,pxPerMs).map(time=>`<span style="left:${time*pxPerMs}px">${formatTime(time)}</span>`).join('');}
 function groupSignature(group:AnimationGroup):string {return `${group.key}:${group.instances.map(instance=>`${instance.id}:${instance.startTime}:${instance.duration??0}:${instance.delay??0}:${instance.iterations??1}:${instance.runtimeState}:${instance.type}`).join(',')}`;}
-function rulerStep(pxPerMs:number):number{return[10,20,50,100,200,500,1000,2000,5000,10000].find(value=>value>=90/pxPerMs)??10000;}
 function formatTime(ms:number):string{return ms>=1000?`${(ms/1000).toFixed(ms%1000===0?0:1)}s`:`${Math.round(ms)}ms`;}
 function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
 function attr(value:string):string{return html(value);}
