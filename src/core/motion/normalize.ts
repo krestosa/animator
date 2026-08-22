@@ -2,60 +2,18 @@ import type { AnimationType, DetectedAnimation } from '../../types/domain';
 import type { MotionKeyframe, MotionPropertyTrack, MotionSourceKind, MotionTrack } from './motion-model';
 
 const sourceKind=(type:AnimationType):MotionSourceKind=>{
-  switch(type){
-    case 'css-animation': return 'css-animation';
-    case 'css-transition': return 'css-transition';
-    case 'web-animation': return 'waapi';
-    case 'javascript': return 'javascript';
-    case 'raf': return 'raf';
-    case 'runtime-style': return 'runtime-style';
-    default: return 'unknown';
-  }
+  switch(type){case 'css-animation':return 'css-animation';case 'css-transition':return 'css-transition';case 'web-animation':return 'waapi';case 'javascript':return 'javascript';case 'raf':return 'raf';case 'runtime-style':return 'runtime-style';default:return 'unknown';}
 };
-
-const normalizeProperties=(properties:DetectedAnimation['properties']):MotionPropertyTrack[]=>properties.map(property=>({
-  name:property.name,
-  ...(property.from!==undefined?{from:property.from}:{}),
-  ...(property.to!==undefined?{to:property.to}:{}),
-  ...(property.values!==undefined?{values:[...property.values]}:{})
-}));
-
-const normalizeKeyframes=(frames:DetectedAnimation['keyframes']):MotionKeyframe[]=>{
-  if(!frames?.length)return [];
-  return frames.map(frame=>{
-    const values:Record<string,string|number|null>={};
-    let offset:number|undefined,easing:string|undefined,composite:string|undefined;
-    for(const [key,value] of Object.entries(frame)){
-      if(key==='offset'&&typeof value==='number'){offset=value;continue;}
-      if(key==='easing'&&typeof value==='string'){easing=value;continue;}
-      if(key==='composite'&&typeof value==='string'){composite=value;continue;}
-      values[key]=value;
-    }
-    return {values,...(offset!==undefined?{offset}:{}),...(easing?{easing}:{}),...(composite?{composite}:{})};
-  });
+const legacyType=(track:MotionTrack):AnimationType=>{
+  const stored=track.metadata?.legacyType;
+  if(stored==='css-animation'||stored==='css-transition'||stored==='web-animation'||stored==='javascript'||stored==='raf'||stored==='runtime-style'||stored==='unknown')return stored;
+  switch(track.source.kind){case 'css-animation':return 'css-animation';case 'css-transition':return 'css-transition';case 'waapi':return 'web-animation';case 'javascript':return 'javascript';case 'raf':return 'raf';case 'runtime-style':return 'runtime-style';default:return 'unknown';}
 };
+const normalizeProperties=(properties:DetectedAnimation['properties']):MotionPropertyTrack[]=>properties.map(property=>({name:property.name,...(property.from!==undefined?{from:property.from}:{}),...(property.to!==undefined?{to:property.to}:{}),...(property.values!==undefined?{values:[...property.values]}:{})}));
+const normalizeKeyframes=(frames:DetectedAnimation['keyframes']):MotionKeyframe[]=>frames?.map(frame=>{const values:Record<string,string|number|null>={};let offset:number|undefined,easing:string|undefined,composite:string|undefined;for(const [key,value] of Object.entries(frame)){if(key==='offset'&&typeof value==='number'){offset=value;continue;}if(key==='easing'&&typeof value==='string'){easing=value;continue;}if(key==='composite'&&typeof value==='string'){composite=value;continue;}values[key]=value;}return{values,...(offset!==undefined?{offset}:{}),...(easing?{easing}:{}),...(composite?{composite}:{})};})??[];
+const denormalizeKeyframes=(frames:MotionKeyframe[]):DetectedAnimation['keyframes']=>frames.length?frames.map(frame=>({...frame.values,...(frame.offset!==undefined?{offset:frame.offset}:{}),...(frame.easing?{easing:frame.easing}:{}),...(frame.composite?{composite:frame.composite}:{})})):undefined;
 
-export function detectedAnimationToMotionTrack(animation:DetectedAnimation):MotionTrack{
-  return {
-    id:animation.id,
-    ...(animation.name?{name:animation.name}:{}),
-    target:{elementId:animation.elementId,...(animation.source?.selector?{selector:animation.source.selector}:{})},
-    timing:{
-      start:animation.startTime,
-      ...(animation.duration!==undefined?{duration:animation.duration}:{}),
-      ...(animation.delay!==undefined?{delay:animation.delay}:{}),
-      ...(animation.iterations!==undefined?{iterations:animation.iterations}:{}),
-      ...(animation.direction?{direction:animation.direction}:{}),
-      ...(animation.easing?{easing:animation.easing}:{}),
-      ...(animation.fill?{fill:animation.fill}:{})
-    },
-    properties:normalizeProperties(animation.properties),
-    keyframes:normalizeKeyframes(animation.keyframes),
-    trigger:{kind:'unknown'},
-    source:{kind:sourceKind(animation.type),...(animation.source?{reference:animation.source}:{}),confidence:animation.confidence},
-    runtimeState:animation.runtimeState,
-    metadata:{legacyType:animation.type}
-  };
-}
-
-export function detectedAnimationsToMotionTracks(animations:DetectedAnimation[]):MotionTrack[]{return animations.map(detectedAnimationToMotionTrack);}
+export function detectedAnimationToMotionTrack(animation:DetectedAnimation):MotionTrack{return{id:animation.id,...(animation.name?{name:animation.name}:{}),target:{elementId:animation.elementId,...(animation.source?.selector?{selector:animation.source.selector}:{})},timing:{start:animation.startTime,...(animation.duration!==undefined?{duration:animation.duration}:{}),...(animation.delay!==undefined?{delay:animation.delay}:{}),...(animation.iterations!==undefined?{iterations:animation.iterations}:{}),...(animation.direction?{direction:animation.direction}:{}),...(animation.easing?{easing:animation.easing}:{}),...(animation.fill?{fill:animation.fill}:{})},properties:normalizeProperties(animation.properties),keyframes:normalizeKeyframes(animation.keyframes),trigger:{kind:'unknown'},source:{kind:sourceKind(animation.type),...(animation.source?{reference:animation.source}:{}),confidence:animation.confidence},runtimeState:animation.runtimeState,metadata:{legacyType:animation.type}};}
+export function motionTrackToDetectedAnimation(track:MotionTrack):DetectedAnimation{return{id:track.id,elementId:track.target.elementId,type:legacyType(track),...(track.name?{name:track.name}:{}),startTime:track.timing.start,...(track.timing.duration!==undefined?{duration:track.timing.duration}:{}),...(track.timing.delay!==undefined?{delay:track.timing.delay}:{}),...(track.timing.iterations!==undefined?{iterations:track.timing.iterations}:{}),...(track.timing.direction?{direction:track.timing.direction}:{}),...(track.timing.easing?{easing:track.timing.easing}:{}),...(track.timing.fill?{fill:track.timing.fill}:{}),properties:track.properties.map(property=>({name:property.name,...(property.from!==undefined?{from:property.from}:{}),...(property.to!==undefined?{to:property.to}:{}),...(property.values?{values:[...property.values]}:{})})),...(track.source.reference?{source:track.source.reference}:{}),confidence:track.source.confidence,runtimeState:track.runtimeState,...(track.keyframes.length?{keyframes:denormalizeKeyframes(track.keyframes)}:{})};}
+export const detectedAnimationsToMotionTracks=(animations:DetectedAnimation[]):MotionTrack[]=>animations.map(detectedAnimationToMotionTrack);
+export const motionTracksToDetectedAnimations=(tracks:MotionTrack[]):DetectedAnimation[]=>tracks.map(motionTrackToDetectedAnimation);
