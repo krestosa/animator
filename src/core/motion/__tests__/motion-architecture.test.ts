@@ -1,0 +1,14 @@
+import {describe,expect,it} from 'vitest';
+import {detectedAnimationToMotionTrack,filterMotionTracks,motionAdapterForAnimationType,overviewMotionTracks,type MotionTrack} from '..';
+import {applyMotionCommand,commandForTrackChange} from '../../../state/history-store';
+import type {DetectedAnimation} from '../../../types/domain';
+
+const detected=(patch:Partial<DetectedAnimation>={}):DetectedAnimation=>({id:'a',elementId:'el',type:'css-animation',name:'fade',startTime:0,duration:300,easing:'ease',properties:[{name:'opacity',values:['0','1']},{name:'display',values:['none','block']},{name:'transform',values:['scale(.8)','scale(1)']}],confidence:'exact',runtimeState:'idle',keyframes:[{offset:0,opacity:0},{offset:1,opacity:1}],...patch});
+
+describe('Motion IR architecture',()=>{
+  it('maps source adapters without losing extended kinds',()=>{expect(motionAdapterForAnimationType('gsap').sourceKind).toBe('gsap');expect(motionAdapterForAnimationType('framer-motion').sourceKind).toBe('framer-motion');expect(motionAdapterForAnimationType('canvas').editable).toBe(false);});
+  it('formalizes ScrollTimeline triggers only when source evidence identifies it',()=>{const scroll=detectedAnimationToMotionTrack(detected({type:'scroll-timeline'})),css=detectedAnimationToMotionTrack(detected());expect(scroll.trigger).toMatchObject({kind:'scroll-progress',source:'scroll-timeline'});expect(css.trigger.kind).toBe('auto');});
+  it('classifies property semantics',()=>{const track=detectedAnimationToMotionTrack(detected()),byName=new Map(track.properties.map(property=>[property.name,property]));expect(byName.get('opacity')).toMatchObject({valueKind:'number',interpolable:true});expect(byName.get('display')).toMatchObject({valueKind:'discrete',interpolable:false});expect(byName.get('transform')).toMatchObject({valueKind:'transform',interpolable:true});});
+  it('filters and summarizes canonical tracks',()=>{const tracks=[detectedAnimationToMotionTrack(detected()),detectedAnimationToMotionTrack(detected({id:'b',type:'web-animation',confidence:'runtime-observed'}))];expect(overviewMotionTracks(tracks)).toMatchObject({total:2,cssAnimations:1,waapi:1});expect(filterMotionTracks(tracks,'opacity','waapi').map(track=>track.id)).toEqual(['b']);});
+  it('creates reversible domain commands instead of opaque snapshots',()=>{const before=detectedAnimationToMotionTrack(detected()),after:MotionTrack={...before,timing:{...before.timing,duration:700},keyframes:[...before.keyframes,{offset:.5,values:{opacity:.5}}]};const command=commandForTrackChange(before,after);expect(command?.kind).toBe('compound');const forward=command?applyMotionCommand(before,command,'forward'):before,reverse=command?applyMotionCommand(forward,command,'reverse'):forward;expect(forward.timing.duration).toBe(700);expect(forward.keyframes).toHaveLength(3);expect(reverse.timing.duration).toBe(300);expect(reverse.keyframes).toEqual(before.keyframes);});
+});
