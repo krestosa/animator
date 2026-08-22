@@ -1,6 +1,7 @@
 import { describe,expect,it } from 'vitest';
 import type { MotionTrack } from '../../motion';
 import { TimelineEngine,fitTimelineZoom,layoutMotionTrack,snapTimelineTime,timelineTrackDuration,timelineTrackStart,timelineVisibleIndexRange,timelineVisibleRange } from '../timeline-engine';
+import { TimelineVirtualizer } from '../timeline-virtualizer';
 
 const track=(id:string,start:number,duration:number,delay=0,iterations=1):MotionTrack=>({id,target:{elementId:`el-${id}`},timing:{start,duration,delay,iterations},properties:[],keyframes:[],trigger:{kind:'unknown'},source:{kind:'waapi',confidence:'runtime-observed'},runtimeState:'running'});
 
@@ -37,5 +38,15 @@ describe('TimelineEngine',()=>{
     const metrics={origin:0,duration:1000,pxPerMs:1,rulerStep:100};
     expect(snapTimelineTime(34,metrics,{frame:true,thresholdPx:8})).toBeCloseTo(1000/30);
     expect(snapTimelineTime(151,metrics,{frame:false,ruler:true,thresholdPx:60})).toBe(200);
+  });
+
+  it('keeps a 10k-row timeline render window bounded',()=>{
+    const virtualizer=new TimelineVirtualizer(),rows=Array.from({length:10000},(_,index)=>({height:index%7===0?38:28}));
+    virtualizer.setItems(rows);
+    const window=virtualizer.window(140000,420,320);
+    expect(window.total).toBeGreaterThan(280000);
+    expect(window.end-window.start).toBeLessThan(50);
+    expect(window.top+window.bottom).toBeLessThan(window.total);
+    expect(window.start).toBeGreaterThan(4000);
   });
 });
