@@ -24,7 +24,7 @@ export function mountRemoteOpen(root:HTMLElement):()=>void{
   let opening=false,installing=false,disposed=false;
   const syncMode=():void=>{browserOptions.hidden=engine.value!=='browser';};
   const renderRuntimeStatus=(runtimes:RuntimeStatus[]):void=>{if(!disposed)runtimeStatus.textContent=runtimes.map(runtime=>`${runtime.label}: ${runtime.installed?'installed':'not installed'}`).join(' · ');};
-  const refreshRuntimes=async():Promise<void>=>{try{const response=await fetch('/api/browser-runtimes',{cache:'no-store'}),body=await response.json() as{runtimes?:RuntimeStatus[]};if(disposed)return;if(response.ok&&body.runtimes)renderRuntimeStatus(body.runtimes);else runtimeStatus.textContent='Could not read browser runtimes';}catch{if(!disposed)runtimeStatus.textContent='Could not read browser runtimes';}};
+  const refreshRuntimes=async():Promise<void=>{try{const response=await fetch('/api/browser-runtimes',{cache:'no-store'}),body=await response.json() as{runtimes?:RuntimeStatus[]};if(disposed)return;if(response.ok&&body.runtimes)renderRuntimeStatus(body.runtimes);else runtimeStatus.textContent='Could not read browser runtimes';}catch{if(!disposed)runtimeStatus.textContent='Could not read browser runtimes';}};
   const install=async():Promise<void>=>{
     if(disposed||installing)return;const selected=[...details.querySelectorAll<HTMLInputElement>('[data-runtime-install]:checked')].map(item=>item.value as BrowserEngine);if(!selected.length)return;
     installing=true;const button=details.querySelector<HTMLButtonElement>('[data-browser-install]');if(button){button.disabled=true;button.textContent='Installing…';}runtimeStatus.textContent='Installing in .animator-browsers/…';
@@ -44,7 +44,7 @@ export function mountRemoteOpen(root:HTMLElement):()=>void{
         const response=await fetch('/api/projects/open-url',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url})});body=await response.json() as ProjectDescriptor&{error?:string};if(!response.ok)throw new Error(body.error??'Could not load web page');
       }
       const current=store.get().project,stale=disposed||(projectContext(current)!==startedContext&&current?.id!==body.id);if(stale){if(body.browserSessionId)void fetch(`/api/browser-sessions/${encodeURIComponent(body.browserSessionId)}`,{method:'DELETE'}).catch(()=>{});return;}
-      localStorage.setItem('animator.last-url',body.sourceUrl??url);store.set({project:body,analysis:emptyAnalysis,animations:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${body.browserSessionId?`${browserLabel(body.browserEngine)} ${body.browserProfile??'desktop'}`:'Proxy'} preview ${body.sourceUrl??url}`].slice(-100)});details.open=false;
+      localStorage.setItem('animator.last-url',body.sourceUrl??url);store.set({project:body,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${body.browserSessionId?`${browserLabel(body.browserEngine)} ${body.browserProfile??'desktop'}`:'Proxy'} preview ${body.sourceUrl??url}`].slice(-100)});details.open=false;
     }catch(error){if(!disposed)store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;if(!disposed&&button){button.disabled=false;button.textContent='Load URL';}}
   };
