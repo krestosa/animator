@@ -1,0 +1,19 @@
+import {filterMotionTracks,overviewMotionTracks,type MotionFilter,type MotionTrack} from '../core/motion';
+import {store} from '../state/store';
+import {motionViewStore} from './motion-view-store';
+
+export function mountMotionIrList(root:HTMLElement):()=>void{
+  let raf=0,disposed=false,signature='';
+  const schedule=()=>{if(disposed||raf)return;raf=requestAnimationFrame(()=>{raf=0;render();});};
+  const render=()=>{if(disposed)return;const region=root.querySelector<HTMLElement>('[data-motion-region]');if(!region)return;const state=store.get(),view=motionViewStore.get(),visible=filterMotionTracks(state.motionTracks,view.query,view.filter),counts=overviewMotionTracks(state.motionTracks),next=`${view.query}|${view.filter}|${state.selectedAnimationId??''}|${state.motionTracks.map(track=>`${track.id}:${track.runtimeState}:${track.source.confidence}:${track.source.kind}`).join(',')}`;if(next===signature&&region.dataset.motionIr==='true')return;signature=next;region.dataset.motionIr='true';region.innerHTML=`<h3>Motion <small>${counts.total}</small></h3><div class="overview"><button data-motion-filter-button="css">CSS <b>${counts.cssAnimations}</b></button><button data-motion-filter-button="transition">Transitions <b>${counts.cssTransitions}</b></button><button data-motion-filter-button="waapi">WAAPI <b>${counts.waapi}</b></button><button data-motion-filter-button="all">Other <b>${counts.javascript+counts.unknown}</b></button></div><input class="search" data-motion-search value="${attr(view.query)}" placeholder="Search animations, source, property"><select data-motion-filter>${(['all','running','css','transition','waapi','exact','inferred'] as MotionFilter[]).map(filter=>`<option value="${filter}"${view.filter===filter?' selected':''}>${filter}</option>`).join('')}</select><div class="motionRows">${visible.slice(0,160).map(track=>renderRow(track,state.selectedAnimationId===track.id)).join('')||'<p class="muted">No matching motion.</p>'}</div>`;};
+  const input=(event:Event)=>{const target=event.target;if(target instanceof HTMLInputElement&&target.matches('[data-motion-search]'))motionViewStore.set({query:target.value});};
+  const change=(event:Event)=>{const target=event.target;if(target instanceof HTMLSelectElement&&target.matches('[data-motion-filter]'))motionViewStore.set({filter:target.value as MotionFilter});};
+  const click=(event:MouseEvent)=>{const target=(event.target as Element|null)?.closest<HTMLElement>('[data-animation-id],[data-motion-filter-button]');if(!target)return;if(target.dataset.animationId){event.preventDefault();event.stopImmediatePropagation();store.set({selectedAnimationId:target.dataset.animationId});return;}if(target.dataset.motionFilterButton){event.preventDefault();event.stopImmediatePropagation();motionViewStore.set({filter:target.dataset.motionFilterButton as MotionFilter});}};
+  root.addEventListener('input',input,true);root.addEventListener('change',change,true);root.addEventListener('click',click,true);const offStore=store.subscribe(schedule),offView=motionViewStore.subscribe(schedule);schedule();
+  return()=>{disposed=true;if(raf)cancelAnimationFrame(raf);offStore();offView();root.removeEventListener('input',input,true);root.removeEventListener('change',change,true);root.removeEventListener('click',click,true);};
+}
+
+function renderRow(track:MotionTrack,selected:boolean):string{const label=track.name??sourceLabel(track);return `<button class="motionRow${selected?' selected':''}" data-animation-id="${attr(track.id)}"><span>${html(label)}</span><small>${html(sourceLabel(track))} · ${html(track.source.confidence)}</small></button>`;}
+function sourceLabel(track:MotionTrack):string{return track.source.kind==='waapi'?'WAAPI':track.source.kind.replaceAll('-',' ');}
+function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
+function attr(value:string):string{return html(value);}

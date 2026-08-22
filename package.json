@@ -1,0 +1,35 @@
+{
+  "name": "animator",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "animator": "./bin/animator.mjs"
+  },
+  "scripts": {
+    "dev": "tsx watch --import ./server/ssd-safety.ts server/index.ts",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "start": "node --import ./server-dist/server/ssd-safety.js server-dist/server/index.js --production",
+    "animator": "node ./bin/animator.mjs",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "test": "vitest run",
+    "test:e2e": "node e2e/timeline.mjs && node e2e/record-gate.mjs && node e2e/view-history.mjs && node e2e/browser-preview.mjs && node e2e/control-plane.mjs && node e2e/viewport-screenshot.mjs && node e2e/theme-live.mjs",
+    "setup:browser": "playwright install chromium firefox webkit",
+    "setup:browsers": "playwright install chromium firefox webkit"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "html2canvas": "^1.4.1",
+    "playwright": "^1.55.0",
+    "postcss": "^8.5.6",
+    "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "vite": "^7.1.3",
+    "vitest": "^3.2.4"
+  }
+}
