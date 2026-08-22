@@ -28,8 +28,11 @@ try{
     const frameLocator=page.locator('[data-preview-frame]');await frameLocator.waitFor({state:'attached'});await waitUntil(async()=>/^http:\/\/127\.0\.0\.1:\d+\//.test(await frameLocator.getAttribute('src')??''),'preview did not use dedicated origin');
     let frameHandle=await frameLocator.elementHandle(),frame=await frameHandle?.contentFrame();assert(frame,'preview iframe missing');await frame.locator('.repeat-motion').first().waitFor();
     await waitUntil(async()=>await page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).count()===1,'repeat-pop group missing');
-    const group=page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).first();await waitUntil(async()=>/3 components/.test(await group.textContent()??''),'repeat-pop instances not grouped');
+    const group=page.locator('.v2GroupRow').filter({hasText:'repeat-pop'}).first();await waitUntil(async()=>/3 lanes/.test(await group.textContent()??''),'repeat-pop lane summary missing');
+    assert.equal(await group.locator('.v2GroupClip').count(),1,'collapsed animation group must render one aggregate clip');assert.equal((await group.locator('.v2LaneCount').textContent())?.trim(),'3','repeat-pop lane count is wrong');
     await group.locator('[data-v2-toggle]').click();await waitUntil(async()=>await page.locator('.v2InstanceRow').count()>=3,'instances did not expand');
+    const expandedLanes=page.locator('.v2InstanceRow').filter({has:page.locator('.v2InstanceClip')});assert((await expandedLanes.count())>=3,'expanded animation group did not create dedicated lanes');
+    const overlappingLanes=await expandedLanes.evaluateAll(rows=>rows.some(row=>{const clips=[...row.querySelectorAll('.v2InstanceClip')];if(clips.length!==1)return true;const clip=clips[0].getBoundingClientRect(),bounds=row.querySelector('.v2Motion')?.getBoundingClientRect();return !bounds||clip.top<bounds.top-1||clip.bottom>bounds.bottom+1;}));assert.equal(overlappingLanes,false,'animation clips overlap or escape their dedicated lanes');
     const firstInstance=page.locator('.v2InstanceRow').first();await firstInstance.locator('.v2InstanceLabel button[data-v2-instance]').click();await waitUntil(async()=>await firstInstance.evaluate(node=>node.classList.contains('selected')),'instance selection failed');
     const recordButton=page.locator('[data-action="record"]'),recordBadge=page.locator('[data-record-state]');
     await waitUntil(async()=>/REC/.test(await recordBadge.textContent()??''),'normal motion selection stopped recording implicitly');
