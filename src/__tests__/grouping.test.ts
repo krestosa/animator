@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import type { MotionTrack } from '../core/motion';
 import { animationGroupKey, groupAnimations } from '../editor/grouping';
-import type { DetectedAnimation } from '../types/domain';
 
-const base=(patch:Partial<DetectedAnimation>):DetectedAnimation=>({
-  id:'a',elementId:'el-1',type:'css-animation',name:'fade-up',startTime:0,duration:400,easing:'ease-out',properties:[{name:'opacity'},{name:'transform'}],confidence:'runtime-observed',runtimeState:'running',...patch
+const base=(patch:Partial<MotionTrack>):MotionTrack=>({
+  id:'a',target:{elementId:'el-1'},timing:{start:0,duration:400,easing:'ease-out'},properties:[{name:'opacity'},{name:'transform'}],keyframes:[],trigger:{kind:'unknown'},source:{kind:'css-animation',confidence:'runtime-observed'},runtimeState:'running',name:'fade-up',...patch
 });
 
 describe('animation grouping',()=>{
   it('groups the same named CSS animation across elements and source/runtime observations',()=>{
     const items=[
-      base({id:'runtime-1',elementId:'el-1'}),
-      base({id:'runtime-2',elementId:'el-2',startTime:120}),
-      base({id:'static',elementId:'static:.card',confidence:'exact',runtimeState:'idle',source:{file:'styles.css',line:10,selector:'.card'}})
+      base({id:'runtime-1',target:{elementId:'el-1'}}),
+      base({id:'runtime-2',target:{elementId:'el-2'},timing:{start:120,duration:400,easing:'ease-out'}}),
+      base({id:'static',target:{elementId:'static:.card'},source:{kind:'css-animation',confidence:'exact',reference:{file:'styles.css',line:10,selector:'.card'}},runtimeState:'idle'})
     ];
     const groups=groupAnimations(items);
     expect(groups).toHaveLength(1);
@@ -23,9 +23,9 @@ describe('animation grouping',()=>{
   });
 
   it('groups equivalent WAAPI keyframes even when targets differ',()=>{
-    const keyframes=[{offset:0,opacity:'0',transform:'scale(.9)'},{offset:1,opacity:'1',transform:'scale(1)'}];
-    const a=base({id:'w1',type:'web-animation',name:undefined,keyframes,elementId:'el-1'});
-    const b=base({id:'w2',type:'web-animation',name:undefined,keyframes,elementId:'el-2'});
+    const keyframes=[{offset:0,values:{opacity:'0',transform:'scale(.9)'}},{offset:1,values:{opacity:'1',transform:'scale(1)'}}];
+    const a=base({id:'w1',name:undefined,target:{elementId:'el-1'},source:{kind:'waapi',confidence:'runtime-observed'},keyframes});
+    const b=base({id:'w2',name:undefined,target:{elementId:'el-2'},source:{kind:'waapi',confidence:'runtime-observed'},keyframes});
     expect(groupAnimations([a,b])).toHaveLength(1);
   });
 });
