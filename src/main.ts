@@ -11,6 +11,7 @@ import './app/browser-runtime.css';
 import './app/motion-catalog.css';
 import './app/editor-pro.css';
 import './app/viewport-screenshot.css';
+import './app/dense-layout.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
