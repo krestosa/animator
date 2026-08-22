@@ -1,5 +1,5 @@
 import type { AnimationType, DetectedAnimation } from '../../types/domain';
-import type { MotionKeyframe, MotionSourceKind, MotionTrack } from './motion-model';
+import type { MotionKeyframe, MotionPropertyTrack, MotionSourceKind, MotionTrack } from './motion-model';
 
 const sourceKind=(type:AnimationType):MotionSourceKind=>{
   switch(type){
@@ -12,6 +12,13 @@ const sourceKind=(type:AnimationType):MotionSourceKind=>{
     default: return 'unknown';
   }
 };
+
+const normalizeProperties=(properties:DetectedAnimation['properties']):MotionPropertyTrack[]=>properties.map(property=>({
+  name:property.name,
+  ...(property.from!==undefined?{from:property.from}:{}),
+  ...(property.to!==undefined?{to:property.to}:{}),
+  ...(property.values!==undefined?{values:[...property.values]}:{})
+}));
 
 const normalizeKeyframes=(frames:DetectedAnimation['keyframes']):MotionKeyframe[]=>{
   if(!frames?.length)return [];
@@ -42,7 +49,7 @@ export function detectedAnimationToMotionTrack(animation:DetectedAnimation):Moti
       ...(animation.easing?{easing:animation.easing}:{}),
       ...(animation.fill?{fill:animation.fill}:{})
     },
-    properties:animation.properties.map(property=>({...property})),
+    properties:normalizeProperties(animation.properties),
     keyframes:normalizeKeyframes(animation.keyframes),
     trigger:{kind:'unknown'},
     source:{kind:sourceKind(animation.type),...(animation.source?{reference:animation.source}:{}),confidence:animation.confidence},
