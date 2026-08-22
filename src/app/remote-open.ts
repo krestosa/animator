@@ -1,7 +1,7 @@
 import { store } from '../state/store';
 import type { BrowserEngine, BrowserProfile, ProjectDescriptor, StaticAnalysis } from '../types/domain';
 
-const emptyAnalysis:StaticAnalysis={animations:[],transitions:[],candidates:[],reducedMotion:false};
+const emptyAnalysis:StaticAnalysis={animations:[],motionTracks:[],transitions:[],candidates:[],reducedMotion:false};
 const globe='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
 type RuntimeStatus={engine:BrowserEngine;label:string;installed:boolean};
 
