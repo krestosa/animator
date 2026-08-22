@@ -13,4 +13,4 @@ export type {
   MotionTrigger,
   MotionSource,
   MotionTrack
-} from '../../types/motion';
+} from '../../types/motion.js';
