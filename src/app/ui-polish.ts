@@ -46,7 +46,7 @@ export function mountUiPolish(root:HTMLElement):()=>void {
   const schedule=()=>{if(!raf)raf=requestAnimationFrame(apply);};
   const stateChanged=():void=>{const state=store.get();if(state.recording===lastRecording&&state.animations===lastAnimations&&state.selectedAnimationId===lastSelectedAnimationId)return;lastRecording=state.recording;lastAnimations=state.animations;lastSelectedAnimationId=state.selectedAnimationId;schedule();};
   const unsubscribe=store.subscribe(stateChanged);
-  const observer=new MutationObserver(()=>{if(!mutating)schedule();});observer.observe(root,{subtree:true,childList:true});
+  const observer=new MutationObserver(records=>{if(mutating)return;const structural=records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node instanceof Element));if(structural)schedule();});observer.observe(root,{subtree:true,childList:true});
   const selectMotion=(event:MouseEvent):void=>{
     const target=(event.target as Element|null)?.closest<HTMLElement>('[data-animation-id]');if(!target||target.closest('[data-timeline-v2]'))return;const id=target.dataset.animationId;if(!id)return;
     const animation=store.get().animations.find(item=>item.id===id);if(!animation)return;
