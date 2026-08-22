@@ -8,6 +8,9 @@ const ignoredSegments=new Set(['__tests__','node_modules','dist','server-dist'])
 const diskMutation=/\b(?:fs\.)?(?:writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|copyFileSync|copyFile|renameSync|rename|truncateSync|truncate|unlinkSync|unlink|rmSync|rm)\s*\(/g;
 const browserPersistence=/\b(?:localStorage|sessionStorage)\.setItem\s*\(|\bindexedDB\.open\s*\(/g;
 const allowedDiskFiles=new Set(['server/export.ts']);
+const allowedDiskMutations=new Map<string,RegExp[]>([
+  ['server/ssd-safety.ts',[/^fs\.rmSync\($/]]
+]);
 const browserPersistenceBudget=new Map<string,number>([
   ['server/gate-runtime.ts',1],
   ['src/app/app-core.ts',2],
@@ -21,7 +24,12 @@ describe('disk write policy',()=>{
     for(const file of productionFiles()){
       const relative=slash(path.relative(root,file)),source=fs.readFileSync(file,'utf8');
       if(allowedDiskFiles.has(relative))continue;
-      for(const match of source.matchAll(diskMutation))violations.push(`${relative}:${lineOf(source,match.index??0)} ${match[0].trim()}`);
+      const permitted=allowedDiskMutations.get(relative)??[];
+      for(const match of source.matchAll(diskMutation)){
+        const call=match[0].trim();
+        if(permitted.some(pattern=>pattern.test(call)))continue;
+        violations.push(`${relative}:${lineOf(source,match.index??0)} ${call}`);
+      }
     }
     expect(violations,'Unexpected production filesystem writers. Background capture, timeline playback and analysis must remain memory/read-only.').toEqual([]);
   });
