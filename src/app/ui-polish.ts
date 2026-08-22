@@ -30,7 +30,7 @@ export function mountUiPolish(root:HTMLElement):()=>void {
   const recordBadge=document.createElement('span');recordBadge.className='recordStateBadge';recordBadge.dataset.recordState='';recordButton?.after(recordBadge);
   const status=document.createElement('span');status.className='previewMode';status.textContent='LIVE';status.dataset.mode='live';
   root.querySelector<HTMLElement>('[data-preview-chrome]')?.append(status);
-  let raf=0,mutating=false;
+  let raf=0,mutating=false,lastRecording=store.get().recording,lastAnimations=store.get().animations,lastSelectedAnimationId=store.get().selectedAnimationId;
   const decorateRecord=():void=>{
     const button=root.querySelector<HTMLButtonElement>('[data-action="record"]');if(!button)return;const recording=store.get().recording;
     button.classList.add('iconButton');button.classList.toggle('recording',recording);button.classList.toggle('stopped',!recording);button.dataset.recordingState=recording?'recording':'stopped';button.setAttribute('aria-pressed',String(recording));button.title=recording?'Stop recording immediately':'Start recording';button.setAttribute('aria-label',button.title);
@@ -44,7 +44,8 @@ export function mountUiPolish(root:HTMLElement):()=>void {
     queueMicrotask(()=>{mutating=false;});
   };
   const schedule=()=>{if(!raf)raf=requestAnimationFrame(apply);};
-  const unsubscribe=store.subscribe(schedule);
+  const stateChanged=():void=>{const state=store.get();if(state.recording===lastRecording&&state.animations===lastAnimations&&state.selectedAnimationId===lastSelectedAnimationId)return;lastRecording=state.recording;lastAnimations=state.animations;lastSelectedAnimationId=state.selectedAnimationId;schedule();};
+  const unsubscribe=store.subscribe(stateChanged);
   const observer=new MutationObserver(()=>{if(!mutating)schedule();});observer.observe(root,{subtree:true,childList:true});
   const selectMotion=(event:MouseEvent):void=>{
     const target=(event.target as Element|null)?.closest<HTMLElement>('[data-animation-id]');if(!target||target.closest('[data-timeline-v2]'))return;const id=target.dataset.animationId;if(!id)return;
