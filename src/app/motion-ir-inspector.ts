@@ -1,10 +1,10 @@
-import type { MotionKeyframe,MotionTrack,MotionValue } from '../core/motion';
+import {addMotionKeyframe,addMotionProperty,deleteMotionKeyframe,duplicateMotionKeyframe,normalizedMotionKeyframes,updateMotionKeyframe,type MotionKeyframe,type MotionTrack,type MotionValue} from '../core/motion';
 import {buildTransform,parseTransform,type TransformParts} from '../editor/motion';
 import {presets} from '../presets/presets';
 import {deleteCustomPreset,loadCustomPresets,saveCustomMotionPreset} from '../presets/custom';
 import {sendCommand} from '../preview/bridge';
 import {store,type MotionTrackPatch} from '../state/store';
-import type { DetectedAnimation } from '../types/domain';
+import type {DetectedAnimation} from '../types/domain';
 
 export type InspectorMotionPatch={timing?:Partial<MotionTrack['timing']>;keyframes?:MotionKeyframe[]};
 
@@ -46,25 +46,3 @@ export function mountMotionIrInspector(root:HTMLElement):()=>void{
  root.addEventListener('click',click,true);root.addEventListener('change',change,true);root.addEventListener('input',input,true);
  return()=>{root.removeEventListener('click',click,true);root.removeEventListener('change',change,true);root.removeEventListener('input',input,true);};
 }
-
-export function normalizedMotionKeyframes(track:MotionTrack):MotionKeyframe[]{
-  const frames=track.keyframes.length?track.keyframes.map(frame=>({...frame,values:{...frame.values}})):[{offset:0,values:{opacity:0}},{offset:1,values:{opacity:1}}];
-  const count=Math.max(1,frames.length-1);
-  return frames.map((frame,index)=>({...frame,offset:typeof frame.offset==='number'?frame.offset:index/count}));
-}
-export function updateMotionKeyframe(frames:MotionKeyframe[],index:number,key:string,value:MotionValue):MotionKeyframe[]{
-  return frames.map((frame,i)=>{if(i!==index)return frame;if(key==='offset'&&typeof value==='number')return{...frame,offset:value};if(key==='easing'&&typeof value==='string')return{...frame,easing:value};if(key==='composite'&&typeof value==='string')return{...frame,composite:value};return{...frame,values:{...frame.values,[key]:value}};});
-}
-export function addMotionKeyframe(frames:MotionKeyframe[]):MotionKeyframe[]{
-  const copy=frames.map(frame=>({...frame,values:{...frame.values}})),last=copy.at(-1)??{offset:1,values:{opacity:1}};
-  copy.splice(Math.max(1,copy.length-1),0,{...last,values:{...last.values},offset:.5});
-  return copy.sort((a,b)=>Number(a.offset??0)-Number(b.offset??0));
-}
-export function duplicateMotionKeyframe(frames:MotionKeyframe[],index:number):MotionKeyframe[]{
-  const copy=frames.map(frame=>({...frame,values:{...frame.values}})),base=copy[index];if(!base)return copy;
-  const previous=copy[index-1],next=copy[index+1],baseOffset=Number(base.offset??(copy.length<=1?0:index/(copy.length-1)));
-  const offset=next?(baseOffset+Number(next.offset??1))/2:previous?(Number(previous.offset??0)+baseOffset)/2:baseOffset;
-  copy.splice(index+1,0,{...base,values:{...base.values},offset});return copy;
-}
-export function deleteMotionKeyframe(frames:MotionKeyframe[],index:number):MotionKeyframe[]{return frames.length<=2?frames:frames.filter((_,i)=>i!==index);}
-export function addMotionProperty(frames:MotionKeyframe[],name:string):MotionKeyframe[]{return frames.map(frame=>({...frame,values:{...frame.values,[name]:frame.values[name]??''}}));}
