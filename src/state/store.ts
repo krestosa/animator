@@ -1,4 +1,4 @@
-import {detectedAnimationToMotionTrack,motionTrackToDetectedAnimation,type MotionTrack} from '../core/motion';
+import {detectedAnimationToMotionTrack,detectedAnimationsToMotionTracks,type MotionTrack} from '../core/motion';
 import type {DetectedAnimation,ProjectDescriptor,RuntimeElement,StaticAnalysis,TimelineEvent} from '../types/domain';
 import {emptyEditorState,mergeElements,projectContext,type EditorState} from './editor-store';
 import {applyMotionCommand,commandForTrackChange,emptyHistory,recordHistory,redoHistory,undoHistory,type HistoryEntry,type HistoryState} from './history-store';
@@ -34,11 +34,8 @@ export const store={
     const updated=patchMotionTrack(current,patch),command=record?commandForTrackChange(current,updated):undefined,history=command?recordHistory(state,command):{history:state.history,future:state.future};
     state={...state,...history,...updateMotionTrack(state,id,updated)};emit();
   },
-  addAnimation(animation:DetectedAnimation):void{
-    const normalized=correlateSource(animation,state.analysis),incoming=detectedAnimationToMotionTrack(normalized),index=state.motionTracks.findIndex(item=>item.id===normalized.id),shouldSelect=normalized.name==='Created animation',fallbackSelection=state.selectedAnimationId??(state.motionTracks.length===0?normalized.id:undefined);
-    const next=index>=0?state.motionTracks.map(item=>item.id===normalized.id?detectedAnimationToMotionTrack(mergeRuntimeReport(motionTrackToDetectedAnimation(item),normalized,state.analysis)):item):[...state.motionTracks,incoming];
-    state={...state,motionTracks:next,selectedAnimationId:shouldSelect?normalized.id:fallbackSelection};emit();
-  },
+  addMotionTrack(track:MotionTrack):void{ingestMotionTrack(track);},
+  addAnimation(animation:DetectedAnimation):void{ingestMotionTrack(detectedAnimationToMotionTrack(animation));},
   addEvent(event:TimelineEvent):void{if(state.recordingDataset.append([event]))emit();},
   addEvents(events:TimelineEvent[]):void{if(state.recordingDataset.append(events))emit();},
   queryEvents(query:RecordingQuery={}):TimelineEvent[]{return state.recordingDataset.query(query);},
@@ -48,8 +45,19 @@ export const store={
   redo():void{const result=redoHistory(state);if(!result.entry)return;state=applyHistory(result.entry,result.state,'forward');emit();}
 };
 
+function ingestMotionTrack(track:MotionTrack):void{
+  const normalized=correlateMotionSource(track,state.analysis),index=state.motionTracks.findIndex(item=>item.id===normalized.id),shouldSelect=normalized.name==='Created animation',fallbackSelection=state.selectedAnimationId??(state.motionTracks.length===0?normalized.id:undefined);
+  const next=index>=0?state.motionTracks.map(item=>item.id===normalized.id?mergeMotionTrack(item,normalized,state.analysis):item):[...state.motionTracks,normalized];
+  state={...state,motionTracks:next,selectedAnimationId:shouldSelect?normalized.id:fallbackSelection};emit();
+}
 function applyHistory(entry:HistoryEntry,history:HistoryState,direction:'forward'|'reverse'):CanonicalAnimatorState{return{...state,...history,motionTracks:state.motionTracks.map(track=>track.id===entry.trackId?applyMotionCommand(track,entry,direction):track)};}
-function mergeRuntimeReport(existing:DetectedAnimation,incoming:DetectedAnimation,analysis:StaticAnalysis|undefined):DetectedAnimation{const merged:DetectedAnimation={...existing,...incoming,startTime:existing.startTime,duration:incoming.duration??existing.duration,delay:incoming.delay??existing.delay,easing:incoming.easing??existing.easing,iterations:incoming.iterations??existing.iterations,direction:incoming.direction??existing.direction,fill:incoming.fill??existing.fill,keyframes:incoming.keyframes??existing.keyframes,source:incoming.source??existing.source,properties:incoming.properties.length?incoming.properties:existing.properties};return correlateSource(merged,analysis);}
-function correlateSource(animation:DetectedAnimation,analysis:StaticAnalysis|undefined):DetectedAnimation{if(animation.source||!analysis)return animation;const match=analysis.animations.find(candidate=>{if(animation.name&&candidate.name===animation.name)return true;return candidate.type===animation.type&&candidate.properties.some(property=>animation.properties.some(runtimeProperty=>runtimeProperty.name===property.name));});if(!match?.source)return animation;return{...animation,source:match.source,confidence:animation.confidence==='runtime-observed'?'source-correlated':animation.confidence};}
+function mergeMotionTrack(existing:MotionTrack,incoming:MotionTrack,analysis:StaticAnalysis|undefined):MotionTrack{
+  const correlated=correlateMotionSource(incoming,analysis),reference=correlated.source.reference??existing.source.reference;
+  return{...existing,...correlated,target:{...existing.target,...correlated.target},timing:{...existing.timing,...correlated.timing,start:existing.timing.start},properties:correlated.properties.length?correlated.properties:existing.properties,keyframes:correlated.keyframes.length?correlated.keyframes:existing.keyframes,source:{...existing.source,...correlated.source,...(reference?{reference}:{})}};
+}
+function correlateMotionSource(track:MotionTrack,analysis:StaticAnalysis|undefined):MotionTrack{
+  if(track.source.reference||!analysis)return track;const candidates=analysis.motionTracks??detectedAnimationsToMotionTracks(analysis.animations),match=candidates.find(candidate=>{if(track.name&&candidate.name===track.name)return true;return candidate.source.kind===track.source.kind&&candidate.properties.some(property=>track.properties.some(runtimeProperty=>runtimeProperty.name===property.name));});if(!match?.source.reference)return track;
+  return{...track,target:{...track.target,...(match.target.selector?{selector:match.target.selector}:{})},source:{...track.source,reference:match.source.reference,confidence:track.source.confidence==='runtime-observed'?'source-correlated':track.source.confidence}};
+}
 
 export type{MotionTrack,MotionTrackPatch,ProjectDescriptor,StaticAnalysis};
