@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import postcss,{type AtRule,type Declaration,type Root,type Rule} from 'postcss';
 import type {AnimationType,DetectedAnimation} from '../src/types/domain.js';
+import {detectedAnimationsToMotionTracks} from '../src/core/motion/normalize.js';
+import type {MotionTrack} from '../src/types/motion.js';
 import {detectSourceMotion,type SourceDetectedAnimation} from './motion-source-detectors.js';
 import type {LoadedProject} from './project.js';
 
@@ -9,7 +11,7 @@ interface SourceRef{file:string;line?:number;column?:number;selector?:string;sni
 interface StaticTransition{selector:string;properties:string[];source:SourceRef;}
 interface StaticCandidate{kind:string;file:string;line:number;column?:number;functionName?:string;snippet:string;}
 interface AncestorNode{type:string;name?:string;params?:string;parent?:unknown;}
-export interface AnalysisResult{animations:DetectedAnimation[];transitions:StaticTransition[];candidates:StaticCandidate[];reducedMotion:boolean;}
+export interface AnalysisResult{animations:DetectedAnimation[];motionTracks:MotionTrack[];transitions:StaticTransition[];candidates:StaticCandidate[];reducedMotion:boolean;}
 type ParsedCss={file:string;rel:string;root:Root};
 type KeyframeRef={file:string;node:AtRule};
 type AnimationSpec={name?:string;duration?:number;delay?:number;easing?:string;iterations?:number;direction?:string;fill?:string};
@@ -30,7 +32,7 @@ export function analyzeProject(project:LoadedProject):AnalysisResult{
     const transitionDeclaration=findMotionDeclaration(declarations,'transition');if(transitionDeclaration){const location=transitionDeclaration.source?.start,media=mediaContext(rule);transitions.push({selector:rule.selector,properties:parseTransitionProperties(declarations),source:{file:item.rel,...(location?.line?{line:location.line}:{}),...(location?.column?{column:location.column}:{}),selector:rule.selector,snippet:transitionDeclaration.toString(),...(media?{media}:{})}});}
   });
   for(const file of files){if(!/\.(?:m?[jt]s|[jt]sx|svg|html?)$/i.test(file))continue;const detected=detectSourceMotion(file,project.root);animations.push(...detected.animations.map(toDetectedAnimation));candidates.push(...detected.candidates);}
-  return{animations:dedupeAnimations(animations),transitions,candidates:dedupeCandidates(candidates),reducedMotion};
+  const dedupedAnimations=dedupeAnimations(animations);return{animations:dedupedAnimations,motionTracks:detectedAnimationsToMotionTracks(dedupedAnimations),transitions,candidates:dedupeCandidates(candidates),reducedMotion};
 }
 
 function toDetectedAnimation(animation:SourceDetectedAnimation):DetectedAnimation{return{id:animation.id,elementId:animation.elementId,type:animation.type,...(animation.name?{name:animation.name}:{}),startTime:animation.startTime,...(animation.duration!==undefined?{duration:animation.duration}:{}),...(animation.delay!==undefined?{delay:animation.delay}:{}),...(animation.iterations!==undefined?{iterations:animation.iterations}:{}),...(animation.direction?{direction:animation.direction}:{}),...(animation.easing?{easing:animation.easing}:{}),...(animation.fill?{fill:animation.fill}:{}),properties:animation.properties,source:animation.source,confidence:animation.confidence,runtimeState:animation.runtimeState,...(animation.keyframes?{keyframes:animation.keyframes}:{})};}
