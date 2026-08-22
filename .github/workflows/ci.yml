@@ -20,6 +20,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+      - name: Upload repository snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: animator-repository-${{ github.sha }}
+          path: |
+            .
+            !node_modules
+            !.animator-browsers
+          include-hidden-files: true
+          retention-days: 1
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
