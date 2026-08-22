@@ -38,7 +38,7 @@ try{
 
   const browser=await chromium.launch({headless:true});
   try{
-    const page=await browser.newPage();await page.goto(base,{waitUntil:'networkidle'});const surface=page.locator('[data-browser-preview]');await waitUntil(async()=>await surface.getAttribute('data-browser-session-id')===navigationId,'UI did not synchronize the active Control API session');
+    const page=await browser.newPage();await page.goto(base,{waitUntil:'domcontentloaded'});await page.locator('.app').waitFor();const surface=page.locator('[data-browser-preview]');await waitUntil(async()=>await surface.getAttribute('data-browser-session-id')===navigationId,'UI did not synchronize the active Control API session');
     await api('DELETE',`/api/browser-sessions/${navigationId}`);await waitUntil(async()=>await page.locator('[data-browser-preview]').count()===0,'UI kept a stale Browser project after its controlled session was deleted');
   } finally {await browser.close();}
 } finally {server.kill('SIGTERM');await closeServer(remote);}
