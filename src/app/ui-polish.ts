@@ -30,7 +30,7 @@ export function mountUiPolish(root:HTMLElement):()=>void {
   const recordBadge=document.createElement('span');recordBadge.className='recordStateBadge';recordBadge.dataset.recordState='';recordButton?.after(recordBadge);
   const status=document.createElement('span');status.className='previewMode';status.textContent='LIVE';status.dataset.mode='live';
   root.querySelector<HTMLElement>('[data-preview-chrome]')?.append(status);
-  let raf=0,mutating=false,lastRecording=store.get().recording,lastPicker=store.get().picker,lastAnimations=store.get().animations,lastSelectedAnimationId=store.get().selectedAnimationId;
+  let raf=0,mutating=false,lastRecording=store.get().recording,lastPicker=store.get().picker,lastMotionTracks=store.get().motionTracks,lastSelectedAnimationId=store.get().selectedAnimationId;
   const decorateRecord=():void=>{
     const button=root.querySelector<HTMLButtonElement>('[data-action="record"]');if(!button)return;const recording=store.get().recording;
     button.classList.add('iconButton');button.classList.toggle('recording',recording);button.classList.toggle('stopped',!recording);button.dataset.recordingState=recording?'recording':'stopped';button.setAttribute('aria-pressed',String(recording));button.title=recording?'Stop recording immediately':'Start recording';button.setAttribute('aria-label',button.title);
@@ -44,13 +44,13 @@ export function mountUiPolish(root:HTMLElement):()=>void {
     queueMicrotask(()=>{mutating=false;});
   };
   const schedule=()=>{if(!raf)raf=requestAnimationFrame(apply);};
-  const stateChanged=():void=>{const state=store.get();if(state.recording===lastRecording&&state.picker===lastPicker&&state.animations===lastAnimations&&state.selectedAnimationId===lastSelectedAnimationId)return;lastRecording=state.recording;lastPicker=state.picker;lastAnimations=state.animations;lastSelectedAnimationId=state.selectedAnimationId;schedule();};
+  const stateChanged=():void=>{const state=store.get();if(state.recording===lastRecording&&state.picker===lastPicker&&state.motionTracks===lastMotionTracks&&state.selectedAnimationId===lastSelectedAnimationId)return;lastRecording=state.recording;lastPicker=state.picker;lastMotionTracks=state.motionTracks;lastSelectedAnimationId=state.selectedAnimationId;schedule();};
   const unsubscribe=store.subscribe(stateChanged);
   const observer=new MutationObserver(records=>{if(mutating)return;const structural=records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node instanceof Element));if(structural)schedule();});observer.observe(root,{subtree:true,childList:true});
   const selectMotion=(event:MouseEvent):void=>{
     const target=(event.target as Element|null)?.closest<HTMLElement>('[data-animation-id]');if(!target||target.closest('[data-timeline-v2]'))return;const id=target.dataset.animationId;if(!id)return;
-    const animation=store.get().animations.find(item=>item.id===id);if(!animation)return;
-    store.set({selectedAnimationId:id,selectedElementId:animation.elementId.startsWith('static:')?store.get().selectedElementId:animation.elementId});sendCommand(root.querySelector<HTMLIFrameElement>('[data-preview-frame]'),{type:'HIGHLIGHT_ANIMATION',id,reveal:false});
+    const track=store.get().motionTracks.find(item=>item.id===id);if(!track)return;const elementId=track.target.elementId;
+    store.set({selectedAnimationId:id,selectedElementId:elementId.startsWith('static:')?store.get().selectedElementId:elementId});sendCommand(root.querySelector<HTMLIFrameElement>('[data-preview-frame]'),{type:'HIGHLIGHT_ANIMATION',id,reveal:false});
   };
   const timelineState=(event:Event):void=>{
     const detail=(event as CustomEvent<TimelineStateMessage>).detail;if(!detail)return;
@@ -95,7 +95,7 @@ function setIcon(root:ParentNode,selector:string,icon:string,label:string):void 
 }
 
 function applyGrouping(root:HTMLElement):void {
-  const state=store.get();const groups=groupAnimations(state.animations,state.selectedAnimationId);const byId=new Map<string,(typeof groups)[number]>();for(const group of groups)for(const animation of group.instances)byId.set(animation.id,group);
+  const state=store.get();const groups=groupAnimations(state.motionTracks,state.selectedAnimationId);const byId=new Map<string,(typeof groups)[number]>();for(const group of groups)for(const track of group.instances)byId.set(track.id,group);
   const motionRows=[...root.querySelectorAll<HTMLButtonElement>('.motionRows [data-animation-id]')];
   for(const row of motionRows){row.hidden=false;row.querySelector('.groupCount')?.remove();}
   for(const group of groups){
