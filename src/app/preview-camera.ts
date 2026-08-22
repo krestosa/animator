@@ -20,7 +20,7 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
   let dragging=false,dragPointerId=-1,lastDragX=0,lastDragY=0;
   const frame=()=>root.querySelector<HTMLIFrameElement>('[data-preview-frame]');
   const stage=()=>root.querySelector<HTMLElement>('.stage');
-  const selectedAnimation=()=>{const state=store.get();return state.selectedAnimationId?state.animations.find(item=>item.id===state.selectedAnimationId):undefined;};
+  const selectedAnimation=()=>{const state=store.get();return state.selectedAnimationId?state.motionTracks.find(item=>item.id===state.selectedAnimationId):undefined;};
   const cameraElement=()=>cameraElementId?store.get().elements.find(element=>element.id===cameraElementId):undefined;
   const postInput=(message:Record<string,unknown>):void=>{frame()?.contentWindow?.postMessage({source:'animator-editor',...message},'*');};
 
@@ -61,7 +61,7 @@ export function mountPreviewCamera(root:HTMLElement):()=>void{
     scheduleCamera();window.setTimeout(scheduleCamera,90);window.setTimeout(scheduleCamera,260);
   };
   const setCamera=(enabled:boolean):void=>{
-    if(enabled){const animation=selectedAnimation();if(!animation)return;cameraAnimationId=animation.id;cameraElementId=animation.elementId;}
+    if(enabled){const animation=selectedAnimation();if(!animation)return;cameraAnimationId=animation.id;cameraElementId=animation.target.elementId;}
     cameraActive=enabled;zoomButton.classList.toggle('active',enabled);zoomButton.setAttribute('aria-pressed',String(enabled));
     if(!enabled){resetCamera();return;}refreshTarget();
   };
