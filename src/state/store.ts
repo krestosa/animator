@@ -2,28 +2,27 @@ import {detectedAnimationToMotionTrack,motionTrackToDetectedAnimation,type Motio
 import type {DetectedAnimation,ProjectDescriptor,RuntimeElement,StaticAnalysis,TimelineEvent} from '../types/domain';
 import {emptyEditorState,mergeElements,projectContext,type EditorState} from './editor-store';
 import {applyMotionCommand,commandForTrackChange,emptyHistory,recordHistory,redoHistory,undoHistory,type HistoryEntry,type HistoryState} from './history-store';
-import {emptyMotionState,ingestDetectedAnimations,legacyAnimations,patchMotionTrack,replaceDetectedAnimations,updateDetectedAnimation,updateMotionTrack,type MotionState,type MotionTrackPatch} from './motion-store';
+import {emptyMotionState,ingestDetectedAnimations,patchMotionTrack,updateMotionTrack,type MotionState,type MotionTrackPatch} from './motion-store';
 import {emptyRecordingState,replaceRecordedEvents,type RecordingQuery,type RecordingState} from './recording-store';
 
 type CanonicalAnimatorState=EditorState&MotionState&RecordingState&HistoryState;
-export type AnimatorState=CanonicalAnimatorState&{readonly animations:DetectedAnimation[];readonly events:TimelineEvent[]};
+export type AnimatorState=CanonicalAnimatorState&{readonly events:TimelineEvent[]};
+type StorePatch=Partial<AnimatorState>&{animations?:DetectedAnimation[]};
 
 let state:CanonicalAnimatorState={...emptyEditorState(),...emptyMotionState(),...emptyRecordingState(),...emptyHistory()};
-let legacyTrackRef:MotionTrack[]|undefined,legacyCache:DetectedAnimation[]=[];
 let eventDatasetRef=state.recordingDataset,eventVersion=-1,eventCache:TimelineEvent[]=[];
 const listeners=new Set<()=>void>();
 const emit=():void=>{for(const listener of listeners)listener();};
-const compatibilityView=():AnimatorState=>{
-  if(legacyTrackRef!==state.motionTracks){legacyTrackRef=state.motionTracks;legacyCache=legacyAnimations(state);}
+const stateView=():AnimatorState=>{
   if(eventDatasetRef!==state.recordingDataset||eventVersion!==state.recordingDataset.version){eventDatasetRef=state.recordingDataset;eventVersion=state.recordingDataset.version;eventCache=state.recordingDataset.snapshot();}
-  return{...state,animations:legacyCache,events:eventCache};
+  return{...state,events:eventCache};
 };
 
 export const store={
-  get:():AnimatorState=>compatibilityView(),
+  get:():AnimatorState=>stateView(),
   subscribe(listener:()=>void):()=>void{listeners.add(listener);return()=>listeners.delete(listener);},
   touch():void{emit();},
-  set(patch:Partial<AnimatorState>):void{
+  set(patch:StorePatch):void{
     const projectChanged=Object.prototype.hasOwnProperty.call(patch,'project')&&projectContext(patch.project)!==projectContext(state.project);
     const {animations,events,...canonicalPatch}=patch;
     const motionPatch=animations!==undefined?{motionTracks:ingestDetectedAnimations(animations)}:{};
@@ -36,14 +35,10 @@ export const store={
     const updated=patchMotionTrack(current,patch),command=record?commandForTrackChange(current,updated):undefined,history=command?recordHistory(state,command):{history:state.history,future:state.future};
     state={...state,...history,...updateMotionTrack(state,id,updated)};emit();
   },
-  updateAnimation(id:string,patch:Partial<DetectedAnimation>,record=true):void{
-    const currentTrack=state.motionTracks.find(track=>track.id===id);if(!currentTrack)return;
-    const current=motionTrackToDetectedAnimation(currentTrack),updated={...current,...patch},updatedTrack=detectedAnimationToMotionTrack(updated),command=record?commandForTrackChange(currentTrack,updatedTrack):undefined,history=command?recordHistory(state,command):{history:state.history,future:state.future};
-    state={...state,...history,...updateDetectedAnimation(state,id,updated)};emit();
-  },
   addAnimation(animation:DetectedAnimation):void{
-    const normalized=correlateSource(animation,state.analysis),animations=legacyAnimations(state),index=animations.findIndex(item=>item.id===normalized.id),shouldSelect=normalized.name==='Created animation',fallbackSelection=state.selectedAnimationId??(animations.length===0?normalized.id:undefined),next=index>=0?animations.map(item=>item.id===normalized.id?mergeRuntimeReport(item,normalized,state.analysis):item):[...animations,normalized];
-    state={...state,...replaceDetectedAnimations(state,next),selectedAnimationId:shouldSelect?normalized.id:fallbackSelection};emit();
+    const normalized=correlateSource(animation,state.analysis),incoming=detectedAnimationToMotionTrack(normalized),index=state.motionTracks.findIndex(item=>item.id===normalized.id),shouldSelect=normalized.name==='Created animation',fallbackSelection=state.selectedAnimationId??(state.motionTracks.length===0?normalized.id:undefined);
+    const next=index>=0?state.motionTracks.map(item=>item.id===normalized.id?detectedAnimationToMotionTrack(mergeRuntimeReport(motionTrackToDetectedAnimation(item),normalized,state.analysis)):item):[...state.motionTracks,incoming];
+    state={...state,motionTracks:next,selectedAnimationId:shouldSelect?normalized.id:fallbackSelection};emit();
   },
   addEvent(event:TimelineEvent):void{if(state.recordingDataset.append([event]))emit();},
   addEvents(events:TimelineEvent[]):void{if(state.recordingDataset.append(events))emit();},
