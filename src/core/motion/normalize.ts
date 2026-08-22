@@ -1,6 +1,6 @@
-import type {AnimationType,DetectedAnimation} from '../../types/domain';
-import {motionAdapterForAnimationType,motionAdapterForSourceKind} from './adapters';
-import type {MotionKeyframe,MotionPropertyTrack,MotionTrack,MotionValueKind} from './motion-model';
+import type {AnimationType,DetectedAnimation} from '../../types/domain.js';
+import {motionAdapterForAnimationType,motionAdapterForSourceKind} from './adapters.js';
+import type {MotionKeyframe,MotionPropertyTrack,MotionTrack,MotionValueKind} from './motion-model.js';
 
 const legacyType=(track:MotionTrack):AnimationType=>{const stored=track.metadata?.legacyType;if(isAnimationType(stored))return stored;return motionAdapterForSourceKind(track.source.kind).animationType;};
 const isAnimationType=(value:unknown):value is AnimationType=>value==='css-animation'||value==='css-transition'||value==='web-animation'||value==='javascript'||value==='raf'||value==='runtime-style'||value==='gsap'||value==='framer-motion'||value==='scroll-timeline'||value==='svg'||value==='canvas'||value==='unknown';
