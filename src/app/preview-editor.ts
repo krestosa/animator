@@ -1,3 +1,4 @@
+import { detectedAnimationsToMotionTracks } from '../core/motion';
 import { CAPTURE_REPORT_EVENT, sendCommand, TIMELINE_STATE_EVENT } from '../preview/bridge';
 import { store } from '../state/store';
 import type { PreviewMessage } from '../types/domain';
@@ -31,7 +32,7 @@ export function mountPreviewEditor(root:HTMLElement):()=>void{
   const recapture=():void=>{
     const frame=iframe();if(!frame)return;
     timelinePlaying=false;controlled=false;currentTime=0;currentFrame=0;lastReport=undefined;updateMode();updateFrameLabel();if(captureTimer)window.clearTimeout(captureTimer);
-    const state=store.get();store.set({animations:state.analysis?.animations??[],events:[],elements:[],selectedAnimationId:undefined,selectedElementId:undefined,playhead:0});
+    const state=store.get();store.set({motionTracks:detectedAnimationsToMotionTracks(state.analysis?.animations??[]),events:[],elements:[],selectedAnimationId:undefined,selectedElementId:undefined,playhead:0});
     const url=new URL(frame.dataset.previewOrigin??frame.src,location.href);url.searchParams.set('__animator_capture',String(Date.now()));frame.src=url.toString();
     const label=status();if(label)label.textContent=store.get().recording?'Reloading preview for capture…':'Reloading preview · Record remains STOPPED';
   };
@@ -47,7 +48,7 @@ export function mountPreviewEditor(root:HTMLElement):()=>void{
     const frame=iframe();if(!frame||event.source!==frame.contentWindow||!event.data||typeof event.data!=='object')return;
     const data=event.data as {source?:unknown;type?:unknown};if(data.source!=='animator-preview'||data.type!=='READY')return;
     activeFrame=event.source as Window;controlled=false;timelinePlaying=false;updateMode();updateFrameLabel();const recording=store.get().recording;const label=status();if(label)label.textContent=recording?'Capturing startup + viewport motion…':'Recording STOPPED · preview is live but not captured';if(captureTimer)window.clearTimeout(captureTimer);sendCommand(frame,{type:'SET_RECORDING',enabled:recording});sendCommand(frame,{type:'SET_AUTO_VIEWPORT_CAPTURE',enabled:autoCapture});
-    captureTimer=window.setTimeout(()=>{captureTimer=0;if(destroyed||activeFrame!==iframe()?.contentWindow)return;const runtimeCount=store.get().animations.filter(animation=>!animation.elementId.startsWith('static:')).length;const current=status();if(current)current.textContent=!store.get().recording?'Recording STOPPED · no new runtime capture':lastReport?reportText(lastReport):`Live ready · ${runtimeCount} runtime motion${runtimeCount===1?'':'s'} · ${FPS} fps`;},1400);
+    captureTimer=window.setTimeout(()=>{captureTimer=0;if(destroyed||activeFrame!==iframe()?.contentWindow)return;const runtimeCount=store.get().motionTracks.filter(track=>!track.target.elementId.startsWith('static:')).length;const current=status();if(current)current.textContent=!store.get().recording?'Recording STOPPED · no new runtime capture':lastReport?reportText(lastReport):`Live ready · ${runtimeCount} runtime motion${runtimeCount===1?'':'s'} · ${FPS} fps`;},1400);
   };
   const stateChanged=():void=>syncRecordingUi();
   updateMode();updateFrameLabel();syncRecordingUi();controls.addEventListener('click',click);controls.addEventListener('change',change);window.addEventListener('keydown',key);window.addEventListener('message',message);window.addEventListener(TIMELINE_STATE_EVENT,timelineState);window.addEventListener(CAPTURE_REPORT_EVENT,captureReport);const unsubscribe=store.subscribe(stateChanged);
