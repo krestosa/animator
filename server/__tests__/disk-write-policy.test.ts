@@ -12,7 +12,7 @@ const allowedBrowserPersistenceFiles=new Set(['src/presets/custom.ts']);
 
 describe('disk write policy',()=>{
   it('keeps filesystem mutation behind explicit export/apply code',()=>{
-    const violations=[];
+    const violations:string[]=[];
     for(const file of productionFiles()){
       const relative=slash(path.relative(root,file)),source=fs.readFileSync(file,'utf8');
       if(allowedDiskFiles.has(relative))continue;
@@ -22,7 +22,7 @@ describe('disk write policy',()=>{
   });
 
   it('keeps browser persistence limited to explicit custom-preset actions',()=>{
-    const violations=[];
+    const violations:string[]=[];
     for(const file of productionFiles()){
       const relative=slash(path.relative(root,file)),source=fs.readFileSync(file,'utf8');
       if(allowedBrowserPersistenceFiles.has(relative))continue;
@@ -32,7 +32,7 @@ describe('disk write policy',()=>{
   });
 });
 
-function productionFiles(){const out=[];for(const directory of productionRoots){const absolute=path.join(root,directory);if(fs.existsSync(absolute))walk(absolute,out);}return out.filter(file=>/\.(?:ts|js|mjs)$/.test(file));}
-function walk(directory,out){for(const entry of fs.readdirSync(directory,{withFileTypes:true})){if(ignoredSegments.has(entry.name))continue;const target=path.join(directory,entry.name);if(entry.isDirectory())walk(target,out);else if(entry.isFile())out.push(target);}}
-function lineOf(source,index){return source.slice(0,index).split('\n').length;}
-function slash(value){return value.split(path.sep).join('/');}
+function productionFiles():string[]{const out:string[]=[];for(const directory of productionRoots){const absolute=path.join(root,directory);if(fs.existsSync(absolute))walk(absolute,out);}return out.filter(file=>/\.(?:ts|js|mjs)$/.test(file));}
+function walk(directory:string,out:string[]):void{for(const entry of fs.readdirSync(directory,{withFileTypes:true})){if(ignoredSegments.has(entry.name))continue;const target=path.join(directory,entry.name);if(entry.isDirectory())walk(target,out);else if(entry.isFile())out.push(target);}}
+function lineOf(source:string,index:number):number{return source.slice(0,index).split('\n').length;}
+function slash(value:string):string{return value.split(path.sep).join('/');}
