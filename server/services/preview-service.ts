@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type express from 'express';
+import type { Express, NextFunction, Response } from 'express';
 import ts from 'typescript';
 import { getProject, resolveInside } from '../project.js';
 
-export function registerPreviewRoutes(app:express.Express):void{
+export function registerPreviewRoutes(app:Express):void{
   app.get('/preview/:id/*path',(req,res,next)=>{
     if(req.params.id.startsWith('browser-'))return res.type('html').send('<!doctype html><html><body></body></html>');
     return serveLegacyPreview(req.params.id,String(req.params.path||''),res,next);
@@ -28,7 +28,7 @@ function previewProjectFromReferer(referer:string|undefined):string|undefined{
   try{const match=new URL(referer).pathname.match(/^\/preview\/([^/]+)(?:\/|$)/);return match?.[1]?decodeURIComponent(match[1]):undefined;}catch{return undefined;}
 }
 
-function serveLegacyPreview(id:string,requested:string,res:express.Response,next:express.NextFunction){
+function serveLegacyPreview(id:string,requested:string,res:Response,next:NextFunction){
   const project=getProject(id);if(!project)return res.status(404).send('Project not loaded');
   try{
     const target=resolveInside(project.root,requested||project.selectedEntry);
