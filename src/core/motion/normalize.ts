@@ -1,5 +1,5 @@
 import type { AnimationType, DetectedAnimation } from '../../types/domain';
-import type { MotionKeyframe, MotionPropertyTrack, MotionSourceKind, MotionTrack } from './motion-model';
+import type { MotionKeyframe, MotionPropertyTrack, MotionSourceKind, MotionTrack, MotionValueKind } from './motion-model';
 
 const sourceKind=(type:AnimationType):MotionSourceKind=>{
   switch(type){case 'css-animation':return 'css-animation';case 'css-transition':return 'css-transition';case 'web-animation':return 'waapi';case 'javascript':return 'javascript';case 'raf':return 'raf';case 'runtime-style':return 'runtime-style';default:return 'unknown';}
@@ -9,7 +9,21 @@ const legacyType=(track:MotionTrack):AnimationType=>{
   if(stored==='css-animation'||stored==='css-transition'||stored==='web-animation'||stored==='javascript'||stored==='raf'||stored==='runtime-style'||stored==='unknown')return stored;
   switch(track.source.kind){case 'css-animation':return 'css-animation';case 'css-transition':return 'css-transition';case 'waapi':return 'web-animation';case 'javascript':return 'javascript';case 'raf':return 'raf';case 'runtime-style':return 'runtime-style';default:return 'unknown';}
 };
-const normalizeProperties=(properties:DetectedAnimation['properties']):MotionPropertyTrack[]=>properties.map(property=>({name:property.name,...(property.from!==undefined?{from:property.from}:{}),...(property.to!==undefined?{to:property.to}:{}),...(property.values!==undefined?{values:[...property.values]}:{})}));
+const valueKind=(name:string):MotionValueKind=>{
+  const key=name.toLowerCase();
+  if(key==='transform')return 'transform';
+  if(key==='filter'||key==='backdrop-filter')return 'filter';
+  if(key.startsWith('--'))return 'custom-property';
+  if(key.includes('color')||key==='fill'||key==='stroke')return 'color';
+  if(key==='d'||key==='offset-path'||key==='clip-path')return 'path';
+  if(key.includes('rotate')||key.includes('skew'))return 'angle';
+  if(['width','height','top','right','bottom','left','margin','padding','gap','translate','translatex','translatey','perspective','border-radius','font-size','letter-spacing'].some(token=>key===token||key.startsWith(`${token}-`)))return 'length';
+  if(['opacity','scale','scalex','scaley','z-index','flex-grow','flex-shrink','order'].includes(key))return 'number';
+  if(['display','visibility','position','overflow','pointer-events','font-family'].includes(key))return 'discrete';
+  return 'unknown';
+};
+const isInterpolable=(kind:MotionValueKind):boolean|undefined=>kind==='discrete'?false:kind==='number'||kind==='length'||kind==='angle'||kind==='color'||kind==='transform'||kind==='filter'||kind==='path'||kind==='custom-property'?true:undefined;
+const normalizeProperties=(properties:DetectedAnimation['properties']):MotionPropertyTrack[]=>properties.map(property=>{const kind=valueKind(property.name);return{name:property.name,...(property.from!==undefined?{from:property.from}:{}),...(property.to!==undefined?{to:property.to}:{}),...(property.values!==undefined?{values:[...property.values]}:{}),valueKind:kind,...(isInterpolable(kind)!==undefined?{interpolable:isInterpolable(kind)}:{})};});
 const normalizeKeyframes=(frames:DetectedAnimation['keyframes']):MotionKeyframe[]=>frames?.map(frame=>{const values:Record<string,string|number|null>={};let offset:number|undefined,easing:string|undefined,composite:string|undefined;for(const [key,value] of Object.entries(frame)){if(key==='offset'&&typeof value==='number'){offset=value;continue;}if(key==='easing'&&typeof value==='string'){easing=value;continue;}if(key==='composite'&&typeof value==='string'){composite=value;continue;}values[key]=value;}return{values,...(offset!==undefined?{offset}:{}),...(easing?{easing}:{}),...(composite?{composite}:{})};})??[];
 const denormalizeKeyframes=(frames:MotionKeyframe[]):DetectedAnimation['keyframes']=>frames.length?frames.map(frame=>({...frame.values,...(frame.offset!==undefined?{offset:frame.offset}:{}),...(frame.easing?{easing:frame.easing}:{}),...(frame.composite?{composite:frame.composite}:{})})):undefined;
 
