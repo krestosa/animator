@@ -12,6 +12,7 @@ import './app/motion-catalog.css';
 import './app/editor-pro.css';
 import './app/viewport-screenshot.css';
 import './app/dense-layout.css';
+import './app/timeline-redesign.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
