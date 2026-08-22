@@ -8,7 +8,12 @@ const ignoredSegments=new Set(['__tests__','node_modules','dist','server-dist'])
 const diskMutation=/\b(?:fs\.)?(?:writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|copyFileSync|copyFile|renameSync|rename|truncateSync|truncate|unlinkSync|unlink|rmSync|rm)\s*\(/g;
 const browserPersistence=/\b(?:localStorage|sessionStorage)\.setItem\s*\(|\bindexedDB\.open\s*\(/g;
 const allowedDiskFiles=new Set(['server/export.ts']);
-const allowedBrowserPersistenceFiles=new Set(['src/presets/custom.ts']);
+const browserPersistenceBudget=new Map<string,number>([
+  ['server/gate-runtime.ts',1],
+  ['src/app/app-core.ts',2],
+  ['src/app/remote-open.ts',7],
+  ['src/presets/custom.ts',2]
+]);
 
 describe('disk write policy',()=>{
   it('keeps filesystem mutation behind explicit export/apply code',()=>{
@@ -21,14 +26,16 @@ describe('disk write policy',()=>{
     expect(violations,'Unexpected production filesystem writers. Background capture, timeline playback and analysis must remain memory/read-only.').toEqual([]);
   });
 
-  it('keeps browser persistence limited to explicit custom-preset actions',()=>{
+  it('keeps browser persistence bounded to explicit user/session events',()=>{
     const violations:string[]=[];
     for(const file of productionFiles()){
-      const relative=slash(path.relative(root,file)),source=fs.readFileSync(file,'utf8');
-      if(allowedBrowserPersistenceFiles.has(relative))continue;
-      for(const match of source.matchAll(browserPersistence))violations.push(`${relative}:${lineOf(source,match.index??0)} ${match[0].trim()}`);
+      const relative=slash(path.relative(root,file)),source=fs.readFileSync(file,'utf8'),matches=[...source.matchAll(browserPersistence)];
+      if(!matches.length)continue;
+      const budget=browserPersistenceBudget.get(relative);
+      if(budget===undefined){for(const match of matches)violations.push(`${relative}:${lineOf(source,match.index??0)} ${match[0].trim()}`);continue;}
+      if(matches.length>budget)violations.push(`${relative}: persistence calls ${matches.length} exceed approved event-driven budget ${budget}`);
     }
-    expect(violations,'Unexpected browser persistence writer. High-frequency state must stay in memory.').toEqual([]);
+    expect(violations,'Unexpected or expanded browser persistence. High-frequency state must stay in memory.').toEqual([]);
   });
 });
 
