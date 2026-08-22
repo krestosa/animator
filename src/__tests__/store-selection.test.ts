@@ -1,32 +1,31 @@
 import { beforeEach,describe,expect,it } from 'vitest';
-import { detectedAnimationToMotionTrack } from '../core/motion';
 import { store } from '../state/store';
-import type { DetectedAnimation, ProjectDescriptor } from '../types/domain';
+import type { MotionTrack } from '../types/motion';
+import type { ProjectDescriptor } from '../types/domain';
 
-const motion=(id:string,elementId:string,name='fade'):DetectedAnimation=>({id,elementId,type:'web-animation',name,startTime:100,duration:300,properties:[{name:'opacity'}],confidence:'runtime-observed',runtimeState:'running'});
-const track=(id:string,elementId:string,name='fade')=>detectedAnimationToMotionTrack(motion(id,elementId,name));
+const track=(id:string,elementId:string,name='fade'):MotionTrack=>({id,name,target:{elementId},timing:{start:100,duration:300},properties:[{name:'opacity'}],keyframes:[],trigger:{kind:'unknown'},source:{kind:'waapi',confidence:'runtime-observed'},runtimeState:'running'});
 const project=(id:string,selectedEntry='/index.html'):ProjectDescriptor=>({id,root:`/${id}`,entries:[selectedEntry],selectedEntry,tree:[]});
 
 beforeEach(()=>store.set({project:undefined,analysis:undefined,elements:[],motionTracks:[],events:[],selectedElementId:undefined,selectedAnimationId:undefined,picker:false,recording:true,playhead:0,zoom:1,diagnostics:[],history:[],future:[]}));
 
 describe('motion selection invariants',()=>{
   it('does not hijack an existing selection when new motion is detected',()=>{
-    store.addAnimation(motion('first','el-a'));
+    store.addMotionTrack(track('first','el-a'));
     store.set({selectedAnimationId:'first',selectedElementId:'el-a'});
-    store.addAnimation(motion('late','el-a','scroll-fade'));
+    store.addMotionTrack(track('late','el-a','scroll-fade'));
     expect(store.get().selectedAnimationId).toBe('first');
     expect(store.get().selectedElementId).toBe('el-a');
   });
 
   it('selects a deliberately created animation even while passive discovery does not',()=>{
-    store.addAnimation(motion('first','el-a'));
-    store.addAnimation(motion('created','el-a','Created animation'));
+    store.addMotionTrack(track('first','el-a'));
+    store.addMotionTrack(track('created','el-a','Created animation'));
     expect(store.get().selectedAnimationId).toBe('created');
   });
 
   it('clears undo and redo history when the project context changes',()=>{
     store.set({project:project('one')});
-    store.addAnimation(motion('shared','el-a'));
+    store.addMotionTrack(track('shared','el-a'));
     store.updateMotionTrack('shared',{timing:{duration:600}});
     store.undo();
     expect(store.get().future).toHaveLength(1);
@@ -39,7 +38,7 @@ describe('motion selection invariants',()=>{
 
   it('clears edit history when switching entries inside the same project',()=>{
     store.set({project:project('one','/index.html')});
-    store.addAnimation(motion('shared','el-a'));
+    store.addMotionTrack(track('shared','el-a'));
     store.updateMotionTrack('shared',{timing:{duration:600}});
     expect(store.get().history).toHaveLength(1);
     store.set({project:{...project('one','/index.html'),selectedEntry:'/details.html'}});
@@ -47,7 +46,7 @@ describe('motion selection invariants',()=>{
   });
 
   it('does not record no-op edits or discard a valid redo',()=>{
-    store.addAnimation(motion('shared','el-a'));
+    store.addMotionTrack(track('shared','el-a'));
     store.updateMotionTrack('shared',{timing:{duration:600}});
     store.undo();
     expect(store.get().future).toHaveLength(1);
