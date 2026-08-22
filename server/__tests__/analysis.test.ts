@@ -19,7 +19,7 @@ describe('analysis',()=>{
     expect(result.animations).toHaveLength(2);
     expect(result.animations.map(animation=>animation.name)).toEqual(['fade','slide']);
     expect(result.animations[1]?.delay).toBe(100);
-    const first=result.animations[0];expect(first).toBeDefined();expect(first?.source.media).toBeDefined();expect(first?.source.media).toContain('max-width');
+    const first=result.animations[0],media=first?.source?.media;expect(first).toBeDefined();expect(media).toBeDefined();expect(media).toContain('max-width');
     expect(result.transitions[0]?.properties).toEqual(['opacity','transform']);
     expect(result.candidates.some(candidate=>candidate.functionName==='run')).toBe(true);
   });
