@@ -30,7 +30,7 @@ export function mountUiPolish(root:HTMLElement):()=>void {
   const recordBadge=document.createElement('span');recordBadge.className='recordStateBadge';recordBadge.dataset.recordState='';recordButton?.after(recordBadge);
   const status=document.createElement('span');status.className='previewMode';status.textContent='LIVE';status.dataset.mode='live';
   root.querySelector<HTMLElement>('[data-preview-chrome]')?.append(status);
-  let raf=0,mutating=false,lastRecording=store.get().recording,lastAnimations=store.get().animations,lastSelectedAnimationId=store.get().selectedAnimationId;
+  let raf=0,mutating=false,lastRecording=store.get().recording,lastPicker=store.get().picker,lastAnimations=store.get().animations,lastSelectedAnimationId=store.get().selectedAnimationId;
   const decorateRecord=():void=>{
     const button=root.querySelector<HTMLButtonElement>('[data-action="record"]');if(!button)return;const recording=store.get().recording;
     button.classList.add('iconButton');button.classList.toggle('recording',recording);button.classList.toggle('stopped',!recording);button.dataset.recordingState=recording?'recording':'stopped';button.setAttribute('aria-pressed',String(recording));button.title=recording?'Stop recording immediately':'Start recording';button.setAttribute('aria-label',button.title);
@@ -44,7 +44,7 @@ export function mountUiPolish(root:HTMLElement):()=>void {
     queueMicrotask(()=>{mutating=false;});
   };
   const schedule=()=>{if(!raf)raf=requestAnimationFrame(apply);};
-  const stateChanged=():void=>{const state=store.get();if(state.recording===lastRecording&&state.animations===lastAnimations&&state.selectedAnimationId===lastSelectedAnimationId)return;lastRecording=state.recording;lastAnimations=state.animations;lastSelectedAnimationId=state.selectedAnimationId;schedule();};
+  const stateChanged=():void=>{const state=store.get();if(state.recording===lastRecording&&state.picker===lastPicker&&state.animations===lastAnimations&&state.selectedAnimationId===lastSelectedAnimationId)return;lastRecording=state.recording;lastPicker=state.picker;lastAnimations=state.animations;lastSelectedAnimationId=state.selectedAnimationId;schedule();};
   const unsubscribe=store.subscribe(stateChanged);
   const observer=new MutationObserver(records=>{if(mutating)return;const structural=records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node instanceof Element));if(structural)schedule();});observer.observe(root,{subtree:true,childList:true});
   const selectMotion=(event:MouseEvent):void=>{
