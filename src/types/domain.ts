@@ -21,7 +21,7 @@ export interface ProjectDescriptor {
   browserSessionId?: string | undefined; browserEngine?: BrowserEngine | undefined; browserProfile?: BrowserProfile | undefined;
   browserWidth?: number | undefined; browserHeight?: number | undefined; browserExternal?: boolean | undefined;
 }
-export interface StaticAnalysis { animations: DetectedAnimation[]; motionTracks?:MotionTrack[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
+export interface StaticAnalysis { animations: DetectedAnimation[]; motionTracks:MotionTrack[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
 export type PreviewMessage =
  | {source:'animator-preview'; type:'READY'}
  | {source:'animator-preview'; type:'ELEMENTS'; elements:RuntimeElement[]}
