@@ -1,10 +1,8 @@
 import {describe,expect,it} from 'vitest';
-import {addMotionKeyframe,detectedAnimationToMotionTrack,duplicateMotionKeyframe,filterMotionTracks,motionPerformanceIssues,normalizedMotionKeyframes,overviewMotionTracks} from '../core/motion';
+import {addMotionKeyframe,createMotionProperty,duplicateMotionKeyframe,filterMotionTracks,motionPerformanceIssues,normalizedMotionKeyframes,overviewMotionTracks,type MotionTrack} from '../core/motion';
 import {buildTransform,parseBezier,parseTransform} from '../editor/motion';
-import type {DetectedAnimation} from '../types/domain';
 
-const animation:DetectedAnimation={id:'a',elementId:'e',type:'css-animation',name:'fade',startTime:0,duration:300,easing:'cubic-bezier(.2,.8,.2,1)',properties:[{name:'width',values:['10px','20px']}],confidence:'exact',runtimeState:'running',keyframes:[{offset:0,opacity:0},{offset:1,opacity:1}]};
-const track=detectedAnimationToMotionTrack(animation);
+const track:MotionTrack={id:'a',name:'fade',target:{elementId:'e'},timing:{start:0,duration:300,easing:'cubic-bezier(.2,.8,.2,1)'},properties:[createMotionProperty('width',{values:['10px','20px']})],keyframes:[{offset:0,values:{opacity:0}},{offset:1,values:{opacity:1}}],trigger:{kind:'auto'},source:{kind:'css-animation',confidence:'exact'},runtimeState:'running'};
 
 describe('motion editor utilities',()=>{
   it('filters and summarizes animations',()=>{expect(overviewMotionTracks([track]).cssAnimations).toBe(1);expect(filterMotionTracks([track],'fade','running')).toHaveLength(1);expect(filterMotionTracks([track],'opacity','css')).toHaveLength(0);});

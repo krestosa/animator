@@ -4,9 +4,9 @@ import ts from 'typescript';
 
 export type ExtendedAnimationType='web-animation'|'javascript'|'raf'|'gsap'|'framer-motion'|'scroll-timeline'|'svg'|'canvas';
 export interface DetectorSourceRef{file:string;line?:number;column?:number;selector?:string;snippet?:string;}
-export interface SourceDetectedAnimation{id:string;elementId:string;type:ExtendedAnimationType;name?:string;startTime:number;duration?:number;delay?:number;iterations?:number;direction?:string;easing?:string;fill?:string;properties:Array<{name:string;values:string[]}>;source:DetectorSourceRef;confidence:'exact'|'inferred';runtimeState:'idle';keyframes?:Array<Record<string,string|number|null>>;}
+export interface SourceDetectedMotion{id:string;elementId:string;type:ExtendedAnimationType;name?:string;startTime:number;duration?:number;delay?:number;iterations?:number;direction?:string;easing?:string;fill?:string;properties:Array<{name:string;values:string[]}>;source:DetectorSourceRef;confidence:'exact'|'inferred';runtimeState:'idle';keyframes?:Array<Record<string,string|number|null>>;}
 export interface SourceCandidate{kind:string;file:string;line:number;column?:number;functionName?:string;snippet:string;}
-export interface SourceDetectionResult{animations:SourceDetectedAnimation[];candidates:SourceCandidate[];}
+export interface SourceDetectionResult{motions:SourceDetectedMotion[];candidates:SourceCandidate[];}
 
 const configKeys=new Set(['duration','delay','ease','easing','repeat','repeatDelay','yoyo','stagger','overwrite','onStart','onUpdate','onComplete','paused','immediateRender','scrollTrigger','defaults','timeline','fill','iterations','direction']);
 const canvasMethods=/\.(?:clearRect|fillRect|strokeRect|drawImage|fillText|strokeText|arc|ellipse|lineTo|moveTo|bezierCurveTo|quadraticCurveTo|fill|stroke)\s*\(/;
@@ -14,14 +14,14 @@ const canvasMethods=/\.(?:clearRect|fillRect|strokeRect|drawImage|fillText|strok
 export function detectSourceMotion(file:string,root:string):SourceDetectionResult{
   const source=fs.readFileSync(file,'utf8'),rel=path.relative(root,file).split(path.sep).join('/');
   if(/\.(?:svg|html?)$/i.test(file))return detectMarkup(source,rel);
-  if(!/\.(?:m?[jt]s|[jt]sx)$/i.test(file))return{animations:[],candidates:[]};
+  if(!/\.(?:m?[jt]s|[jt]sx)$/i.test(file))return{motions:[],candidates:[]};
   return detectScript(source,file,rel);
 }
 
 function detectScript(source:string,file:string,rel:string):SourceDetectionResult{
-  const sf=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,scriptKind(file)),animations:SourceDetectedAnimation[]=[],candidates:SourceCandidate[]=[];
+  const sf=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,scriptKind(file)),motions:SourceDetectedMotion[]=[],candidates:SourceCandidate[]=[];
   const pushCandidate=(node:ts.Node,kind:string):void=>{const location=sf.getLineAndCharacterOfPosition(node.getStart(sf)),functionName=enclosingFunctionName(node,sf);candidates.push({kind,file:rel,line:location.line+1,column:location.character+1,...(functionName?{functionName}:{}),snippet:node.getText(sf).slice(0,240)});};
-  const push=(node:ts.Node,input:Omit<SourceDetectedAnimation,'id'|'startTime'|'source'|'runtimeState'>):void=>{const location=sf.getLineAndCharacterOfPosition(node.getStart(sf));animations.push({...input,id:`${input.type}:${rel}:${location.line+1}:${location.character+1}:${animations.length}`,startTime:0,source:{file:rel,line:location.line+1,column:location.character+1,snippet:node.getText(sf).slice(0,320)},runtimeState:'idle'});};
+  const push=(node:ts.Node,input:Omit<SourceDetectedMotion,'id'|'startTime'|'source'|'runtimeState'>):void=>{const location=sf.getLineAndCharacterOfPosition(node.getStart(sf));motions.push({...input,id:`${input.type}:${rel}:${location.line+1}:${location.character+1}:${motions.length}`,startTime:0,source:{file:rel,line:location.line+1,column:location.character+1,snippet:node.getText(sf).slice(0,320)},runtimeState:'idle'});};
   const scan=(node:ts.Node):void=>{
     if(ts.isCallExpression(node)){
       const expression=node.expression.getText(sf);
@@ -39,23 +39,23 @@ function detectScript(source:string,file:string,rel:string):SourceDetectionResul
       else if(expression.endsWith('.style.setProperty'))pushCandidate(node,'style-write');
     }
     if(ts.isNewExpression(node)&&/^(?:window\.)?(?:ScrollTimeline|ViewTimeline)$/.test(node.expression.getText(sf)))pushCandidate(node,'scroll-timeline');
-    if(ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node))detectFramerJsx(node,sf,rel,animations);
+    if(ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node))detectFramerJsx(node,sf,rel,motions);
     ts.forEachChild(node,scan);
   };
-  scan(sf);return{animations:dedupeAnimations(animations),candidates};
+  scan(sf);return{motions:dedupeMotions(motions),candidates};
 }
 
-function detectFramerJsx(node:ts.JsxOpeningElement|ts.JsxSelfClosingElement,sf:ts.SourceFile,rel:string,animations:SourceDetectedAnimation[]):void{
+function detectFramerJsx(node:ts.JsxOpeningElement|ts.JsxSelfClosingElement,sf:ts.SourceFile,rel:string,motions:SourceDetectedMotion[]):void{
   const tag=node.tagName.getText(sf);if(!/^motion\./.test(tag)&&tag!=='motion')return;
   const animateAttr=node.attributes.properties.find(prop=>ts.isJsxAttribute(prop)&&prop.name.getText(sf)==='animate') as ts.JsxAttribute|undefined;if(!animateAttr)return;
   const initialAttr=node.attributes.properties.find(prop=>ts.isJsxAttribute(prop)&&prop.name.getText(sf)==='initial') as ts.JsxAttribute|undefined,transitionAttr=node.attributes.properties.find(prop=>ts.isJsxAttribute(prop)&&prop.name.getText(sf)==='transition') as ts.JsxAttribute|undefined,animate=readJsxObject(animateAttr,sf),initial=initialAttr?readJsxObject(initialAttr,sf):undefined,transition=transitionAttr?readJsxObject(transitionAttr,sf):undefined,location=sf.getLineAndCharacterOfPosition(node.getStart(sf)),properties=propertiesFromVars(animate,initial),frames=animate?[objectToFrame(initial??{}),objectToFrame(animate)].filter(frame=>Object.keys(frame).length):undefined;
-  animations.push({id:`framer:${rel}:${location.line+1}:${location.character+1}`,elementId:`static-jsx:${rel}:${location.line+1}`,type:'framer-motion',name:tag,startTime:0,duration:secondsToMs(transition?.duration),delay:secondsToMs(transition?.delay),easing:toStringValue(transition?.ease),properties,source:{file:rel,line:location.line+1,column:location.character+1,snippet:node.getText(sf).slice(0,320)},confidence:'inferred',runtimeState:'idle',...(frames?.length?{keyframes:frames}:{})});
+  motions.push({id:`framer:${rel}:${location.line+1}:${location.character+1}`,elementId:`static-jsx:${rel}:${location.line+1}`,type:'framer-motion',name:tag,startTime:0,duration:secondsToMs(transition?.duration),delay:secondsToMs(transition?.delay),easing:toStringValue(transition?.ease),properties,source:{file:rel,line:location.line+1,column:location.character+1,snippet:node.getText(sf).slice(0,320)},confidence:'inferred',runtimeState:'idle',...(frames?.length?{keyframes:frames}:{})});
 }
 
 function detectMarkup(source:string,rel:string):SourceDetectionResult{
-  const animations:SourceDetectedAnimation[]=[],candidates:SourceCandidate[]=[];const pattern=/<(animate(?:Transform|Motion)?|set)\b([^>]*)>/gi;let match:RegExpExecArray|null;
-  while((match=pattern.exec(source))){const tag=match[1]??'animate',attrs=parseAttributes(match[2]??''),line=lineAt(source,match.index),property=attrs.attributeName??(tag==='animateTransform'?'transform':tag==='animateMotion'?'motion':'unknown'),values=(attrs.values?.split(';').map(value=>value.trim()).filter(Boolean)??[attrs.from,attrs.to].filter((value):value is string=>!!value)),duration=parseClock(attrs.dur),delay=parseClock(attrs.begin),keyframes=values.length?values.map((value,index)=>({offset:values.length<=1?0:index/(values.length-1),[property]:value})):undefined;animations.push({id:`svg:${rel}:${line}:${animations.length}`,elementId:`static-svg:${rel}:${line}`,type:'svg',name:tag,startTime:0,duration,delay,properties:property==='unknown'?[]:[{name:property,values}],source:{file:rel,line,snippet:match[0].slice(0,320)},confidence:'exact',runtimeState:'idle',...(keyframes?{keyframes}:{})});candidates.push({kind:'svg-smil',file:rel,line,snippet:match[0].slice(0,240)});}
-  return{animations,candidates};
+  const motions:SourceDetectedMotion[]=[],candidates:SourceCandidate[]=[];const pattern=/<(animate(?:Transform|Motion)?|set)\b([^>]*)>/gi;let match:RegExpExecArray|null;
+  while((match=pattern.exec(source))){const tag=match[1]??'animate',attrs=parseAttributes(match[2]??''),line=lineAt(source,match.index),property=attrs.attributeName??(tag==='animateTransform'?'transform':tag==='animateMotion'?'motion':'unknown'),values=(attrs.values?.split(';').map(value=>value.trim()).filter(Boolean)??[attrs.from,attrs.to].filter((value):value is string=>!!value)),duration=parseClock(attrs.dur),delay=parseClock(attrs.begin),keyframes=values.length?values.map((value,index)=>({offset:values.length<=1?0:index/(values.length-1),[property]:value})):undefined;motions.push({id:`svg:${rel}:${line}:${motions.length}`,elementId:`static-svg:${rel}:${line}`,type:'svg',name:tag,startTime:0,duration,delay,properties:property==='unknown'?[]:[{name:property,values}],source:{file:rel,line,snippet:match[0].slice(0,320)},confidence:'exact',runtimeState:'idle',...(keyframes?{keyframes}:{})});candidates.push({kind:'svg-smil',file:rel,line,snippet:match[0].slice(0,240)});}
+  return{motions,candidates};
 }
 
 function isGsapCall(expression:string):boolean{return/^(?:window\.)?gsap\.(?:to|from|fromTo|set)$/.test(expression)||/\.to$|\.from$|\.fromTo$/.test(expression)&&/gsap|timeline/i.test(expression);}
@@ -79,4 +79,4 @@ function enclosingFunctionName(node:ts.Node,sf:ts.SourceFile):string|undefined{l
 function parseAttributes(value:string):Record<string,string>{const out:Record<string,string>={};for(const match of value.matchAll(/([:\w-]+)\s*=\s*(["'])(.*?)\2/g))out[match[1]??'']=match[3]??'';return out;}
 function parseClock(value:string|undefined):number|undefined{if(!value)return undefined;const match=value.match(/^([\d.]+)(ms|s)?$/i);if(!match)return undefined;return Number(match[1])*(match[2]?.toLowerCase()==='s'?1000:1);}
 function lineAt(source:string,index:number):number{return source.slice(0,index).split('\n').length;}
-function dedupeAnimations(items:SourceDetectedAnimation[]):SourceDetectedAnimation[]{const seen=new Set<string>();return items.filter(item=>{const key=`${item.type}:${item.source.file}:${item.source.line}:${item.name??''}`;if(seen.has(key))return false;seen.add(key);return true;});}
+function dedupeMotions(items:SourceDetectedMotion[]):SourceDetectedMotion[]{const seen=new Set<string>();return items.filter(item=>{const key=`${item.type}:${item.source.file}:${item.source.line}:${item.name??''}`;if(seen.has(key))return false;seen.add(key);return true;});}

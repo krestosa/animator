@@ -1,7 +1,7 @@
 import { store } from '../state/store';
 import type { BrowserEngine, BrowserProfile, ProjectDescriptor, StaticAnalysis } from '../types/domain';
 
-const emptyAnalysis:StaticAnalysis={animations:[],motionTracks:[],transitions:[],candidates:[],reducedMotion:false};
+const emptyAnalysis:StaticAnalysis={motionTracks:[],transitions:[],candidates:[],reducedMotion:false};
 const CONTROL_OPEN_SYNC_MS=1500;
 type ControlSession={id:string;url:string;title:string;width:number;height:number;engine:BrowserEngine;profile:BrowserProfile;external:boolean;recording:boolean;closed:boolean;snapshotReady:boolean;snapshotStatus:string};
 type ControlStatus={revision:number;activeSessionId:string|null;activeSession:ControlSession|null};
