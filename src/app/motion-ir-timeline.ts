@@ -1,5 +1,6 @@
 import { store } from '../state/store';
 import type { MotionTrack } from '../core/motion';
+import { layoutMotionTrack,timelineDurationFromTracks } from '../core/timeline';
 
 export function mountMotionIrTimeline(root:HTMLElement):()=>void{
   let disposed=false,raf=0,writing=false,signature='';
@@ -30,15 +31,13 @@ export function mountMotionIrTimeline(root:HTMLElement):()=>void{
 }
 
 export function renderTrack(track:MotionTrack,pxPerMs:number,selected:boolean):string{
-  const left=Math.max(0,track.timing.start*pxPerMs),width=Math.max(4,(track.timing.duration??100)*pxPerMs);
+  const {left,width}=layoutMotionTrack(track,{origin:0,pxPerMs},4);
   const markers=selected?track.keyframes.map((frame,index)=>`<i class="keyframeMarker" data-kf-marker data-kf-index="${index}" style="left:${clamp01(frame.offset??fallbackOffset(index,track.keyframes.length))*width}px"></i>`).join(''):'';
   const label=track.name??sourceLabel(track);
   return `<button class="track${selected?' selected':''}" data-animation-id="${attr(track.id)}" data-motion-source="${attr(track.source.kind)}"><span class="trackLabel">${html(label)}</span><span class="clip" style="left:${left}px;width:${width}px">${markers}</span></button>`;
 }
 
-export function motionTimelineDuration(tracks:MotionTrack[]):number{
-  return tracks.reduce((max,track)=>Math.max(max,track.timing.start+(track.timing.delay??0)+(track.timing.duration??100)*Math.max(1,track.timing.iterations??1)),1000);
-}
+export function motionTimelineDuration(tracks:MotionTrack[]):number{return timelineDurationFromTracks(tracks,undefined);}
 
 function trackSignature(track:MotionTrack):string{return `${track.id}:${track.timing.start}:${track.timing.duration??100}:${track.timing.delay??0}:${track.source.kind}:${track.keyframes.map(frame=>frame.offset??'').join('/')}`;}
 function sourceLabel(track:MotionTrack):string{return track.source.kind==='waapi'?'WAAPI':track.source.kind.replaceAll('-',' ');}
