@@ -1,9 +1,10 @@
-export type DetectionConfidence = 'exact' | 'runtime-observed' | 'source-correlated' | 'inferred' | 'unknown';
+import type {DetectionConfidence,MotionTrack,SourceReference} from './motion';
+export type {DetectionConfidence,SourceReference} from './motion';
+
 export type AnimationType = 'css-animation' | 'css-transition' | 'web-animation' | 'javascript' | 'raf' | 'runtime-style' | 'gsap' | 'framer-motion' | 'scroll-timeline' | 'svg' | 'canvas' | 'unknown';
 export type BrowserEngine = 'chromium' | 'firefox' | 'webkit';
 export type BrowserProfile = 'desktop' | 'mobile';
 
-export interface SourceReference { file: string; line?: number | undefined; column?: number | undefined; selector?: string | undefined; snippet?: string | undefined; media?: string | undefined; }
 export interface AnimatedProperty { name: string; from?: string | undefined; to?: string | undefined; values?: string[] | undefined; }
 export interface DetectedAnimation {
   id: string; elementId: string; type: AnimationType; name?: string | undefined; startTime: number; duration?: number | undefined; delay?: number | undefined;
@@ -20,12 +21,13 @@ export interface ProjectDescriptor {
   browserSessionId?: string | undefined; browserEngine?: BrowserEngine | undefined; browserProfile?: BrowserProfile | undefined;
   browserWidth?: number | undefined; browserHeight?: number | undefined; browserExternal?: boolean | undefined;
 }
-export interface StaticAnalysis { animations: DetectedAnimation[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
+export interface StaticAnalysis { animations: DetectedAnimation[]; motionTracks?:MotionTrack[]; transitions: Array<{selector:string; properties:string[]; source:SourceReference}>; candidates: Array<{kind:string; file:string; line:number; column?:number|undefined; functionName?:string|undefined; snippet:string}>; reducedMotion: boolean; }
 export type PreviewMessage =
  | {source:'animator-preview'; type:'READY'}
  | {source:'animator-preview'; type:'ELEMENTS'; elements:RuntimeElement[]}
  | {source:'animator-preview'; type:'SELECT_ELEMENT'; element:RuntimeElement}
  | {source:'animator-preview'; type:'ANIMATION'; animation:DetectedAnimation}
+ | {source:'animator-preview'; type:'MOTION_TRACK'; track:MotionTrack}
  | {source:'animator-preview'; type:'EVENT'; event:TimelineEvent}
  | {source:'animator-preview'; type:'EVENTS'; events:TimelineEvent[]}
  | {source:'animator-preview'; type:'TIMELINE_STATE'; time:number; frame?:number | undefined; fps?:number | undefined; playing:boolean; controlled:boolean}
