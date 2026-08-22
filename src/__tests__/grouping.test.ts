@@ -24,8 +24,8 @@ describe('animation grouping',()=>{
 
   it('groups equivalent WAAPI keyframes even when targets differ',()=>{
     const keyframes=[{offset:0,values:{opacity:'0',transform:'scale(.9)'}},{offset:1,values:{opacity:'1',transform:'scale(1)'}}];
-    const a=base({id:'w1',name:undefined,target:{elementId:'el-1'},source:{kind:'waapi',confidence:'runtime-observed'},keyframes});
-    const b=base({id:'w2',name:undefined,target:{elementId:'el-2'},source:{kind:'waapi',confidence:'runtime-observed'},keyframes});
-    expect(groupAnimations([a,b])).toHaveLength(1);
+    const {name:_aName,...aBase}=base({id:'w1',target:{elementId:'el-1'},source:{kind:'waapi',confidence:'runtime-observed'},keyframes});
+    const {name:_bName,...bBase}=base({id:'w2',target:{elementId:'el-2'},source:{kind:'waapi',confidence:'runtime-observed'},keyframes});
+    expect(groupAnimations([aBase,bBase])).toHaveLength(1);
   });
 });
