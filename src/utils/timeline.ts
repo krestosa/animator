@@ -1,7 +1,9 @@
+import { timelineTimingDuration,timelineTimingStart } from '../core/timeline';
 import type { DetectedAnimation, TimelineEvent } from '../types/domain';
 export function timelineDuration(animations:DetectedAnimation[], events:TimelineEvent[]): number {
-  const a = animations.map(x => x.startTime + (x.delay ?? 0) + (x.duration ?? 0));
-  const e = events.map(x=>x.at);
-  return Math.max(1000, ...a, ...e);
+  let end=1000;
+  for(const animation of animations)end=Math.max(end,timelineTimingStart(animation.startTime,animation.delay)+timelineTimingDuration(animation.duration,animation.iterations));
+  for(const event of events)end=Math.max(end,event.at);
+  return end;
 }
 export function timeToPercent(time:number, duration:number): number { return Math.max(0, Math.min(100, duration ? time / duration * 100 : 0)); }
