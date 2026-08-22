@@ -23,13 +23,12 @@ export function commandForTrackChange(before:MotionTrack,after:MotionTrack):Moti
 export function applyMotionCommand(track:MotionTrack,command:MotionCommand,direction:'forward'|'reverse'):MotionTrack{
   if(track.id!==command.trackId)return track;
   if(command.kind==='compound')return command.commands.reduce((next,child)=>applyMotionCommand(next,child,direction),track);
-  const value=direction==='forward'?command.after:command.before;
   switch(command.kind){
-    case 'change-timing':return{...track,timing:{...value}};
-    case 'replace-keyframes':return{...track,keyframes:cloneMotionKeyframes(value)};
-    case 'replace-properties':return{...track,properties:cloneProperties(value)};
-    case 'change-trigger':return{...track,trigger:cloneTrigger(value)};
-    case 'rename-track':return value===undefined?omitName(track):{...track,name:value};
+    case 'change-timing':{const value=direction==='forward'?command.after:command.before;return{...track,timing:{...value}};}
+    case 'replace-keyframes':{const value=direction==='forward'?command.after:command.before;return{...track,keyframes:cloneMotionKeyframes(value)};}
+    case 'replace-properties':{const value=direction==='forward'?command.after:command.before;return{...track,properties:cloneProperties(value)};}
+    case 'change-trigger':{const value=direction==='forward'?command.after:command.before;return{...track,trigger:cloneTrigger(value)};}
+    case 'rename-track':{const value=direction==='forward'?command.after:command.before;return value===undefined?omitName(track):{...track,name:value};}
   }
 }
 export const recordHistory=(state:HistoryState,entry:HistoryEntry):HistoryState=>({history:[...state.history,entry].slice(-500),future:[]});
