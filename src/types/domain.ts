@@ -1,5 +1,5 @@
 export type DetectionConfidence = 'exact' | 'runtime-observed' | 'source-correlated' | 'inferred' | 'unknown';
-export type AnimationType = 'css-animation' | 'css-transition' | 'web-animation' | 'javascript' | 'raf' | 'runtime-style' | 'unknown';
+export type AnimationType = 'css-animation' | 'css-transition' | 'web-animation' | 'javascript' | 'raf' | 'runtime-style' | 'gsap' | 'framer-motion' | 'scroll-timeline' | 'svg' | 'canvas' | 'unknown';
 export type BrowserEngine = 'chromium' | 'firefox' | 'webkit';
 export type BrowserProfile = 'desktop' | 'mobile';
 
