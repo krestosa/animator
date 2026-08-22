@@ -1,5 +1,5 @@
-import {detectedAnimationToMotionTrack,detectedAnimationsToMotionTracks,type MotionTrack} from '../core/motion';
-import type {DetectedAnimation,ProjectDescriptor,RuntimeElement,StaticAnalysis,TimelineEvent} from '../types/domain';
+import type {MotionTrack} from '../core/motion';
+import type {ProjectDescriptor,RuntimeElement,StaticAnalysis,TimelineEvent} from '../types/domain';
 import {emptyEditorState,mergeElements,projectContext,type EditorState} from './editor-store';
 import {applyMotionCommand,commandForTrackChange,emptyHistory,recordHistory,redoHistory,undoHistory,type HistoryEntry,type HistoryState} from './history-store';
 import {emptyMotionState,patchMotionTrack,updateMotionTrack,type MotionState,type MotionTrackPatch} from './motion-store';
@@ -35,7 +35,6 @@ export const store={
     state={...state,...history,...updateMotionTrack(state,id,updated)};emit();
   },
   addMotionTrack(track:MotionTrack):void{ingestMotionTrack(track);},
-  addAnimation(animation:DetectedAnimation):void{ingestMotionTrack(detectedAnimationToMotionTrack(animation));},
   addEvent(event:TimelineEvent):void{if(state.recordingDataset.append([event]))emit();},
   addEvents(events:TimelineEvent[]):void{if(state.recordingDataset.append(events))emit();},
   queryEvents(query:RecordingQuery={}):TimelineEvent[]{return state.recordingDataset.query(query);},
@@ -56,7 +55,7 @@ function mergeMotionTrack(existing:MotionTrack,incoming:MotionTrack,analysis:Sta
   return{...existing,...correlated,target:{...existing.target,...correlated.target},timing:{...existing.timing,...correlated.timing,start:existing.timing.start},properties:correlated.properties.length?correlated.properties:existing.properties,keyframes:correlated.keyframes.length?correlated.keyframes:existing.keyframes,source:{...existing.source,...correlated.source,...(reference?{reference}:{})}};
 }
 function correlateMotionSource(track:MotionTrack,analysis:StaticAnalysis|undefined):MotionTrack{
-  if(track.source.reference||!analysis)return track;const candidates=analysis.motionTracks??detectedAnimationsToMotionTracks(analysis.animations),match=candidates.find(candidate=>{if(track.name&&candidate.name===track.name)return true;return candidate.source.kind===track.source.kind&&candidate.properties.some(property=>track.properties.some(runtimeProperty=>runtimeProperty.name===property.name));});if(!match?.source.reference)return track;
+  if(track.source.reference||!analysis)return track;const match=analysis.motionTracks.find(candidate=>{if(track.name&&candidate.name===track.name)return true;return candidate.source.kind===track.source.kind&&candidate.properties.some(property=>track.properties.some(runtimeProperty=>runtimeProperty.name===property.name));});if(!match?.source.reference)return track;
   return{...track,target:{...track.target,...(match.target.selector?{selector:match.target.selector}:{})},source:{...track.source,reference:match.source.reference,confidence:track.source.confidence==='runtime-observed'?'source-correlated':track.source.confidence}};
 }
 
