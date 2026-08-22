@@ -5,6 +5,7 @@ import {deleteCustomPreset,loadCustomPresets,saveCustomMotionPreset} from '../pr
 import {sendCommand} from '../preview/bridge';
 import {store,type MotionTrackPatch} from '../state/store';
 import type {DetectedAnimation} from '../types/domain';
+export {addMotionKeyframe,addMotionProperty,deleteMotionKeyframe,duplicateMotionKeyframe,normalizedMotionKeyframes,updateMotionKeyframe};
 
 export type InspectorMotionPatch={timing?:Partial<MotionTrack['timing']>;keyframes?:MotionKeyframe[]};
 
