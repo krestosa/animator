@@ -1,5 +1,5 @@
-import type {AnimationType} from '../../types/domain';
-import type {MotionSourceKind,MotionTrigger} from './motion-model';
+import type {AnimationType} from '../../types/domain.js';
+import type {MotionSourceKind,MotionTrigger} from './motion-model.js';
 
 export interface MotionSourceAdapter{animationType:AnimationType;sourceKind:MotionSourceKind;defaultTrigger:MotionTrigger;editable:boolean;}
 const adapter=(animationType:AnimationType,sourceKind:MotionSourceKind,defaultTrigger:MotionTrigger={kind:'unknown'},editable=true):MotionSourceAdapter=>({animationType,sourceKind,defaultTrigger,editable});
