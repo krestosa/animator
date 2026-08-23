@@ -1,9 +1,12 @@
 import '../server/ssd-safety.js';
+import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, session, shell } from 'electron';
 import { startAnimatorServer, type AnimatorServerHandle } from '../server/index.js';
+import { installBlinkPreview } from './blink-preview.js';
 
 let mainWindow:BrowserWindow|null=null;
 let server:AnimatorServerHandle|null=null;
+let blinkCleanup:(()=>Promise<void>)|null=null;
 let quitting=false;
 
 app.commandLine.appendSwitch('disable-component-update');
@@ -27,6 +30,7 @@ async function createMainWindow():Promise<void>{
   const production=app.isPackaged||process.argv.includes('--production');
   server=await startAnimatorServer({host:'127.0.0.1',port:0,production});
   const uiSession=session.fromPartition('animator-ui',{cache:false});
+  const preload=fileURLToPath(new URL('./preload.js',import.meta.url));
 
   const window=new BrowserWindow({
     width:1440,
@@ -37,6 +41,7 @@ async function createMainWindow():Promise<void>{
     autoHideMenuBar:true,
     backgroundColor:'#101010',
     webPreferences:{
+      preload,
       session:uiSession,
       nodeIntegration:false,
       contextIsolation:true,
@@ -46,6 +51,7 @@ async function createMainWindow():Promise<void>{
     }
   });
   mainWindow=window;
+  blinkCleanup=installBlinkPreview(window);
 
   window.webContents.setWindowOpenHandler(({url})=>{
     if(/^https?:\/\//i.test(url))void shell.openExternal(url);
@@ -84,6 +90,8 @@ function roundMb(kb:number):number{return Number((kb/1024).toFixed(1));}
 async function shutdown():Promise<void>{
   if(quitting)return;
   quitting=true;
+  const cleanupBlink=blinkCleanup;blinkCleanup=null;
+  if(cleanupBlink)await cleanupBlink().catch(()=>{});
   const active=server;
   server=null;
   if(active)await active.close().catch(()=>{});
