@@ -24,7 +24,7 @@ export interface BlinkPreviewHandle{
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
 
 export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
-  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true,previewOpen=false,attached:WebContentsView|null=null,hostAttached=false;
+  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true,previewOpen=false,attached:WebContentsView|null=null,hostAttached=false,canvasHandMode=false,canvasDragging=false,canvasDragTargetId=-1;
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:true});
   const networkResources=new Map<string,PageResource>();
@@ -58,10 +58,25 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   targetSession.webRequest.onBeforeRedirect(networkFilter,details=>captureResource(details));
   targetSession.webRequest.onErrorOccurred(networkFilter,details=>captureResource(details));
 
+  const stopCanvasDrag=():void=>{canvasDragging=false;canvasDragTargetId=-1;};
+  const publishCanvasPan=(dx:number,dy:number):void=>{if(window.isDestroyed()||(!dx&&!dy))return;window.webContents.send('animator:blink:message',{source:'animator-preview',type:'CANVAS_PAN',dx,dy});};
+  const installCanvasInput=(target:WebContentsView):void=>{
+    const contents=target.webContents;
+    contents.on('before-mouse-event',(event,mouse)=>{
+      if(mouse.type==='mouseDown'){
+        const starts=mouse.button==='middle'||canvasHandMode&&mouse.button==='left';if(!starts)return;canvasDragging=true;canvasDragTargetId=contents.id;event.preventDefault();return;
+      }
+      if(canvasDragging&&canvasDragTargetId===contents.id&&mouse.type==='mouseMove'){event.preventDefault();publishCanvasPan(Number(mouse.movementX)||0,Number(mouse.movementY)||0);return;}
+      if(canvasDragging&&canvasDragTargetId===contents.id&&(mouse.type==='mouseUp'||mouse.type==='leave')){event.preventDefault();stopCanvasDrag();}
+    });
+    contents.on('blur',()=>{if(canvasDragTargetId===contents.id)stopCanvasDrag();});
+    contents.on('destroyed',()=>{if(canvasDragTargetId===contents.id)stopCanvasDrag();});
+  };
   const mountHost=():void=>{if(hostAttached||window.isDestroyed())return;try{window.contentView.addChildView(clipHost);hostAttached=true;}catch{hostAttached=false;}};
   const unmountHost=():void=>{if(!hostAttached||window.isDestroyed())return;try{window.contentView.removeChildView(clipHost);}catch{}hostAttached=false;};
   const unmountTarget=(target:WebContentsView|null):void=>{
     if(!target||target.webContents.isDestroyed())return;
+    if(canvasDragTargetId===target.webContents.id)stopCanvasDrag();
     try{target.setVisible(false);}catch{}
     try{clipHost.removeChildView(target);}catch{}
     if(attached===target)attached=null;
@@ -81,7 +96,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     });
   };
   const disposeViews=async():Promise<void>=>{
-    const active=view,parked=parkedInstrumented,resource=resourceView;view=null;parkedInstrumented=null;resourceView=null;attached=null;unmountHost();
+    const active=view,parked=parkedInstrumented,resource=resourceView;view=null;parkedInstrumented=null;resourceView=null;attached=null;unmountHost();stopCanvasDrag();
     await destroyTarget(active);if(parked&&parked!==active)await destroyTarget(parked);if(resource&&resource!==active&&resource!==parked)await destroyTarget(resource);
   };
   const setGeometry=(target:WebContentsView,value:Viewport):boolean=>{
@@ -106,7 +121,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const createView=async(instrumented:boolean):Promise<WebContentsView>=>{
     const preload=fileURLToPath(new URL('./target-preload.cjs',import.meta.url));
     const next=new WebContentsView({webPreferences:{...(instrumented?{preload}:{}),session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:false}});
-    next.setBackgroundColor('#ffffff');next.setVisible(false);
+    next.setBackgroundColor('#ffffff');next.setVisible(false);installCanvasInput(next);
     next.webContents.setWindowOpenHandler(({url})=>{startReload(next,url);return{action:'deny'};});
     next.webContents.on('did-navigate',(_event,url)=>{if(next===view&&/^https?:\/\//i.test(url))currentUrl=url;});
     if(instrumented){
@@ -121,7 +136,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const createResourceView=():WebContentsView=>{
     const next=new WebContentsView({webPreferences:{session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:true}});
-    next.setBackgroundColor('#ffffff');next.setVisible(false);return next;
+    next.setBackgroundColor('#ffffff');next.setVisible(false);installCanvasInput(next);return next;
   };
   const ensureView=async():Promise<WebContentsView>=>{if(view&&!view.webContents.isDestroyed())return view;view=await createView(instrumentationEnabled);return view;};
   const startReload=(target:WebContentsView,url:string):void=>{if(!url||target.webContents.isDestroyed())return;void target.webContents.loadURL(url).catch(error=>{if(!target.webContents.isDestroyed())console.warn('Blink reload failed',error);});};
@@ -144,7 +159,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
         const response=await targetSession.fetch(source,{method:'GET',credentials:'include',cache:'force-cache'});
         const headers=new Headers(response.headers);headers.set('access-control-allow-origin','*');headers.set('cache-control','no-store');headers.delete('set-cookie');headers.delete('content-security-policy');
         return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
-      }catch{return new Response('',{status:502});}
+      }catch{return new Response('',{status:502});
     });
   }catch(error){console.warn('Animator asset protocol unavailable',error);}
 
@@ -200,7 +215,11 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const viewport=(value:Viewport):void=>{lastViewport=value;syncAttachedTarget();};
   const setVisible=(visible:boolean):void=>{previewVisible=Boolean(visible);syncAttachedTarget();};
   const debugState=()=>({open:previewOpen,visible:previewVisible,resourceActive,attached:Boolean(attached&&!attached.webContents.isDestroyed()&&hostAttached),url:currentUrl});
-  const command=(value:unknown):void=>{if(instrumentationEnabled&&view&&!view.webContents.isDestroyed())view.webContents.send('animator:blink:command',value);};
+  const command=(value:unknown):void=>{
+    const internal=value as{source?:unknown;type?:unknown;handMode?:unknown}|undefined;
+    if(internal?.source==='animator-shell'&&internal.type==='SET_CANVAS_NAVIGATION'){canvasHandMode=Boolean(internal.handMode);if(!canvasHandMode)stopCanvasDrag();return;}
+    if(instrumentationEnabled&&view&&!view.webContents.isDestroyed())view.webContents.send('animator:blink:command',value);
+  };
   const pageMessage=(event:Electron.IpcMainEvent,value:unknown):void=>{if(!instrumentationEnabled||!view||event.sender.id!==view.webContents.id||window.isDestroyed())return;window.webContents.send('animator:blink:message',value);};
 
   ipcMain.handle('animator:blink:open',(event,payload:{url?:unknown})=>{if(!validSender(event.sender.id))throw new Error('Invalid Blink preview sender');return open(String(payload?.url??''));});
@@ -220,7 +239,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:visible',visibleHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
     targetSession.webRequest.onBeforeRequest(null);targetSession.webRequest.onSendHeaders(null);targetSession.webRequest.onResponseStarted(null);targetSession.webRequest.onCompleted(null);targetSession.webRequest.onBeforeRedirect(null);targetSession.webRequest.onErrorOccurred(null);
     try{await uiProtocol.unhandle('animator-asset');}catch{}
-    networkResources.clear();unmountHost();await disposeViews();
+    networkResources.clear();unmountHost();stopCanvasDrag();await disposeViews();
   };
   return{open,close,setInstrumentation,resources,openResource,closeResource,downloadResource,debugState,cleanup};
 }
