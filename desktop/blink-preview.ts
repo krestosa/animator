@@ -61,6 +61,12 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     if(view)return view;
     view=await createView(instrumentationEnabled);return view;
   };
+  const startReload=(target:WebContentsView,url:string):void=>{
+    if(!url)return;
+    void target.webContents.loadURL(url).catch(error=>{
+      if(!target.webContents.isDestroyed())console.warn('Blink reload failed',error);
+    });
+  };
 
   const open=async(url:string):Promise<void>=>{
     if(!/^https?:\/\//i.test(url))throw new Error('Blink preview only accepts http(s) URLs');
@@ -76,14 +82,11 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     view=null;if(previous)previous.setVisible(false);await destroyTarget(previous);
     instrumentationEnabled=nextEnabled;currentUrl=url;
     try{
-      const next=await createView(instrumentationEnabled);view=next;
-      if(url)await next.webContents.loadURL(url);
-      showTarget(next);return{enabled:instrumentationEnabled};
+      const next=await createView(instrumentationEnabled);view=next;showTarget(next);startReload(next,url);
+      return{enabled:instrumentationEnabled};
     }catch(error){
       await disposeView();instrumentationEnabled=previousEnabled;
-      const restored=await createView(instrumentationEnabled);view=restored;
-      if(url)await restored.webContents.loadURL(url).catch(()=>{});
-      showTarget(restored);throw error;
+      const restored=await createView(instrumentationEnabled);view=restored;showTarget(restored);startReload(restored,url);throw error;
     }
   };
   const resources=async():Promise<PageResource[]>=>{
