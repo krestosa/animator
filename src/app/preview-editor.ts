@@ -38,6 +38,7 @@ export function mountPreviewEditor(root:HTMLElement):()=>void{
   const click=(event:MouseEvent):void=>{const target=(event.target as Element|null)?.closest<HTMLElement>('[data-preview-live],[data-preview-step],[data-preview-recalculate],[data-preview-recapture]');if(!target)return;if(target.hasAttribute('data-preview-live'))release();else if(target.dataset.previewStep)step(Number(target.dataset.previewStep));else if(target.hasAttribute('data-preview-recalculate'))recalculate();else recapture();};
   const change=(event:Event):void=>{const target=event.target as HTMLInputElement|null;if(target?.matches('[data-preview-auto]'))setAutoCapture(target.checked);};
   const key=(event:KeyboardEvent):void=>{
+    if(event.defaultPrevented)return;
     const target=event.target as HTMLElement|null;if(target?.matches('input,textarea,select,[contenteditable="true"]'))return;
     if(event.key==='ArrowLeft'){event.preventDefault();step(event.shiftKey?-10:-1);}else if(event.key==='ArrowRight'){event.preventDefault();step(event.shiftKey?10:1);}else if(event.key==='Home'){event.preventDefault();seekFrame(0);}else if(event.key===' '&&!event.repeat){event.preventDefault();sendCommand(iframe(),{type:timelinePlaying?'PAUSE_ALL':'PLAY_ALL'});}
   };
