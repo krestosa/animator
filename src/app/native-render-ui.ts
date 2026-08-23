@@ -26,6 +26,14 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
     instrumentationOption.classList.toggle('clean',!instrumentationEnabled);
     instrumentationCheckbox.disabled=togglingInstrumentation;
   };
+  const setInputError=(message?:string):void=>{
+    if(message){input.setAttribute('aria-invalid','true');input.title=message;}
+    else{input.removeAttribute('aria-invalid');input.removeAttribute('title');}
+  };
+  const resolveInputUrl=():string|undefined=>{
+    const url=normalizeUrl(input.value);if(!url){setInputError('Ingresá una dirección web válida');store.set({diagnostics:[...store.get().diagnostics,'error: Dirección web inválida'].slice(-100)});return undefined;}
+    setInputError();input.value=url;return url;
+  };
   const applyInstrumentation=async(desired:boolean):Promise<void>=>{
     if(togglingInstrumentation)return;
     const project=store.get().project,blinkActive=Boolean(project&&!project.browserSessionId);
@@ -40,32 +48,41 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
     }finally{togglingInstrumentation=false;updateInstrumentationUi();}
   };
   const openBlink=async():Promise<void>=>{
-    const url=normalizeUrl(input.value);if(!url||opening)return;opening=true;openButton.disabled=true;openButton.textContent='Abriendo Blink…';
+    const url=resolveInputUrl();if(!url||opening)return;opening=true;openButton.disabled=true;openButton.textContent='Abriendo Blink…';
     try{
       await api.close();const desired=instrumentationCheckbox.checked,state=await api.setInstrumentation(desired);instrumentationEnabled=state.enabled;updateInstrumentationUi();
       const project:ProjectDescriptor={id:`blink-${hash(url)}`,root:url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:url,kind:'remote'};
       store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: Blink native render ${url}${instrumentationEnabled?'':' · clean'}`].slice(-100)});
-      await api.open(url);details.open=false;
+      details.open=false;
+      await api.open(url);
+      localStorage.setItem('animator.last-url',url);
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;openButton.disabled=false;openButton.textContent='Abrir en Blink';}
   };
   const openAlternate=async():Promise<void>=>{
-    const url=normalizeUrl(input.value);if(!url||opening)return;opening=true;altButton.disabled=true;altButton.textContent='Abriendo…';
+    const url=resolveInputUrl();if(!url||opening)return;opening=true;altButton.disabled=true;altButton.textContent='Abriendo…';
     try{
       const engine=browserEngine.value as BrowserEngine,selectedProfile=profile.value as BrowserProfile,width=selectedProfile==='mobile'?390:1100,height=selectedProfile==='mobile'?844:700;
       const response=await fetch('/api/browser-sessions/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url,width,height,engine,profile:selectedProfile})}),session=await response.json() as{id?:string;url?:string;engine?:BrowserEngine;profile?:BrowserProfile;width?:number;height?:number;external?:boolean;error?:string};
       if(!response.ok||!session.id)throw new Error(session.error??'No se pudo abrir el render alternativo');
       const project:ProjectDescriptor={id:session.id,root:session.url??url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:session.url??url,kind:'remote',browserSessionId:session.id,browserEngine:session.engine??engine,browserProfile:session.profile??selectedProfile,browserWidth:session.width??width,browserHeight:session.height??height,browserExternal:session.external??false};
-      store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${engine==='firefox'?'Firefox':'WebKit'} render ${url}`].slice(-100)});details.open=false;
+      store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${engine==='firefox'?'Firefox':'WebKit'} render ${url}`].slice(-100)});details.open=false;localStorage.setItem('animator.last-url',url);
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;altButton.disabled=false;altButton.textContent='Abrir render alternativo';}
   };
   const click=(event:MouseEvent):void=>{const target=event.target as Element|null;if(target?.closest('[data-web-open]')){event.preventDefault();event.stopImmediatePropagation();void openBlink();}else if(target?.closest('[data-native-alternate-open]')){event.preventDefault();event.stopImmediatePropagation();void openAlternate();}};
   const change=(event:Event):void=>{if(event.target===instrumentationCheckbox)void applyInstrumentation(instrumentationCheckbox.checked);};
+  const inputEvent=():void=>setInputError();
   const key=(event:KeyboardEvent):void=>{if(event.key==='Enter'&&event.target===input){event.preventDefault();event.stopImmediatePropagation();void openBlink();}};
-  details.addEventListener('click',click,true);details.addEventListener('change',change);details.addEventListener('keydown',key,true);updateInstrumentationUi();
-  return()=>{details.removeEventListener('click',click,true);details.removeEventListener('change',change);details.removeEventListener('keydown',key,true);blinkLabel.remove();instrumentationOption.remove();switcher.remove();};
+  details.addEventListener('click',click,true);details.addEventListener('change',change);details.addEventListener('keydown',key,true);input.addEventListener('input',inputEvent);updateInstrumentationUi();
+  return()=>{details.removeEventListener('click',click,true);details.removeEventListener('change',change);details.removeEventListener('keydown',key,true);input.removeEventListener('input',inputEvent);blinkLabel.remove();instrumentationOption.remove();switcher.remove();};
 }
 
-function normalizeUrl(value:string):string|undefined{try{const url=new URL(value.trim());return url.protocol==='http:'||url.protocol==='https:'?url.toString():undefined;}catch{return undefined;}}
+function normalizeUrl(value:string):string|undefined{
+  const raw=value.trim();if(!raw)return undefined;
+  const hasScheme=/^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
+  const local=/^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)(?::\d+)?(?:[/?#]|$)/i.test(raw);
+  const candidate=hasScheme?raw:`${local?'http':'https'}://${raw}`;
+  try{const url=new URL(candidate);return url.protocol==='http:'||url.protocol==='https:'?url.toString():undefined;}catch{return undefined;}
+}
 function hash(value:string):string{let result=2166136261;for(let index=0;index<value.length;index++){result^=value.charCodeAt(index);result=Math.imul(result,16777619);}return(result>>>0).toString(36);}
