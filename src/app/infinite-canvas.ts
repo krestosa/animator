@@ -7,7 +7,7 @@ type GridRenderer={render:(camera:CameraState)=>void;resize:()=>void;destroy:()=
 const minZoom=.12,maxZoom=6;
 
 export function mountInfiniteCanvas(root:HTMLElement):()=>void{
-  const stage=root.querySelector<HTMLElement>('.stage'),device=root.querySelector<HTMLElement>('[data-device]');
+  const stage=root.querySelector<HTMLElement>('.stage'),device=root.querySelector<HTMLElement>('[data-device]'),chrome=root.querySelector<HTMLElement>('[data-preview-chrome]');
   if(!stage||!device)return()=>{};
 
   const originalParent=device.parentElement,originalNext=device.nextSibling;
@@ -16,7 +16,7 @@ export function mountInfiniteCanvas(root:HTMLElement):()=>void{
   originalParent?.insertBefore(layer,device);layer.append(device);stage.prepend(grid);
 
   const controls=document.createElement('div');controls.className='workspaceCameraControls';controls.innerHTML=`<button type="button" data-canvas-hand aria-pressed="false" title="Hand tool · H"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 7V3.3a1 1 0 0 1 2 0V6h.5V2.7a1 1 0 1 1 2 0V6h.5V3.5a1 1 0 1 1 2 0v4.1l.5-.8a1 1 0 0 1 1.8.9l-2.2 4.1A4 4 0 0 1 9.3 14H8a4 4 0 0 1-3.3-1.8L2.2 8.5a1.05 1.05 0 0 1 1.7-1.2L5.2 9h.5V7Z"/></svg></button><span class="workspaceCameraDivider"></span><button type="button" data-canvas-zoom-out title="Zoom out">−</button><button type="button" data-canvas-zoom-label title="Reset zoom">100%</button><button type="button" data-canvas-zoom-in title="Zoom in">+</button><button type="button" data-canvas-fit title="Fit to view">Fit</button>`;
-  stage.append(controls);
+  (chrome??stage).append(controls);
   const handButton=controls.querySelector<HTMLButtonElement>('[data-canvas-hand]')!,zoomLabel=controls.querySelector<HTMLButtonElement>('[data-canvas-zoom-label]')!;
 
   const cameras=new Map<string,CameraState>();
