@@ -93,7 +93,11 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
     if(!server)throw new Error('Native Blink smoke test: server unavailable');
     const target=`${server.origin}/api/health`;
     await window.webContents.executeJavaScript(`window.animatorDesktop?.blink.open(${JSON.stringify(target)})`,true);
-    console.log('Native Blink smoke test: WebContentsView created and URL loaded');
+    const clean=await window.webContents.executeJavaScript('window.animatorDesktop?.blink.setInstrumentation(false)',true) as{enabled?:boolean}|undefined;
+    if(clean?.enabled!==false)throw new Error('Native Blink smoke test: clean mode did not activate');
+    const instrumented=await window.webContents.executeJavaScript('window.animatorDesktop?.blink.setInstrumentation(true)',true) as{enabled?:boolean}|undefined;
+    if(instrumented?.enabled!==true)throw new Error('Native Blink smoke test: instrumentation did not reactivate');
+    console.log('Native Blink smoke test: native view, clean reload and instrumented reload verified');
     await window.webContents.executeJavaScript('window.animatorDesktop?.blink.close()',true);
   }
   if(metrics){
