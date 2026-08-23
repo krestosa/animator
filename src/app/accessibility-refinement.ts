@@ -1,3 +1,13 @@
+const controlLabels:ReadonlyArray<[string,string]>=[
+  ['[data-path-input]','Project path'],
+  ['[data-playback-rate]','Playback rate'],
+  ['[data-viewport]','Preview viewport'],
+  ['[data-entry]','Preview page'],
+  ['[data-web-url]','Web page URL'],
+  ['[data-web-engine]','Preview engine'],
+  ['[data-reduced-motion]','Emulate reduced motion']
+];
+
 export function mountAccessibilityRefinement(root:HTMLElement):()=>void{
   let raf=0;
   const apply=():void=>{
@@ -13,15 +23,17 @@ export function mountAccessibilityRefinement(root:HTMLElement):()=>void{
       if(button.getAttribute('aria-label')||button.textContent?.trim())return;
       const label=button.title.trim();if(label)button.setAttribute('aria-label',label);
     });
+    for(const [selector,label] of controlLabels)root.querySelectorAll<HTMLElement>(selector).forEach(control=>{if(!control.getAttribute('aria-label'))control.setAttribute('aria-label',label);});
   };
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(apply);};
+  const openPopup=():HTMLDetailsElement|null=>root.querySelector<HTMLDetailsElement>('.toolbarMore[open],.webLoader[open]');
   const keydown=(event:KeyboardEvent):void=>{
     if(event.key!=='Escape')return;
-    const details=root.querySelector<HTMLDetailsElement>('.toolbarMore[open]');if(!details)return;
+    const details=openPopup();if(!details)return;
     details.open=false;details.querySelector<HTMLElement>('summary')?.focus();event.stopPropagation();
   };
   const pointerdown=(event:PointerEvent):void=>{
-    const details=root.querySelector<HTMLDetailsElement>('.toolbarMore[open]');if(!details)return;
+    const details=openPopup();if(!details)return;
     const target=event.target;if(target instanceof Node&&!details.contains(target))details.open=false;
   };
   const observer=new MutationObserver(schedule);observer.observe(root,{subtree:true,childList:true});
