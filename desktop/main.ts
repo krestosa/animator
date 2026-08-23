@@ -59,7 +59,27 @@ async function createMainWindow():Promise<void>{
   window.once('ready-to-show',()=>window.show());
   window.on('closed',()=>{if(mainWindow===window)mainWindow=null;});
   await window.loadURL(server.origin);
+  await runDiagnosticMode(window);
 }
+
+async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
+  const smoke=process.argv.includes('--smoke-test'),metrics=process.argv.includes('--metrics');
+  if(!smoke&&!metrics)return;
+  const mounted=await window.webContents.executeJavaScript("Boolean(document.querySelector('.app'))",true) as boolean;
+  if(!mounted)throw new Error('Electron smoke test: Animator UI did not mount');
+  if(smoke)console.log('Electron smoke test: UI mounted');
+  if(metrics){
+    await new Promise(resolve=>setTimeout(resolve,750));
+    const processes=app.getAppMetrics().map(metric=>({pid:metric.pid,type:metric.type,name:metric.name??metric.serviceName??'',workingSetMb:roundMb(metric.memory.workingSetSize),cpuPercent:Number(metric.cpu.percentCPUUsage.toFixed(2))}));
+    const workingSetMb=Number(processes.reduce((sum,item)=>sum+item.workingSetMb,0).toFixed(1));
+    console.log(JSON.stringify({workingSetMb,processes},null,2));
+  }
+  await shutdown();
+  window.destroy();
+  app.exit(0);
+}
+
+function roundMb(kb:number):number{return Number((kb/1024).toFixed(1));}
 
 async function shutdown():Promise<void>{
   if(quitting)return;
