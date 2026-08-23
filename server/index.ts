@@ -2,7 +2,6 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ViteDevServer } from 'vite';
-import { closeAllBrowserSessions } from './browser-session.js';
 import { createBrowserRouter } from './routes/browser.js';
 import { createControlRouter } from './routes/control.js';
 import { createExportRouter } from './routes/export.js';
@@ -55,6 +54,7 @@ export async function startAnimatorServer(options:AnimatorServerOptions={}):Prom
   const close=async():Promise<void>=>{
     if(closed)return;
     closed=true;
+    const {closeAllBrowserSessions}=await import('./browser-session.js');
     await closeAllBrowserSessions();
     if(vite)await vite.close();
     await new Promise<void>(resolve=>httpServer.close(()=>resolve()));
