@@ -95,16 +95,17 @@ export function mountInfiniteCanvas(root:HTMLElement):()=>void{
   const syncProject=():void=>{
     const next=contextKey();if(next===projectKey)return;saveCamera();projectKey=next;camera=next&&cameras.get(next)?{...cameras.get(next)!}:{x:0,y:0,zoom:1};requestApply();if(next&&!cameras.has(next))window.setTimeout(fit,60);
   };
-  const resize=new ResizeObserver(()=>{renderer?.resize();requestApply();});resize.observe(stage);
+  const resize=new ResizeObserver(entries=>{renderer?.resize();requestApply();if(entries.some(entry=>entry.target===device)&&device.dataset.customViewport)fit();});resize.observe(stage);resize.observe(device);
   const unsubscribe=store.subscribe(syncProject);
+  const fitRequest=():void=>fit();
   const api=window.animatorDesktop?.blink;api?.onMessage(nativeMessage);
-  stage.addEventListener('pointerdown',pointerDown,true);stage.addEventListener('pointermove',pointerMove,true);stage.addEventListener('pointerup',pointerEnd,true);stage.addEventListener('pointercancel',pointerEnd,true);stage.addEventListener('wheel',wheel,{capture:true,passive:false});controls.addEventListener('click',click);window.addEventListener('keydown',keyDown,true);window.addEventListener('keyup',keyUp,true);window.addEventListener('blur',blur);
+  stage.addEventListener('pointerdown',pointerDown,true);stage.addEventListener('pointermove',pointerMove,true);stage.addEventListener('pointerup',pointerEnd,true);stage.addEventListener('pointercancel',pointerEnd,true);stage.addEventListener('wheel',wheel,{capture:true,passive:false});controls.addEventListener('click',click);root.addEventListener('animator:workspace-fit-request',fitRequest);window.addEventListener('keydown',keyDown,true);window.addEventListener('keyup',keyUp,true);window.addEventListener('blur',blur);
 
   void createGridRenderer(grid).then(value=>{if(disposed){value.destroy();return;}renderer=value;renderer.resize();requestApply();}).catch(()=>{});
   requestApply();window.setTimeout(()=>{if(contextKey())fit();},80);
 
   return()=>{
-    disposed=true;if(applyRaf)cancelAnimationFrame(applyRaf);saveCamera();unsubscribe();resize.disconnect();api?.offMessage(nativeMessage);stage.removeEventListener('pointerdown',pointerDown,true);stage.removeEventListener('pointermove',pointerMove,true);stage.removeEventListener('pointerup',pointerEnd,true);stage.removeEventListener('pointercancel',pointerEnd,true);stage.removeEventListener('wheel',wheel,true);controls.removeEventListener('click',click);window.removeEventListener('keydown',keyDown,true);window.removeEventListener('keyup',keyUp,true);window.removeEventListener('blur',blur);renderer?.destroy();controls.remove();grid.remove();layer.replaceWith(device);if(originalParent&&device.parentElement!==originalParent)originalParent.insertBefore(device,originalNext);stage.classList.remove('workspaceHandMode','workspaceSpacePan','workspacePanning');
+    disposed=true;if(applyRaf)cancelAnimationFrame(applyRaf);saveCamera();unsubscribe();resize.disconnect();api?.offMessage(nativeMessage);stage.removeEventListener('pointerdown',pointerDown,true);stage.removeEventListener('pointermove',pointerMove,true);stage.removeEventListener('pointerup',pointerEnd,true);stage.removeEventListener('pointercancel',pointerEnd,true);stage.removeEventListener('wheel',wheel,true);controls.removeEventListener('click',click);root.removeEventListener('animator:workspace-fit-request',fitRequest);window.removeEventListener('keydown',keyDown,true);window.removeEventListener('keyup',keyUp,true);window.removeEventListener('blur',blur);renderer?.destroy();controls.remove();grid.remove();layer.replaceWith(device);if(originalParent&&device.parentElement!==originalParent)originalParent.insertBefore(device,originalNext);stage.classList.remove('workspaceHandMode','workspaceSpacePan','workspacePanning');
   };
 
   function contextKey():string{const project=store.get().project;return project?`${project.id}:${project.selectedEntry}`:'';}
