@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('animatorDesktop',{
     onResource:(handler:ResourceHandler)=>{resourceHandlers.add(handler);},
     offResource:(handler:ResourceHandler)=>{resourceHandlers.delete(handler);},
     setViewport:(viewport:Viewport)=>ipcRenderer.send('animator:blink:viewport',viewport),
+    setVisible:(visible:boolean)=>ipcRenderer.send('animator:blink:visible',visible),
     command:(command:unknown)=>ipcRenderer.send('animator:blink:command',command),
     onMessage:(handler:MessageHandler)=>{handlers.add(handler);},
     offMessage:(handler:MessageHandler)=>{handlers.delete(handler);}
