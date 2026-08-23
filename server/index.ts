@@ -18,33 +18,33 @@ export type AnimatorServerHandle={host:string;port:number;origin:string;close:()
 export type AnimatorServerOptions={host?:string;port?:number;production?:boolean};
 
 export async function startAnimatorServer(options:AnimatorServerOptions={}):Promise<AnimatorServerHandle>{
-  const expressApp=express();
+  const app=express();
   const projects=new ProjectService();
   const browserControl=new BrowserControlService();
 
-  expressApp.use(express.json({limit:'2mb'}));
-  expressApp.get('/api/health',(_req,res)=>res.json({ok:true}));
-  expressApp.use('/api/projects',createProjectRouter(projects));
-  expressApp.use('/api',createBrowserRouter(browserControl));
-  expressApp.use('/api/control',createControlRouter(browserControl));
-  expressApp.use('/api',createExportRouter(projects));
-  expressApp.use('/api',createScreenshotRouter());
-  expressApp.use('/__animator',createRuntimeRouter());
-  registerPreviewRoutes(expressApp);
+  app.use(express.json({limit:'2mb'}));
+  app.get('/api/health',(_req,res)=>res.json({ok:true}));
+  app.use('/api/projects',createProjectRouter(projects));
+  app.use('/api',createBrowserRouter(browserControl));
+  app.use('/api/control',createControlRouter(browserControl));
+  app.use('/api',createExportRouter(projects));
+  app.use('/api',createScreenshotRouter());
+  app.use('/__animator',createRuntimeRouter());
+  registerPreviewRoutes(app);
 
   const production=options.production??(process.env.NODE_ENV==='production'||process.argv.includes('--production'));
   let vite:ViteDevServer|undefined;
-  if(production)expressApp.use(express.static(path.resolve(__dirname,'../../dist')));
+  if(production)app.use(express.static(path.resolve(__dirname,'../../dist')));
   else{
     const {createServer:createViteServer}=await import('vite');
     vite=await createViteServer({server:{middlewareMode:true},appType:'spa'});
-    expressApp.use(vite.middlewares);
+    app.use(vite.middlewares);
   }
 
   const host=options.host??process.env.HOST??'127.0.0.1';
   const requestedPort=options.port??Number(process.env.PORT||5173);
-  const httpServer=await new Promise<ReturnType<typeof expressApp.listen>>((resolve,reject)=>{
-    const server=expressApp.listen(requestedPort,host,()=>resolve(server));
+  const httpServer=await new Promise<ReturnType<typeof app.listen>>((resolve,reject)=>{
+    const server=app.listen(requestedPort,host,()=>resolve(server));
     server.once('error',reject);
   });
   const address=httpServer.address();
