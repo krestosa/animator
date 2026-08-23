@@ -69,8 +69,8 @@ async function createMainWindow():Promise<void>{
 }
 
 async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
-  const smoke=process.argv.includes('--smoke-test'),nativeSmoke=process.argv.includes('--native-smoke-test'),metrics=process.argv.includes('--metrics');
-  if(!smoke&&!nativeSmoke&&!metrics)return;
+  const smoke=process.argv.includes('--smoke-test'),nativeSmoke=process.argv.includes('--native-smoke-test'),googleAssets=process.argv.includes('--google-assets-test'),metrics=process.argv.includes('--metrics');
+  if(!smoke&&!nativeSmoke&&!googleAssets&&!metrics)return;
   const mounted=await window.webContents.executeJavaScript("Boolean(document.querySelector('.app'))",true) as boolean;
   if(!mounted)throw new Error('Electron smoke test: Animator UI did not mount');
   if(smoke){
@@ -108,6 +108,22 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
     if(instrumented.enabled!==true)throw new Error(`Native Blink smoke test: instrumentation did not reactivate ${JSON.stringify(instrumented)}`);
     console.log('Native Blink smoke test: native view, assets capture, clean reload and instrumented reload verified');
     await bounded('native Blink close',blinkHandle.close(),3000);
+  }
+  if(googleAssets){
+    if(!blinkHandle)throw new Error('Google assets test: Blink runtime unavailable');
+    const target='https://www.google.com/';
+    console.log(`Google assets test: opening ${target}`);
+    await bounded('Google Blink open',blinkHandle.open(target),20000);
+    await new Promise(resolve=>setTimeout(resolve,1500));
+    const resources=await bounded('Google asset inventory',blinkHandle.resources(),5000);
+    const counts:Record<string,number>={};
+    for(const resource of resources)counts[resource.resourceType]=(counts[resource.resourceType]??0)+1;
+    const samples=resources.slice(0,25).map(resource=>({type:resource.resourceType,mime:resource.mimeType,url:resource.url}));
+    console.log(`Google assets test: ${resources.length} references ${JSON.stringify(counts)}`);
+    console.log(`Google assets samples: ${JSON.stringify(samples)}`);
+    if(resources.length<2)throw new Error(`Google assets test: expected multiple loaded assets, got ${resources.length}`);
+    if(!resources.some(resource=>!['mainFrame','document'].includes(resource.resourceType)))throw new Error('Google assets test: no non-document asset references captured');
+    await bounded('Google Blink close',blinkHandle.close(),3000);
   }
   if(metrics){
     await new Promise(resolve=>setTimeout(resolve,750));
