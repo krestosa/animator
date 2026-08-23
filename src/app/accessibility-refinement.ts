@@ -5,14 +5,21 @@ const controlLabels:ReadonlyArray<[string,string]>=[
   ['[data-entry]','Preview page'],
   ['[data-web-url]','Web page URL'],
   ['[data-web-engine]','Preview engine'],
-  ['[data-reduced-motion]','Emulate reduced motion']
+  ['[data-reduced-motion]','Emulate reduced motion'],
+  ['[data-dialog-close]','Close create animation dialog'],
+  ['[data-assets-refresh]','Refresh asset references'],
+  ['[data-canvas-hand]','Toggle hand tool'],
+  ['[data-canvas-zoom-out]','Zoom out canvas'],
+  ['[data-canvas-zoom-label]','Reset canvas zoom'],
+  ['[data-canvas-zoom-in]','Zoom in canvas'],
+  ['[data-canvas-fit]','Fit preview to view']
 ];
 
 export function mountAccessibilityRefinement(root:HTMLElement):()=>void{
   let raf=0;
   const apply=():void=>{
     raf=0;
-    root.querySelectorAll<HTMLElement>('.recordStateBadge,[data-preview-chrome] .previewMode').forEach(status=>{
+    root.querySelectorAll<HTMLElement>('.recordStateBadge,[data-preview-chrome] .previewMode,[data-assets-status],[data-preview-capture-status]').forEach(status=>{
       status.setAttribute('role','status');
       status.setAttribute('aria-live','polite');
       status.setAttribute('aria-atomic','true');
