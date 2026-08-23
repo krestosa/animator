@@ -73,7 +73,22 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
   if(!smoke&&!nativeSmoke&&!metrics)return;
   const mounted=await window.webContents.executeJavaScript("Boolean(document.querySelector('.app'))",true) as boolean;
   if(!mounted)throw new Error('Electron smoke test: Animator UI did not mount');
-  if(smoke)console.log('Electron smoke test: UI mounted');
+  if(smoke){
+    const shellState=await window.webContents.executeJavaScript(`(()=>{
+      const app=document.querySelector('.app'),tabs=document.querySelector('.workspaceTabs'),toggle=document.querySelector('[data-timeline-toggle]'),timeline=document.querySelector('.timeline'),stage=document.querySelector('.stage'),device=document.querySelector('[data-device]');
+      if(!(app instanceof HTMLElement)||!(tabs instanceof HTMLElement)||!(toggle instanceof HTMLButtonElement)||!(timeline instanceof HTMLElement)||!(stage instanceof HTMLElement)||!(device instanceof HTMLElement))return{ok:false,reason:'workspace controls missing'};
+      const initialHidden=timeline.getAttribute('aria-hidden')==='true'&&!app.classList.contains('timeline-open');
+      const stageBefore=stage.getBoundingClientRect().height,deviceBefore=device.getBoundingClientRect().height;
+      toggle.click();
+      const open=app.classList.contains('timeline-open')&&timeline.getAttribute('aria-hidden')==='false'&&getComputedStyle(timeline).position==='absolute';
+      const stageAfter=stage.getBoundingClientRect().height,deviceAfter=device.getBoundingClientRect().height;
+      toggle.click();
+      const closed=!app.classList.contains('timeline-open')&&timeline.getAttribute('aria-hidden')==='true';
+      return{ok:initialHidden&&open&&closed&&Math.abs(stageBefore-stageAfter)<.01&&Math.abs(deviceBefore-deviceAfter)<.01,initialHidden,open,closed,stageBefore,stageAfter,deviceBefore,deviceAfter};
+    })()`,true) as{ok:boolean;reason?:string;[key:string]:unknown};
+    if(!shellState.ok)throw new Error(`Electron smoke test: workspace shell invariant failed ${JSON.stringify(shellState)}`);
+    console.log('Electron smoke test: UI mounted; tabs and overlay timeline verified');
+  }
   if(nativeSmoke){
     if(!server)throw new Error('Native Blink smoke test: server unavailable');
     const target=`${server.origin}/api/health`;
