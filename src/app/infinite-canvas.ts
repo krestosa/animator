@@ -60,7 +60,7 @@ export function mountInfiniteCanvas(root:HTMLElement):()=>void{
     event.preventDefault();event.stopImmediatePropagation();dragging=true;dragPointer=event.pointerId;lastX=event.clientX;lastY=event.clientY;stage.classList.add('workspacePanning');try{stage.setPointerCapture(event.pointerId);}catch{}
   };
   const pointerMove=(event:PointerEvent):void=>{if(!dragging||event.pointerId!==dragPointer)return;event.preventDefault();event.stopImmediatePropagation();const dx=event.clientX-lastX,dy=event.clientY-lastY;lastX=event.clientX;lastY=event.clientY;if(Math.abs(dx)>.01||Math.abs(dy)>.01)pan(dx,dy);};
-  function endDrag():void{if(!dragging)return;try{if(dragPointer>=0&&stage.hasPointerCapture(dragPointer))stage.releasePointerCapture(dragPointer);}catch{}dragging=false;dragPointer=-1;stage.classList.remove('workspacePanning');}
+  function endDrag():void{if(!dragging)return;try{if(dragPointer>=0&&stage!.hasPointerCapture(dragPointer))stage!.releasePointerCapture(dragPointer);}catch{}dragging=false;dragPointer=-1;stage!.classList.remove('workspacePanning');}
   const pointerEnd=(event:PointerEvent):void=>{if(dragging&&event.pointerId===dragPointer){event.preventDefault();endDrag();}};
   const wheel=(event:WheelEvent):void=>{
     if(!stage.contains(event.target as Node))return;
