@@ -1,10 +1,11 @@
 export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
   if(window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__)return;window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__=true;
-  let recording=true,timer=0,busy=false,guardActive=false;const topLevel=window===window.top;
+  let recording=true,timer=0,idleHandle=0,busy=false,guardActive=false,lastCapture=0,lastInteraction=performance.now();const topLevel=window===window.top,heartbeatMs=12000,quietMs=1400;
   const capturable=()=>location.protocol==='http:'||location.protocol==='https:';
   const emit=payload=>{const target=window.__animatorEmit;if(typeof target!=='function')return;try{void target(payload);}catch{}};
   const guardText={preparing:['Preparing reconstruction…','Animator is securing this page before interaction is enabled.'],finalizing:['Finalizing reconstruction…','Capture is stopped. Animator is finishing the document for the timeline.'],complete:['Capture complete','The reconstructed page is ready in Animator.']};
-  const blockEvent=event=>{if(!guardActive)return;event.preventDefault();event.stopImmediatePropagation();};
+  const noteInteraction=()=>{lastInteraction=performance.now();};
+  const blockEvent=event=>{noteInteraction();if(!guardActive)return;event.preventDefault();event.stopImmediatePropagation();};
   if(topLevel)for(const type of ['pointerdown','mousedown','touchstart','click','wheel','keydown'])addEventListener(type,blockEvent,{capture:true,passive:false});
   const setGuard=(enabled,mode='preparing')=>{
     if(!topLevel)return;guardActive=!!enabled;let overlay=document.querySelector('[data-animator-reconstruction-guard]');
@@ -14,21 +15,24 @@ export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
     const copy=guardText[mode]||guardText.preparing,card=overlay.querySelector('[data-animator-reconstruction-card]');card.querySelector('strong').textContent=copy[0];card.querySelector('span').textContent=copy[1];const dot=card.querySelector('i');dot.style.display=mode==='complete'?'none':'block';
   };
   if(topLevel){const bootGuard=()=>document.documentElement&&setGuard(true,'preparing');if(!bootGuard())addEventListener('DOMContentLoaded',bootGuard,{once:true});}
-  const capture=()=>{
-    if(!recording||busy||!capturable()||!document.documentElement||typeof window.__animatorEmit!=='function')return;busy=true;
+  const capture=force=>{
+    if(!recording||busy||!capturable()||!document.documentElement||typeof window.__animatorEmit!=='function')return false;if(!force&&performance.now()-lastInteraction<quietMs)return false;busy=true;
     try{
       const idFor=window.__ANIMATOR_ELEMENT_ID__,marked=[],all=[document.documentElement,...document.documentElement.querySelectorAll('*')];
       for(const element of all){if(!(element instanceof Element)||element.hasAttribute('data-animator-internal'))continue;const id=typeof idFor==='function'?idFor(element):element.id?'dom-'+element.id:'';if(!id)continue;marked.push([element,element.getAttribute('data-animator-capture-id')]);element.setAttribute('data-animator-capture-id',id);}
       const animations=[];
       for(const animation of document.getAnimations?.()??[]){const effect=animation.effect;if(!(effect instanceof KeyframeEffect))continue;const target=effect.target;if(!(target instanceof Element)||target.hasAttribute('data-animator-internal'))continue;const elementId=typeof idFor==='function'?idFor(target):target.getAttribute('data-animator-capture-id')||'';if(!elementId)continue;let timing={},rawFrames=[];try{timing=effect.getComputedTiming();rawFrames=effect.getKeyframes();}catch{}const keyframes=rawFrames.map(frame=>{const out={};for(const [key,value] of Object.entries(frame))if(value!==undefined)out[key]=value===null||typeof value==='number'||typeof value==='string'?value:String(value);return out;}),object=animation,current=Number(animation.currentTime),rate=Math.abs(Number(animation.playbackRate))||1,id=object.__animatorId||'anim-emergency-'+(animations.length+1),knownStart=Number(object.__animatorBrowserStartTime),iterations=Number(timing.iterations);animations.push({id,elementId,startTime:Number.isFinite(knownStart)?knownStart:Math.max(0,performance.now()-(Number.isFinite(current)?Math.max(0,current)/rate:0)),duration:Number(timing.duration)||0,delay:Number(timing.delay)||0,iterations:Number.isFinite(iterations)?iterations:'Infinity',direction:String(timing.direction||'normal'),easing:String(timing.easing||'linear'),fill:String(timing.fill||'both'),keyframes,currentTime:Number.isFinite(current)?current:null,playbackRate:Number(animation.playbackRate)||1});}
-      const clone=document.documentElement.cloneNode(true);for(const [element,previous] of marked){if(previous==null)element.removeAttribute('data-animator-capture-id');else element.setAttribute('data-animator-capture-id',previous);}clone.querySelectorAll('script,[data-animator-internal],[data-animator-picker-outline],[data-animator-recorded-viewport],[data-animator-recorded-cursor]').forEach(node=>node.remove());clone.querySelectorAll('meta[http-equiv]').forEach(node=>{if((node.getAttribute('http-equiv')||'').toLowerCase()==='content-security-policy')node.remove();});clone.querySelectorAll('base').forEach(node=>node.remove());emit({source:'animator-preview',type:'BROWSER_CHECKPOINT',html:'<!doctype html>'+clone.outerHTML,url:location.href,scrollX,scrollY,history:window.__ANIMATOR_VIEW_HISTORY__?.snapshot?.()??[],animations,visuals:[],capturedAt:Date.now()});
-    }catch{}finally{busy=false;}
+      const clone=document.documentElement.cloneNode(true);for(const [element,previous] of marked){if(previous==null)element.removeAttribute('data-animator-capture-id');else element.setAttribute('data-animator-capture-id',previous);}clone.querySelectorAll('script,[data-animator-internal],[data-animator-picker-outline],[data-animator-recorded-viewport],[data-animator-recorded-cursor]').forEach(node=>node.remove());clone.querySelectorAll('meta[http-equiv]').forEach(node=>{if((node.getAttribute('http-equiv')||'').toLowerCase()==='content-security-policy')node.remove();});clone.querySelectorAll('base').forEach(node=>node.remove());const capturedAt=Date.now();emit({source:'animator-preview',type:'BROWSER_CHECKPOINT',html:'<!doctype html>'+clone.outerHTML,url:location.href,scrollX,scrollY,history:window.__ANIMATOR_VIEW_HISTORY__?.snapshot?.()??[],animations,visuals:[],capturedAt});lastCapture=capturedAt;return true;
+    }catch{return false;}finally{busy=false;}
   };
-  const schedule=delay=>{if(timer)clearTimeout(timer);if(!recording||typeof window.__animatorEmit!=='function')return;timer=setTimeout(()=>{timer=0;capture();schedule(900);},Math.max(80,Number(delay)||900));};
-  addEventListener('message',event=>{const message=event.data;if(!message||typeof message.type!=='string')return;if(message.type==='SET_RECONSTRUCTION_GUARD'&&(message.source==='animator-editor'||message.source==='animator-timeline')){setGuard(message.enabled!==false,String(message.mode||'preparing'));return;}if(message.type==='CAPTURE_BROWSER_CHECKPOINT'&&message.source==='animator-editor'){capture();schedule(900);return;}if(message.type!=='SET_RECORDING'||(message.source!=='animator-editor'&&message.source!=='animator-timeline'))return;recording=!!message.enabled;if(recording){setGuard(true,'preparing');capture();schedule(900);}else{setGuard(true,'finalizing');if(timer){clearTimeout(timer);timer=0;}}});
-  addEventListener('DOMContentLoaded',()=>{capture();schedule(900);},{once:true});
-  addEventListener('load',()=>capture(),{once:true});
-  addEventListener('pagehide',()=>capture(),{capture:true});
-  addEventListener('beforeunload',()=>capture(),{capture:true});
-  schedule(160);
+  const cancelScheduled=()=>{if(timer){clearTimeout(timer);timer=0;}if(idleHandle&&typeof cancelIdleCallback==='function'){try{cancelIdleCallback(idleHandle);}catch{}idleHandle=0;}};
+  const runIdle=()=>{idleHandle=0;if(!recording)return;const quietFor=performance.now()-lastInteraction;if(quietFor<quietMs){schedule(quietMs-quietFor+250);return;}capture(false);schedule(heartbeatMs);};
+  const schedule=delay=>{cancelScheduled();if(!recording||typeof window.__animatorEmit!=='function')return;timer=setTimeout(()=>{timer=0;if(typeof requestIdleCallback==='function')idleHandle=requestIdleCallback(runIdle,{timeout:2500});else runIdle();},Math.max(250,Number(delay)||heartbeatMs));};
+  const captureIfStale=(maxAge=2000)=>{if(Date.now()-lastCapture>maxAge)capture(true);};
+  addEventListener('message',event=>{const message=event.data;if(!message||typeof message.type!=='string')return;if(message.type==='SET_RECONSTRUCTION_GUARD'&&(message.source==='animator-editor'||message.source==='animator-timeline')){setGuard(message.enabled!==false,String(message.mode||'preparing'));return;}if(message.type==='CAPTURE_BROWSER_CHECKPOINT'&&message.source==='animator-editor'){captureIfStale(1000);schedule(heartbeatMs);return;}if(message.type!=='SET_RECORDING'||(message.source!=='animator-editor'&&message.source!=='animator-timeline'))return;recording=!!message.enabled;if(recording){setGuard(true,'preparing');captureIfStale(1000);schedule(heartbeatMs);}else{setGuard(true,'finalizing');cancelScheduled();}});
+  addEventListener('DOMContentLoaded',()=>{captureIfStale(0);schedule(heartbeatMs);},{once:true});
+  addEventListener('load',()=>captureIfStale(2500),{once:true});
+  addEventListener('pagehide',()=>captureIfStale(500),{capture:true});
+  addEventListener('beforeunload',()=>captureIfStale(500),{capture:true});
+  schedule(250);
 })();`;
