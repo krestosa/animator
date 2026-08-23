@@ -114,16 +114,18 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
       return svg?new Response(svg,{status:200,headers:{'content-type':'image/svg+xml;charset=utf-8','cache-control':'no-store'}}):new Response('',{status:404});
     }catch{return new Response('',{status:404});}
   };
-  void uiProtocol.handle('animator-asset',async request=>{
-    try{
-      const source=new URL(request.url).searchParams.get('url')??'';
-      if(/^dom:\/\/inline-svg\/\d+$/.test(source))return await resolveDomPreview(source);
-      if(!/^https?:\/\//i.test(source))return new Response('',{status:404});
-      const response=await targetSession.fetch(source,{method:'GET',credentials:'include',cache:'force-cache'});
-      const headers=new Headers(response.headers);headers.set('access-control-allow-origin','*');
-      return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
-    }catch{return new Response('',{status:502});}
-  }).catch(error=>console.warn('Animator asset protocol unavailable',error));
+  try{
+    uiProtocol.handle('animator-asset',async request=>{
+      try{
+        const source=new URL(request.url).searchParams.get('url')??'';
+        if(/^dom:\/\/inline-svg\/\d+$/.test(source))return await resolveDomPreview(source);
+        if(!/^https?:\/\//i.test(source))return new Response('',{status:404});
+        const response=await targetSession.fetch(source,{method:'GET',credentials:'include',cache:'force-cache'});
+        const headers=new Headers(response.headers);headers.set('access-control-allow-origin','*');
+        return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+      }catch{return new Response('',{status:502});}
+    });
+  }catch(error){console.warn('Animator asset protocol unavailable',error);}
 
   const closeResource=async():Promise<void>=>{resourceActive=false;if(resourceView&&!resourceView.webContents.isDestroyed())resourceView.setVisible(false);if(view&&!view.webContents.isDestroyed())showTarget(view);};
   const openResource=async(url:string):Promise<void>=>{
