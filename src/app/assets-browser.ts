@@ -44,5 +44,5 @@ function glyph(category:AssetCategory):string{return({media:'MEDIA',typography:'
 function formatBytes(v:number):string{if(v<1024)return`${v} B`;if(v<1048576)return`${(v/1024).toFixed(v<10240?1:0)} KB`;return`${(v/1048576).toFixed(1)} MB`;}
 function host(value:string):string{try{const url=new URL(value);return url.protocol==='dom:'?'DOM':url.hostname||url.protocol.replace(':','');}catch{return value;}}
 function hash(value:string):string{let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36);}
-function html(value:string):string{return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'})[c]??c);}
+function html(value:string):string{return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]??c);}
 function attr(value:string):string{return html(value);}
