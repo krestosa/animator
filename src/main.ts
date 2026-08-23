@@ -15,6 +15,7 @@ import './app/dense-layout.css';
 import './app/timeline-redesign.css';
 import './app/workspace-shell.css';
 import './app/left-panel-tabs.css';
+import './app/assets-browser.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
@@ -36,6 +37,7 @@ import { mountDomLoadTree } from './app/dom-load-tree';
 import { mountControlSync } from './app/control-sync';
 import { mountViewportScreenshot } from './app/viewport-screenshot';
 import { mountWorkspaceShell } from './app/workspace-shell';
+import { mountAssetsBrowser } from './app/assets-browser';
 import { mountLeftPanelTabs } from './app/left-panel-tabs';
 import { installPreviewNavigationGate, mountRecordGate } from './app/record-gate';
 
@@ -65,7 +67,8 @@ const cleanupLoadTimeline=mountLoadTimeline(root);
 const cleanupDomLoadTree=mountDomLoadTree(root);
 const cleanupViewportScreenshot=mountViewportScreenshot(root);
 const cleanupWorkspaceShell=mountWorkspaceShell(root);
+const cleanupAssetsBrowser=mountAssetsBrowser(root);
 const cleanupLeftPanelTabs=mountLeftPanelTabs(root);
-const cleanup=():void=>{cleanupLeftPanelTabs();cleanupWorkspaceShell();cleanupViewportScreenshot();cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupNativeBlinkPreview();cleanupNativeRenderUi();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
+const cleanup=():void=>{cleanupLeftPanelTabs();cleanupAssetsBrowser();cleanupWorkspaceShell();cleanupViewportScreenshot();cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupNativeBlinkPreview();cleanupNativeRenderUi();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
 
 if(import.meta.hot)import.meta.hot.dispose(cleanup);
