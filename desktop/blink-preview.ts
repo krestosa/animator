@@ -31,6 +31,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const networkFilter={urls:['<all_urls>']};
   const uiProtocol=window.webContents.session.protocol;
   const clipHost=new View();
+  const viewAlive=(target:WebContentsView|null|undefined):target is WebContentsView=>{try{return Boolean(target?.webContents&&!target.webContents.isDestroyed());}catch{return false;}};
 
   const publishResource=(resource:PageResource):void=>{if(!window.isDestroyed())window.webContents.send('animator:blink:resource',resource);};
   const captureResource=(details:{url:string;resourceType?:string;method?:string;timestamp?:number;responseHeaders?:Record<string,string[]>;statusCode?:number;fromCache?:boolean}):void=>{
@@ -79,7 +80,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const unmountHost=():void=>{if(!hostAttached||window.isDestroyed())return;try{window.contentView.removeChildView(clipHost);}catch{}hostAttached=false;};
   const unmountTarget=(target:WebContentsView|null):void=>{
-    if(!target||target.webContents.isDestroyed())return;
+    if(!viewAlive(target))return;
     if(canvasDragTargetId===target.webContents.id)stopCanvasDrag();
     try{target.setVisible(false);}catch{}
     try{clipHost.removeChildView(target);}catch{}
@@ -91,7 +92,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const destroyTarget=async(target:WebContentsView|null):Promise<void>=>{
     if(!target)return;detachTarget(target);
-    const contents=target.webContents;if(contents.isDestroyed())return;
+    if(!viewAlive(target))return;const contents=target.webContents;
     await new Promise<void>(resolve=>{
       let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(timer);resolve();};
       const timer=setTimeout(finish,500);
@@ -116,7 +117,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const syncAttachedTarget=():void=>{
     const active=activeTarget();
     for(const target of [view,resourceView])if(target&&target!==active)unmountTarget(target);
-    if(!active||active.webContents.isDestroyed()||!previewVisible||!lastViewport){if(active)unmountTarget(active);unmountHost();return;}
+    if(!viewAlive(active)||!previewVisible||!lastViewport){if(active)unmountTarget(active);unmountHost();return;}
     if(!setGeometry(active,lastViewport)){lastAttachError='geometry: outside clip';unmountTarget(active);unmountHost();return;}
     mountHost();
     if(!hostAttached){unmountTarget(active);return;}
@@ -148,11 +149,11 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     const next=new WebContentsView({webPreferences:{session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:true}});
     next.setBackgroundColor('#ffffff');next.setVisible(false);installCanvasInput(next);return next;
   };
-  const ensureView=async():Promise<WebContentsView>=>{if(view&&!view.webContents.isDestroyed())return view;view=await createView(instrumentationEnabled);return view;};
-  const startReload=(target:WebContentsView,url:string):void=>{if(!url||target.webContents.isDestroyed())return;void target.webContents.loadURL(url).catch(error=>{if(!target.webContents.isDestroyed())console.warn('Blink reload failed',error);});};
+  const ensureView=async():Promise<WebContentsView>=>{if(viewAlive(view))return view;view=await createView(instrumentationEnabled);return view;};
+  const startReload=(target:WebContentsView,url:string):void=>{if(!url||!viewAlive(target))return;const contents=target.webContents;void contents.loadURL(url).catch(error=>{if(!contents.isDestroyed())console.warn('Blink reload failed',error);});};
 
   const resolveDomPreview=async(source:string):Promise<Response>=>{
-    if(!instrumentationEnabled||!view||view.webContents.isDestroyed())return new Response('',{status:404});
+    if(!instrumentationEnabled||!viewAlive(view))return new Response('',{status:404});
     const match=/^dom:\/\/inline-svg\/(\d+)$/.exec(source);if(!match)return new Response('',{status:404});
     const index=Number(match[1]);
     try{
@@ -176,7 +177,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const closeResource=async():Promise<void>=>{resourceActive=false;unmountTarget(resourceView);syncAttachedTarget();};
   const openResource=async(url:string):Promise<void>=>{
     if(!/^(?:https?|blob|data):/i.test(url))throw new Error('Unsupported resource URL');
-    const target=resourceView&&!resourceView.webContents.isDestroyed()?resourceView:(resourceView=createResourceView());
+    const target=viewAlive(resourceView)?resourceView:(resourceView=createResourceView());
     resourceActive=true;syncAttachedTarget();
     if(target.webContents.getURL()!==url)await target.webContents.loadURL(url);
   };
@@ -207,16 +208,16 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     const url=currentUrl;
     if(!nextEnabled){
       const instrumented=view;
-      try{const clean=await createView(false);if(instrumented){unmountTarget(instrumented);parkedInstrumented=instrumented;instrumented.webContents.stop();startReload(instrumented,'about:blank');}view=clean;instrumentationEnabled=false;syncAttachedTarget();if(previewOpen&&url)startReload(clean,url);return{enabled:false};}
-      catch(error){if(instrumented){view=instrumented;syncAttachedTarget();}throw error;}
+      try{const clean=await createView(false);if(viewAlive(instrumented)){unmountTarget(instrumented);parkedInstrumented=instrumented;instrumented.webContents.stop();startReload(instrumented,'about:blank');}else parkedInstrumented=null;view=clean;instrumentationEnabled=false;syncAttachedTarget();if(previewOpen&&url)startReload(clean,url);return{enabled:false};}
+      catch(error){if(viewAlive(instrumented)){view=instrumented;syncAttachedTarget();}else view=null;throw error;}
     }
     const clean=view,prepared=parkedInstrumented;parkedInstrumented=null;if(clean)unmountTarget(clean);let instrumented=prepared;
-    try{if(!instrumented||instrumented.webContents.isDestroyed())instrumented=await createView(true);view=instrumented;instrumentationEnabled=true;syncAttachedTarget();if(previewOpen&&url)startReload(instrumented,url);if(clean&&clean!==instrumented)await destroyTarget(clean);return{enabled:true};}
-    catch(error){if(clean&&!clean.webContents.isDestroyed()){view=clean;instrumentationEnabled=false;syncAttachedTarget();}if(instrumented&&instrumented!==prepared)await destroyTarget(instrumented);parkedInstrumented=prepared&&!prepared.webContents.isDestroyed()?prepared:null;throw error;}
+    try{if(!viewAlive(instrumented))instrumented=await createView(true);view=instrumented;instrumentationEnabled=true;syncAttachedTarget();if(previewOpen&&url)startReload(instrumented,url);if(clean&&clean!==instrumented)await destroyTarget(clean);return{enabled:true};}
+    catch(error){if(viewAlive(clean)){view=clean;instrumentationEnabled=false;syncAttachedTarget();}if(instrumented&&instrumented!==prepared)await destroyTarget(instrumented);parkedInstrumented=viewAlive(prepared)?prepared:null;throw error;}
   };
   const resources=async():Promise<PageResource[]>=>{
     const merged=new Map<string,PageResource>(networkResources);
-    if(instrumentationEnabled&&view&&!view.webContents.isDestroyed()){
+    if(instrumentationEnabled&&viewAlive(view)){
       const references=await collectPageAssetReferences(view.webContents);
       for(const reference of references)if(!merged.has(reference.url))merged.set(reference.url,reference);
     }
@@ -224,13 +225,13 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const viewport=(value:Viewport):void=>{lastViewport=value;syncAttachedTarget();};
   const setVisible=(visible:boolean):void=>{previewVisible=Boolean(visible);syncAttachedTarget();};
-  const debugState=()=>({open:previewOpen,visible:previewVisible,resourceActive,attached:Boolean(attached&&!attached.webContents.isDestroyed()&&hostAttached),url:currentUrl,hasViewport:Boolean(lastViewport),...(lastViewport?{viewport:lastViewport}:{}),hostAttached,attachError:lastAttachError});
+  const debugState=()=>({open:previewOpen,visible:previewVisible,resourceActive,attached:Boolean(viewAlive(attached)&&hostAttached),url:currentUrl,hasViewport:Boolean(lastViewport),...(lastViewport?{viewport:lastViewport}:{}),hostAttached,attachError:lastAttachError});
   const command=(value:unknown):void=>{
     const internal=value as{source?:unknown;type?:unknown;handMode?:unknown}|undefined;
     if(internal?.source==='animator-shell'&&internal.type==='SET_CANVAS_NAVIGATION'){canvasHandMode=Boolean(internal.handMode);if(!canvasHandMode)stopCanvasDrag();return;}
-    if(instrumentationEnabled&&view&&!view.webContents.isDestroyed())view.webContents.send('animator:blink:command',value);
+    if(instrumentationEnabled&&viewAlive(view))view.webContents.send('animator:blink:command',value);
   };
-  const pageMessage=(event:Electron.IpcMainEvent,value:unknown):void=>{if(!instrumentationEnabled||!view||event.sender.id!==view.webContents.id||window.isDestroyed())return;window.webContents.send('animator:blink:message',value);};
+  const pageMessage=(event:Electron.IpcMainEvent,value:unknown):void=>{if(!instrumentationEnabled||!viewAlive(view)||event.sender.id!==view.webContents.id||window.isDestroyed())return;window.webContents.send('animator:blink:message',value);};
 
   ipcMain.handle('animator:blink:open',(event,payload:{url?:unknown})=>{if(!validSender(event.sender.id))throw new Error('Invalid Blink preview sender');return open(String(payload?.url??''));});
   ipcMain.handle('animator:blink:close',event=>{if(!validSender(event.sender.id))throw new Error('Invalid Blink preview sender');return close();});

@@ -2,7 +2,7 @@ import { store } from '../state/store';
 
 export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const api=window.animatorDesktop?.blink,device=root.querySelector<HTMLElement>('[data-device]'),stage=root.querySelector<HTMLElement>('.stage'),webLoader=root.querySelector<HTMLDetailsElement>('.webLoader'),app=root.querySelector<HTMLElement>('.app'),timeline=root.querySelector<HTMLElement>('.timeline');if(!api||!device||!stage)return()=>{};
-  let disposed=false,currentKey='',generation=0,raf=0,lastOccluded=Boolean(webLoader?.open);
+  let disposed=false,currentKey='',generation=0,raf=0;
 
   const removeLegacyFrame=():void=>{if(store.get().project?.browserSessionId)return;device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());};
   const blinkActive=():boolean=>{const project=store.get().project;return Boolean(project&&!project.browserSessionId);};
@@ -11,15 +11,17 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
     const stageRect=stage.getBoundingClientRect();
     for(const element of root.querySelectorAll<HTMLElement>('dialog[open],details[open]')){
       if(timeline?.contains(element))continue;
-      if(element===webLoader)return true;
-      const rect=element.getBoundingClientRect();if(rect.width<1||rect.height<1||!overlaps(rect,stageRect))continue;
-      if(element instanceof HTMLDialogElement)return true;
-      const position=getComputedStyle(element).position;if(position==='absolute'||position==='fixed'||position==='sticky')return true;
+      if(element instanceof HTMLDialogElement){const rect=element.getBoundingClientRect();if(rect.width>0&&rect.height>0&&overlaps(rect,stageRect))return true;continue;}
+      for(const child of [...element.children]){
+        if(!(child instanceof HTMLElement)||child.tagName==='SUMMARY')continue;
+        const style=getComputedStyle(child);if(style.display==='none'||style.visibility==='hidden')continue;
+        const rect=child.getBoundingClientRect();if(rect.width>0&&rect.height>0&&overlaps(rect,stageRect))return true;
+      }
     }
     return false;
   };
   const syncSurfaceVisibility=():boolean=>{
-    const occluded=floatingOverlayOpen();lastOccluded=occluded;
+    const occluded=floatingOverlayOpen();
     api.setVisible(blinkActive()&&!occluded);
     return occluded;
   };
@@ -70,14 +72,14 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const unsubscribe=store.subscribe(()=>void sync());
   const mutations=new MutationObserver(()=>{removeLegacyFrame();scheduleViewport();});mutations.observe(device,{childList:true,attributes:true,attributeFilter:['style','class']});
   const resize=new ResizeObserver(scheduleViewport);resize.observe(device);resize.observe(stage);if(timeline)resize.observe(timeline);
-  const syncLoaderState=():void=>{const occluded=floatingOverlayOpen();lastOccluded=occluded;syncSurfaceVisibility();if(!occluded)syncViewport();};
+  const syncLoaderState=():void=>{const occluded=floatingOverlayOpen();syncSurfaceVisibility();if(!occluded)syncViewport();};
   const loaderObserver=webLoader?new MutationObserver(syncLoaderState):null;loaderObserver?.observe(webLoader!,{attributes:true,attributeFilter:['open']});
   const workspaceObserver=app?new MutationObserver(scheduleViewport):null;workspaceObserver?.observe(app!,{attributes:true,attributeFilter:['class']});
   const timelineObserver=timeline?new MutationObserver(scheduleViewport):null;timelineObserver?.observe(timeline!,{attributes:true,attributeFilter:['aria-hidden','style','class']});
   const floatingObserver=new MutationObserver(scheduleViewport);floatingObserver.observe(root,{subtree:true,attributes:true,attributeFilter:['open']});
   const onWebLoaderToggle=():void=>syncLoaderState();
   const loaderSummary=webLoader?.querySelector<HTMLElement>('summary');
-  const onLoaderPointerDown=():void=>{if(webLoader&&!webLoader.open){lastOccluded=true;api.setVisible(false);}};
+  const onLoaderPointerDown=():void=>{if(webLoader&&!webLoader.open)api.setVisible(false);};
   const onCameraChange=():void=>scheduleViewport();
   const onTimelineTransition=():void=>scheduleViewport();
   webLoader?.addEventListener('toggle',onWebLoaderToggle);loaderSummary?.addEventListener('pointerdown',onLoaderPointerDown,true);timeline?.addEventListener('transitionrun',onTimelineTransition);timeline?.addEventListener('transitionend',onTimelineTransition);root.addEventListener('animator:workspace-camera-change',onCameraChange);

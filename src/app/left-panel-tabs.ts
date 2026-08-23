@@ -10,11 +10,11 @@ const icons={
 } as const;
 
 type PanelKind=keyof typeof icons;
-type PanelRecord={section:HTMLElement;button:HTMLButtonElement;id:string};
+type PanelRecord={section:HTMLElement;button:HTMLButtonElement;id:string;previousId:string};
 
 export function mountLeftPanelTabs(root:HTMLElement):()=>void{
   const panel=root.querySelector<HTMLElement>('.leftPanel');if(!panel)return()=>{};
-  const rail=document.createElement('nav');rail.className='leftPanelTabRail';rail.setAttribute('aria-label','Workspace panels');
+  const rail=document.createElement('nav');rail.className='leftPanelTabRail';rail.setAttribute('aria-label','Workspace panels');rail.setAttribute('role','tablist');rail.setAttribute('aria-orientation','vertical');
   const content=document.createElement('div');content.className='leftPanelTabContent';
   const records=new Map<HTMLElement,PanelRecord>();let active:HTMLElement|undefined,serial=0,mutating=false;
   panel.prepend(rail,content);
@@ -28,14 +28,14 @@ export function mountLeftPanelTabs(root:HTMLElement):()=>void{
   };
   const register=(section:HTMLElement):void=>{
     if(records.has(section)||section===rail||section===content)return;
-    const id=`left-panel-${++serial}`,label=panelLabel(section),kind=panelKind(section,label),button=document.createElement('button');button.type='button';button.className='leftPanelTab';button.dataset.leftPanelTab=id;button.title=label;button.setAttribute('aria-label',label);button.setAttribute('role','tab');button.innerHTML=icons[kind];
-    section.dataset.leftPanelId=id;section.setAttribute('role','tabpanel');section.setAttribute('aria-label',label);records.set(section,{section,button,id});rail.append(button);content.append(section);if(!active)activate(section);else section.hidden=true;
+    const id=`left-panel-${++serial}`,buttonId=`${id}-tab`,panelId=`${id}-panel`,previousId=section.id,label=panelLabel(section),kind=panelKind(section,label),button=document.createElement('button');button.type='button';button.id=buttonId;button.className='leftPanelTab';button.dataset.leftPanelTab=id;button.title=label;button.setAttribute('aria-label',label);button.setAttribute('aria-controls',panelId);button.setAttribute('role','tab');button.innerHTML=icons[kind];
+    section.id=panelId;section.dataset.leftPanelId=id;section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby',buttonId);records.set(section,{section,button,id,previousId});rail.append(button);content.append(section);if(!active)activate(section);else section.hidden=true;
   };
   const collect=():void=>{mutating=true;for(const child of [...panel.children])if(child instanceof HTMLElement&&child!==rail&&child!==content)register(child);for(const child of [...content.children])if(child instanceof HTMLElement)register(child);mutating=false;};
   const click=(event:MouseEvent):void=>{const button=(event.target as Element|null)?.closest<HTMLButtonElement>('[data-left-panel-tab]');if(!button)return;const record=[...records.values()].find(item=>item.id===button.dataset.leftPanelTab);if(record)activate(record.section);};
   const keydown=(event:KeyboardEvent):void=>{const button=(event.target as Element|null)?.closest<HTMLButtonElement>('[data-left-panel-tab]');if(!button||!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;event.preventDefault();const buttons=[...rail.querySelectorAll<HTMLButtonElement>('[data-left-panel-tab]')];if(!buttons.length)return;let index=buttons.indexOf(button);if(event.key==='Home')index=0;else if(event.key==='End')index=buttons.length-1;else index=(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;const next=buttons[index];next?.focus();next?.click();};
   const observer=new MutationObserver(()=>{if(!mutating)collect();});observer.observe(panel,{childList:true});observer.observe(content,{childList:true});rail.addEventListener('click',click);rail.addEventListener('keydown',keydown);collect();
-  return()=>{observer.disconnect();rail.removeEventListener('click',click);rail.removeEventListener('keydown',keydown);for(const record of records.values()){record.section.hidden=false;record.section.classList.remove('panelTabActive');record.section.removeAttribute('role');record.section.removeAttribute('aria-label');delete record.section.dataset.leftPanelId;panel.append(record.section);}rail.remove();content.remove();records.clear();};
+  return()=>{observer.disconnect();rail.removeEventListener('click',click);rail.removeEventListener('keydown',keydown);for(const record of records.values()){record.section.hidden=false;record.section.classList.remove('panelTabActive');record.section.removeAttribute('role');record.section.removeAttribute('aria-labelledby');if(record.previousId)record.section.id=record.previousId;else record.section.removeAttribute('id');delete record.section.dataset.leftPanelId;panel.append(record.section);}rail.remove();content.remove();records.clear();};
 }
 
 function panelLabel(section:HTMLElement):string{
