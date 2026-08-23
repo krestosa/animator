@@ -30,7 +30,7 @@ export function mountApp(root:HTMLElement):()=>void{
     if(device){const scale=Math.min(1,900/ui.viewport.width,620/ui.viewport.height);device.style.width=`${ui.viewport.width}px`;device.style.height=`${ui.viewport.height}px`;device.style.transform=`scale(${scale})`;}
     if(chrome)chrome.innerHTML=previewChrome(state.project,state.analysis,ui.reducedMotion);
     if(key===previewKey)return;bridgeCleanup?.();iframe?.remove();iframe=null;previewKey=key;
-    if(state.project?.browserSessionId)bridgeCleanup=connectPreview(null);else if(device&&state.project){iframe=document.createElement('iframe');iframe.dataset.previewFrame='';iframe.title='Project preview';iframe.src=previewUrl(state.project);device.appendChild(iframe);bridgeCleanup=connectPreview(iframe);}
+    if(state.project?.browserSessionId)bridgeCleanup=connectPreview(null);else if(device&&state.project){if(window.animatorDesktop)bridgeCleanup=connectPreview(null);else{iframe=document.createElement('iframe');iframe.dataset.previewFrame='';iframe.title='Project preview';iframe.src=previewUrl(state.project);device.appendChild(iframe);bridgeCleanup=connectPreview(iframe);}}
   };
   const requestRender=():void=>{if(!disposed&&!raf)raf=requestAnimationFrame(render);};
   const click=(event:MouseEvent)=>onClick(event,root,ui,getFrame,requestRender),change=(event:Event)=>onChange(event,ui,getFrame,requestRender),input=(event:Event)=>onInput(event,ui);
