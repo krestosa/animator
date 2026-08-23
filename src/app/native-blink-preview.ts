@@ -7,7 +7,6 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const removeLegacyFrame=():void=>{if(store.get().project?.browserSessionId)return;device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());};
   const syncViewport=():void=>{
     raf=0;if(disposed||store.get().project?.browserSessionId)return;
-    if(webLoader?.open){api.setViewport({x:window.innerWidth+64,y:window.innerHeight+64,width:1,height:1,zoomFactor:1});return;}
     const rect=device.getBoundingClientRect(),layoutWidth=Math.max(1,device.offsetWidth||rect.width),zoomFactor=Math.max(.05,rect.width/layoutWidth);
     if(rect.width<1||rect.height<1)return;
     api.setViewport({x:rect.left,y:rect.top,width:rect.width,height:rect.height,zoomFactor});
@@ -32,9 +31,11 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const unsubscribe=store.subscribe(()=>void sync());
   const mutations=new MutationObserver(()=>{removeLegacyFrame();scheduleViewport();});mutations.observe(device,{childList:true,attributes:true,attributeFilter:['style','class']});
   const resize=new ResizeObserver(scheduleViewport);resize.observe(device);if(device.parentElement)resize.observe(device.parentElement);
-  const onWebLoaderToggle=():void=>scheduleViewport();
+  const onWebLoaderToggle=():void=>{
+    const visible=!webLoader?.open;api.setVisible(visible);if(visible)scheduleViewport();
+  };
   webLoader?.addEventListener('toggle',onWebLoaderToggle);
   window.addEventListener('resize',scheduleViewport);window.addEventListener('scroll',scheduleViewport,true);
-  void sync();
-  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);void api.close();};
+  api.setVisible(!webLoader?.open);void sync();
+  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(true);void api.close();};
 }
