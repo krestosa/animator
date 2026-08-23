@@ -45,6 +45,15 @@ describe('motion selection invariants',()=>{
     expect(store.get().history).toHaveLength(0);
   });
 
+  it('clears stale element and motion selection when the project context changes',()=>{
+    store.set({project:project('one','/index.html')});
+    store.addMotionTrack(track('shared','el-a'));
+    store.set({selectedAnimationId:'shared',selectedElementId:'el-a'});
+    store.set({project:{...project('one','/index.html'),selectedEntry:'/details.html'},motionTracks:[],elements:[]});
+    expect(store.get().selectedAnimationId).toBeUndefined();
+    expect(store.get().selectedElementId).toBeUndefined();
+  });
+
   it('does not record no-op edits or discard a valid redo',()=>{
     store.addMotionTrack(track('shared','el-a'));
     store.updateMotionTrack('shared',{timing:{duration:600}});
