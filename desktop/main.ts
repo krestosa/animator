@@ -14,9 +14,9 @@ app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-breakpad');
 app.commandLine.appendSwitch('disable-sync');
 
-const singleInstance=app.requestSingleInstanceLock();
+const singleInstance=app.isPackaged?app.requestSingleInstanceLock():true;
 if(!singleInstance)app.quit();
-else{
+else if(app.isPackaged){
   app.on('second-instance',()=>{
     if(!mainWindow)return;
     if(mainWindow.isMinimized())mainWindow.restore();
