@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer as createViteServer } from 'vite';
+import type { ViteDevServer } from 'vite';
 import { closeAllBrowserSessions } from './browser-session.js';
 import { createBrowserRouter } from './routes/browser.js';
 import { createControlRouter } from './routes/control.js';
@@ -34,9 +34,13 @@ export async function startAnimatorServer(options:AnimatorServerOptions={}):Prom
   registerPreviewRoutes(expressApp);
 
   const production=options.production??(process.env.NODE_ENV==='production'||process.argv.includes('--production'));
-  const vite=production?undefined:await createViteServer({server:{middlewareMode:true},appType:'spa'});
+  let vite:ViteDevServer|undefined;
   if(production)expressApp.use(express.static(path.resolve(__dirname,'../../dist')));
-  else if(vite)expressApp.use(vite.middlewares);
+  else{
+    const {createServer:createViteServer}=await import('vite');
+    vite=await createViteServer({server:{middlewareMode:true},appType:'spa'});
+    expressApp.use(vite.middlewares);
+  }
 
   const host=options.host??process.env.HOST??'127.0.0.1';
   const requestedPort=options.port??Number(process.env.PORT||5173);
