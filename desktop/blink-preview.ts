@@ -67,7 +67,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
         const starts=mouse.button==='middle'||canvasHandMode&&mouse.button==='left';if(!starts)return;canvasDragging=true;canvasDragTargetId=contents.id;event.preventDefault();return;
       }
       if(canvasDragging&&canvasDragTargetId===contents.id&&mouse.type==='mouseMove'){event.preventDefault();publishCanvasPan(Number(mouse.movementX)||0,Number(mouse.movementY)||0);return;}
-      if(canvasDragging&&canvasDragTargetId===contents.id&&(mouse.type==='mouseUp'||mouse.type==='leave')){event.preventDefault();stopCanvasDrag();}
+      if(canvasDragging&&canvasDragTargetId===contents.id&&(mouse.type==='mouseUp'||mouse.type==='mouseLeave')){event.preventDefault();stopCanvasDrag();}
     });
     contents.on('blur',()=>{if(canvasDragTargetId===contents.id)stopCanvasDrag();});
     contents.on('destroyed',()=>{if(canvasDragTargetId===contents.id)stopCanvasDrag();});
@@ -159,7 +159,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
         const response=await targetSession.fetch(source,{method:'GET',credentials:'include',cache:'force-cache'});
         const headers=new Headers(response.headers);headers.set('access-control-allow-origin','*');headers.set('cache-control','no-store');headers.delete('set-cookie');headers.delete('content-security-policy');
         return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
-      }catch{return new Response('',{status:502});
+      }catch{return new Response('',{status:502});}
     });
   }catch(error){console.warn('Animator asset protocol unavailable',error);}
 
