@@ -1,7 +1,7 @@
 export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
   if(window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__)return;window.__ANIMATOR_BROWSER_CHECKPOINT_RUNTIME__=true;
   let recording=true,timer=0,idleHandle=0,busy=false,guardActive=false,lastCapture=0,lastInteraction=performance.now();const topLevel=window===window.top,heartbeatMs=12000,quietMs=1400;
-  const capturable=()=>location.protocol==='http:'||location.protocol==='https:';
+  const capturable=()=>topLevel&&(location.protocol==='http:'||location.protocol==='https:');
   const emit=payload=>{const target=window.__animatorEmit;if(typeof target!=='function')return;try{void target(payload);}catch{}};
   const guardText={preparing:['Preparing reconstruction…','Animator is securing this page before interaction is enabled.'],finalizing:['Finalizing reconstruction…','Capture is stopped. Animator is finishing the document for the timeline.'],complete:['Capture complete','The reconstructed page is ready in Animator.']};
   const noteInteraction=()=>{lastInteraction=performance.now();};
@@ -26,8 +26,8 @@ export const emergencyCheckpointRuntimeSource=String.raw`(()=>{
     }catch{return false;}finally{busy=false;}
   };
   const cancelScheduled=()=>{if(timer){clearTimeout(timer);timer=0;}if(idleHandle&&typeof cancelIdleCallback==='function'){try{cancelIdleCallback(idleHandle);}catch{}idleHandle=0;}};
-  const runIdle=()=>{idleHandle=0;if(!recording)return;const quietFor=performance.now()-lastInteraction;if(quietFor<quietMs){schedule(quietMs-quietFor+250);return;}capture(false);schedule(heartbeatMs);};
-  const schedule=delay=>{cancelScheduled();if(!recording||typeof window.__animatorEmit!=='function')return;timer=setTimeout(()=>{timer=0;if(typeof requestIdleCallback==='function')idleHandle=requestIdleCallback(runIdle,{timeout:2500});else runIdle();},Math.max(250,Number(delay)||heartbeatMs));};
+  const runIdle=()=>{idleHandle=0;if(!recording||!topLevel)return;const quietFor=performance.now()-lastInteraction;if(quietFor<quietMs){schedule(quietMs-quietFor+250);return;}capture(false);schedule(heartbeatMs);};
+  const schedule=delay=>{cancelScheduled();if(!topLevel||!recording||typeof window.__animatorEmit!=='function')return;timer=setTimeout(()=>{timer=0;if(typeof requestIdleCallback==='function')idleHandle=requestIdleCallback(runIdle,{timeout:2500});else runIdle();},Math.max(250,Number(delay)||heartbeatMs));};
   const captureIfStale=(maxAge=2000)=>{if(Date.now()-lastCapture>maxAge)capture(true);};
   addEventListener('message',event=>{const message=event.data;if(!message||typeof message.type!=='string')return;if(message.type==='SET_RECONSTRUCTION_GUARD'&&(message.source==='animator-editor'||message.source==='animator-timeline')){setGuard(message.enabled!==false,String(message.mode||'preparing'));return;}if(message.type==='CAPTURE_BROWSER_CHECKPOINT'&&message.source==='animator-editor'){captureIfStale(1000);schedule(heartbeatMs);return;}if(message.type!=='SET_RECORDING'||(message.source!=='animator-editor'&&message.source!=='animator-timeline'))return;recording=!!message.enabled;if(recording){setGuard(true,'preparing');captureIfStale(1000);schedule(heartbeatMs);}else{setGuard(true,'finalizing');cancelScheduled();}});
   addEventListener('DOMContentLoaded',()=>{captureIfStale(0);schedule(heartbeatMs);},{once:true});
