@@ -22,13 +22,21 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:false});
 
-  const destroyTarget=(target:WebContentsView|null):void=>{
-    if(!target)return;
+  const detachTarget=(target:WebContentsView):void=>{
     try{window.contentView.removeChildView(target);}catch{}
     try{if(target.webContents.debugger.isAttached())target.webContents.debugger.detach();}catch{}
-    if(!target.webContents.isDestroyed())target.webContents.close();
   };
-  const disposeView=():void=>{const current=view;view=null;destroyTarget(current);};
+  const destroyTarget=async(target:WebContentsView|null):Promise<void>=>{
+    if(!target)return;detachTarget(target);
+    const contents=target.webContents;if(contents.isDestroyed())return;
+    await new Promise<void>(resolve=>{
+      let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(timer);resolve();};
+      const timer=setTimeout(finish,500);
+      contents.once('destroyed',finish);
+      contents.close();
+    });
+  };
+  const disposeView=async():Promise<void>=>{const current=view;view=null;await destroyTarget(current);};
   const setGeometry=(target:WebContentsView,value:Viewport):void=>{
     const x=Math.max(0,Math.round(value.x)),y=Math.max(0,Math.round(value.y)),width=Math.max(1,Math.round(value.width)),height=Math.max(1,Math.round(value.height)),zoom=Number.isFinite(value.zoomFactor)?Math.max(.05,value.zoomFactor):1;
     target.setBounds({x,y,width,height});target.webContents.setZoomFactor(zoom);
@@ -63,17 +71,19 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const setInstrumentation=async(enabled:boolean):Promise<{enabled:boolean}>=>{
     const nextEnabled=Boolean(enabled);
     if(nextEnabled===instrumentationEnabled)return{enabled:instrumentationEnabled};
-    const liveUrl=view&&!view.webContents.isDestroyed()?view.webContents.getURL():'';
-    const url=/^https?:\/\//i.test(liveUrl)?liveUrl:currentUrl;
-    if(!url){instrumentationEnabled=nextEnabled;disposeView();return{enabled:instrumentationEnabled};}
-    const previous=view,previousEnabled=instrumentationEnabled;
-    const next=await createView(nextEnabled);
+    const previous=view,liveUrl=previous&&!previous.webContents.isDestroyed()?previous.webContents.getURL():'';
+    const url=/^https?:\/\//i.test(liveUrl)?liveUrl:currentUrl,previousEnabled=instrumentationEnabled;
+    view=null;if(previous)previous.setVisible(false);await destroyTarget(previous);
+    instrumentationEnabled=nextEnabled;currentUrl=url;
     try{
-      await next.webContents.loadURL(url);
-      instrumentationEnabled=nextEnabled;currentUrl=url;view=next;showTarget(next);destroyTarget(previous);
-      return{enabled:instrumentationEnabled};
+      const next=await createView(instrumentationEnabled);view=next;
+      if(url)await next.webContents.loadURL(url);
+      showTarget(next);return{enabled:instrumentationEnabled};
     }catch(error){
-      destroyTarget(next);view=previous;instrumentationEnabled=previousEnabled;if(previous)showTarget(previous);throw error;
+      await disposeView();instrumentationEnabled=previousEnabled;
+      const restored=await createView(instrumentationEnabled);view=restored;
+      if(url)await restored.webContents.loadURL(url).catch(()=>{});
+      showTarget(restored);throw error;
     }
   };
   const resources=async():Promise<PageResource[]>=>{
@@ -94,7 +104,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
 
   const cleanup=async():Promise<void>=>{
     ipcMain.removeHandler('animator:blink:open');ipcMain.removeHandler('animator:blink:close');ipcMain.removeHandler('animator:blink:instrumentation');ipcMain.removeHandler('animator:blink:resources');ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
-    disposeView();
+    await disposeView();
   };
   return{open,close,setInstrumentation,cleanup};
 }
