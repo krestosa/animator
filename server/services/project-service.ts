@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { analyzeProject } from '../analysis.js';
 import { getProject, loadProject, resolveInside, setProjectPreviewOrigin, type LoadedProject } from '../project.js';
 import { ensurePreviewOrigin } from '../preview-host.js';
 import { openRemotePreview } from '../remote-preview.js';
@@ -26,7 +25,12 @@ export class ProjectService {
     return project?this.preparePreview(project):undefined;
   }
 
-  analysis(id:string){const project=getProject(id);return project?analyzeProject(project):undefined;}
+  async analysis(id:string){
+    const project=getProject(id);
+    if(!project)return undefined;
+    const {analyzeProject}=await import('../analysis.js');
+    return analyzeProject(project);
+  }
 
   source(id:string,filePath:string):string|undefined{
     const project=getProject(id);if(!project)return undefined;
