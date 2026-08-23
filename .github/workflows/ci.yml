@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - mvp
+      - electron-light
   pull_request:
   workflow_dispatch:
 
@@ -28,6 +29,7 @@ jobs:
             .
             !node_modules
             !.animator-browsers
+            !.cache
           include-hidden-files: true
           retention-days: 1
       - name: Setup Node
@@ -48,7 +50,7 @@ jobs:
         run: node e2e/disk-safety.mjs
       - name: Capture actual editor UI
         run: |
-          PORT=4173 NODE_ENV=production node server-dist/server/index.js --production > /tmp/animator-ui.log 2>&1 &
+          PORT=4173 NODE_ENV=production node runtime-dist/server/index.js --production > /tmp/animator-ui.log 2>&1 &
           echo $! > /tmp/animator-ui.pid
           node --input-type=module <<'NODE'
           import path from 'node:path';
