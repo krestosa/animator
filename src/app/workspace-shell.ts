@@ -8,7 +8,7 @@ export function mountWorkspaceShell(root:HTMLElement):()=>void{
   const app=root.querySelector<HTMLElement>('.app'),toolbar=root.querySelector<HTMLElement>('.toolbar'),timeline=root.querySelector<HTMLElement>('.timeline');
   if(!app||!toolbar||!timeline)return()=>{};
 
-  const desktop=Boolean(window.animatorDesktop);
+  const desktop=Boolean(window.animatorDesktop)||/\bElectron\//.test(navigator.userAgent);
   app.classList.toggle('desktopWorkspace',desktop);
 
   const tabs=document.createElement('div');
