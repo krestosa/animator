@@ -55,7 +55,6 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
       store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: Blink native render ${url}${instrumentationEnabled?'':' · clean'}`].slice(-100)});
       details.open=false;
       await api.open(url);
-      localStorage.setItem('animator.last-url',url);
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;openButton.disabled=false;openButton.textContent='Abrir en Blink';}
   };
@@ -66,7 +65,7 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
       const response=await fetch('/api/browser-sessions/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url,width,height,engine,profile:selectedProfile})}),session=await response.json() as{id?:string;url?:string;engine?:BrowserEngine;profile?:BrowserProfile;width?:number;height?:number;external?:boolean;error?:string};
       if(!response.ok||!session.id)throw new Error(session.error??'No se pudo abrir el render alternativo');
       const project:ProjectDescriptor={id:session.id,root:session.url??url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:session.url??url,kind:'remote',browserSessionId:session.id,browserEngine:session.engine??engine,browserProfile:session.profile??selectedProfile,browserWidth:session.width??width,browserHeight:session.height??height,browserExternal:session.external??false};
-      store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${engine==='firefox'?'Firefox':'WebKit'} render ${url}`].slice(-100)});details.open=false;localStorage.setItem('animator.last-url',url);
+      store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${engine==='firefox'?'Firefox':'WebKit'} render ${url}`].slice(-100)});details.open=false;
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;altButton.disabled=false;altButton.textContent='Abrir render alternativo';}
   };
