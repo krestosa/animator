@@ -1,5 +1,5 @@
 import '../server/ssd-safety.js';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
 import { startAnimatorServer, type AnimatorServerHandle } from '../server/index.js';
 
 let mainWindow:BrowserWindow|null=null;
@@ -26,6 +26,7 @@ async function createMainWindow():Promise<void>{
   if(mainWindow)return;
   const production=app.isPackaged||process.argv.includes('--production');
   server=await startAnimatorServer({host:'127.0.0.1',port:0,production});
+  const uiSession=session.fromPartition('animator-ui',{cache:false});
 
   const window=new BrowserWindow({
     width:1440,
@@ -36,6 +37,7 @@ async function createMainWindow():Promise<void>{
     autoHideMenuBar:true,
     backgroundColor:'#101010',
     webPreferences:{
+      session:uiSession,
       nodeIntegration:false,
       contextIsolation:true,
       sandbox:true,
