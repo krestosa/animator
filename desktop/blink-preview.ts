@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { BrowserWindow, WebContentsView, dialog, ipcMain, session } from 'electron';
+import { BrowserWindow, WebContentsView, View, dialog, ipcMain, session } from 'electron';
 import { gateRuntimeSource } from '../server/gate-runtime.js';
 import { runtimeSource } from '../server/runtime.js';
 import { recordResumeRuntimeSource } from '../server/record-resume-runtime.js';
@@ -8,7 +8,7 @@ import { mutationRuntimeSource } from '../server/mutation-runtime.js';
 import { auxiliaryRuntimeSource } from '../server/aux-runtime.js';
 import { collectPageAssetReferences, type PageAssetReference } from './page-asset-references.js';
 
-type Viewport={x:number;y:number;width:number;height:number;zoomFactor:number};
+type Viewport={x:number;y:number;width:number;height:number;zoomFactor:number;clipX?:number;clipY?:number;clipWidth?:number;clipHeight?:number};
 type PageResource=PageAssetReference;
 export interface BlinkPreviewHandle{
   open:(url:string)=>Promise<void>;
@@ -24,12 +24,13 @@ export interface BlinkPreviewHandle{
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
 
 export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
-  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true,previewOpen=false,attached:WebContentsView|null=null;
+  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true,previewOpen=false,attached:WebContentsView|null=null,hostAttached=false;
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:true});
   const networkResources=new Map<string,PageResource>();
   const networkFilter={urls:['<all_urls>']};
   const uiProtocol=window.webContents.session.protocol;
+  const clipHost=new View();
 
   const publishResource=(resource:PageResource):void=>{if(!window.isDestroyed())window.webContents.send('animator:blink:resource',resource);};
   const captureResource=(details:{url:string;resourceType?:string;method?:string;timestamp?:number;responseHeaders?:Record<string,string[]>;statusCode?:number;fromCache?:boolean}):void=>{
@@ -57,10 +58,12 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   targetSession.webRequest.onBeforeRedirect(networkFilter,details=>captureResource(details));
   targetSession.webRequest.onErrorOccurred(networkFilter,details=>captureResource(details));
 
+  const mountHost=():void=>{if(hostAttached||window.isDestroyed())return;try{window.contentView.addChildView(clipHost);hostAttached=true;}catch{hostAttached=false;}};
+  const unmountHost=():void=>{if(!hostAttached||window.isDestroyed())return;try{window.contentView.removeChildView(clipHost);}catch{}hostAttached=false;};
   const unmountTarget=(target:WebContentsView|null):void=>{
     if(!target||target.webContents.isDestroyed())return;
     try{target.setVisible(false);}catch{}
-    try{window.contentView.removeChildView(target);}catch{}
+    try{clipHost.removeChildView(target);}catch{}
     if(attached===target)attached=null;
   };
   const detachTarget=(target:WebContentsView):void=>{
@@ -78,21 +81,26 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     });
   };
   const disposeViews=async():Promise<void>=>{
-    const active=view,parked=parkedInstrumented,resource=resourceView;view=null;parkedInstrumented=null;resourceView=null;attached=null;
+    const active=view,parked=parkedInstrumented,resource=resourceView;view=null;parkedInstrumented=null;resourceView=null;attached=null;unmountHost();
     await destroyTarget(active);if(parked&&parked!==active)await destroyTarget(parked);if(resource&&resource!==active&&resource!==parked)await destroyTarget(resource);
   };
-  const setGeometry=(target:WebContentsView,value:Viewport):void=>{
-    const x=Math.max(0,Math.round(value.x)),y=Math.max(0,Math.round(value.y)),width=Math.max(1,Math.round(value.width)),height=Math.max(1,Math.round(value.height)),zoom=Number.isFinite(value.zoomFactor)?Math.max(.05,value.zoomFactor):1;
-    target.setBounds({x,y,width,height});target.webContents.setZoomFactor(zoom);
+  const setGeometry=(target:WebContentsView,value:Viewport):boolean=>{
+    const x=Math.round(Number.isFinite(value.x)?value.x:0),y=Math.round(Number.isFinite(value.y)?value.y:0),width=Math.max(1,Math.round(value.width)),height=Math.max(1,Math.round(value.height)),zoom=Number.isFinite(value.zoomFactor)?Math.max(.05,value.zoomFactor):1;
+    const hasClip=[value.clipX,value.clipY,value.clipWidth,value.clipHeight].every(item=>Number.isFinite(item));
+    const clipX=hasClip?Math.round(value.clipX!):x,clipY=hasClip?Math.round(value.clipY!):y,clipWidth=hasClip?Math.max(1,Math.round(value.clipWidth!)):width,clipHeight=hasClip?Math.max(1,Math.round(value.clipHeight!)):height;
+    const left=Math.max(x,clipX),top=Math.max(y,clipY),right=Math.min(x+width,clipX+clipWidth),bottom=Math.min(y+height,clipY+clipHeight);
+    if(right<=left||bottom<=top)return false;
+    clipHost.setBounds({x:Math.max(0,left),y:Math.max(0,top),width:Math.max(1,right-left),height:Math.max(1,bottom-top)});
+    target.setBounds({x:x-left,y:y-top,width,height});target.webContents.setZoomFactor(zoom);return true;
   };
   const activeTarget=():WebContentsView|null=>resourceActive?resourceView:(previewOpen?view:null);
   const syncAttachedTarget=():void=>{
     const active=activeTarget();
     for(const target of [view,resourceView])if(target&&target!==active)unmountTarget(target);
-    if(!active||active.webContents.isDestroyed()||!previewVisible){if(active)unmountTarget(active);return;}
-    if(lastViewport)setGeometry(active,lastViewport);
-    if(attached!==active){if(attached&&attached!==active)unmountTarget(attached);try{window.contentView.addChildView(active);attached=active;}catch{attached=null;return;}}
-    try{active.setVisible(true);}catch{}
+    if(!active||active.webContents.isDestroyed()||!previewVisible||!lastViewport){if(active)unmountTarget(active);unmountHost();return;}
+    if(!setGeometry(active,lastViewport)){unmountTarget(active);unmountHost();return;}
+    if(attached!==active){if(attached&&attached!==active)unmountTarget(attached);try{clipHost.addChildView(active);attached=active;}catch{attached=null;unmountHost();return;}}
+    mountHost();try{active.setVisible(true);}catch{}
   };
   const cdp=async(target:WebContentsView,method:string,params?:Record<string,unknown>):Promise<void>=>{await bounded(`CDP ${method}`,target.webContents.debugger.sendCommand(method,params),5000);};
   const createView=async(instrumented:boolean):Promise<WebContentsView>=>{
@@ -101,7 +109,6 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     next.setBackgroundColor('#ffffff');next.setVisible(false);
     next.webContents.setWindowOpenHandler(({url})=>{startReload(next,url);return{action:'deny'};});
     next.webContents.on('did-navigate',(_event,url)=>{if(next===view&&/^https?:\/\//i.test(url))currentUrl=url;});
-    if(lastViewport)setGeometry(next,lastViewport);
     if(instrumented){
       try{
         await bounded('Blink instrumentation target init',next.webContents.loadURL('about:blank'),5000);
@@ -114,7 +121,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const createResourceView=():WebContentsView=>{
     const next=new WebContentsView({webPreferences:{session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:true}});
-    next.setBackgroundColor('#ffffff');next.setVisible(false);if(lastViewport)setGeometry(next,lastViewport);return next;
+    next.setBackgroundColor('#ffffff');next.setVisible(false);return next;
   };
   const ensureView=async():Promise<WebContentsView>=>{if(view&&!view.webContents.isDestroyed())return view;view=await createView(instrumentationEnabled);return view;};
   const startReload=(target:WebContentsView,url:string):void=>{if(!url||target.webContents.isDestroyed())return;void target.webContents.loadURL(url).catch(error=>{if(!target.webContents.isDestroyed())console.warn('Blink reload failed',error);});};
@@ -169,7 +176,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     syncAttachedTarget();if(same)return;
     await target.webContents.loadURL(url);syncAttachedTarget();
   };
-  const close=async():Promise<void>=>{previewOpen=false;currentUrl='';networkResources.clear();resourceActive=false;unmountTarget(resourceView);unmountTarget(view);};
+  const close=async():Promise<void>=>{previewOpen=false;currentUrl='';networkResources.clear();resourceActive=false;unmountTarget(resourceView);unmountTarget(view);unmountHost();};
   const setInstrumentation=async(enabled:boolean):Promise<{enabled:boolean}>=>{
     const nextEnabled=Boolean(enabled);if(nextEnabled===instrumentationEnabled)return{enabled:instrumentationEnabled};
     const url=currentUrl;
@@ -190,9 +197,9 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     }
     return[...merged.values()].sort((a,b)=>a.timestamp-b.timestamp||a.url.localeCompare(b.url));
   };
-  const viewport=(value:Viewport):void=>{lastViewport=value;if(view&&!view.webContents.isDestroyed())setGeometry(view,value);if(resourceView&&!resourceView.webContents.isDestroyed())setGeometry(resourceView,value);syncAttachedTarget();};
+  const viewport=(value:Viewport):void=>{lastViewport=value;syncAttachedTarget();};
   const setVisible=(visible:boolean):void=>{previewVisible=Boolean(visible);syncAttachedTarget();};
-  const debugState=()=>({open:previewOpen,visible:previewVisible,resourceActive,attached:Boolean(attached&&!attached.webContents.isDestroyed()),url:currentUrl});
+  const debugState=()=>({open:previewOpen,visible:previewVisible,resourceActive,attached:Boolean(attached&&!attached.webContents.isDestroyed()&&hostAttached),url:currentUrl});
   const command=(value:unknown):void=>{if(instrumentationEnabled&&view&&!view.webContents.isDestroyed())view.webContents.send('animator:blink:command',value);};
   const pageMessage=(event:Electron.IpcMainEvent,value:unknown):void=>{if(!instrumentationEnabled||!view||event.sender.id!==view.webContents.id||window.isDestroyed())return;window.webContents.send('animator:blink:message',value);};
 
@@ -213,7 +220,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:visible',visibleHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
     targetSession.webRequest.onBeforeRequest(null);targetSession.webRequest.onSendHeaders(null);targetSession.webRequest.onResponseStarted(null);targetSession.webRequest.onCompleted(null);targetSession.webRequest.onBeforeRedirect(null);targetSession.webRequest.onErrorOccurred(null);
     try{await uiProtocol.unhandle('animator-asset');}catch{}
-    networkResources.clear();await disposeViews();
+    networkResources.clear();unmountHost();await disposeViews();
   };
   return{open,close,setInstrumentation,resources,openResource,closeResource,downloadResource,debugState,cleanup};
 }
