@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-type Viewport={x:number;y:number;width:number;height:number;zoomFactor:number};
+type Viewport={x:number;y:number;width:number;height:number;zoomFactor:number;clipX?:number;clipY?:number;clipWidth?:number;clipHeight?:number};
 type MessageHandler=(message:unknown)=>void;
 type Resource={url:string;initiatorType:string;resourceType:string;transferSize:number;decodedBodySize:number;mimeType:string;statusCode:number;method:string;fromCache:boolean;timestamp:number};
 type ResourceHandler=(resource:Resource)=>void;
