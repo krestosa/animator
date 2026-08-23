@@ -12,7 +12,9 @@ const controlLabels:ReadonlyArray<[string,string]>=[
   ['[data-canvas-zoom-out]','Zoom out canvas'],
   ['[data-canvas-zoom-label]','Reset canvas zoom'],
   ['[data-canvas-zoom-in]','Zoom in canvas'],
-  ['[data-canvas-fit]','Fit preview to view']
+  ['[data-canvas-fit]','Fit preview to view'],
+  ['[data-action="add-keyframe"]','Add keyframe'],
+  ['[data-delete-preset]','Delete custom preset']
 ];
 
 export function mountAccessibilityRefinement(root:HTMLElement):()=>void{
@@ -27,8 +29,8 @@ export function mountAccessibilityRefinement(root:HTMLElement):()=>void{
     root.querySelectorAll<HTMLElement>('.workspaceResourceTabWrap').forEach(wrapper=>wrapper.setAttribute('role','presentation'));
     root.querySelectorAll<HTMLElement>('.workspaceTabEmpty').forEach(empty=>empty.setAttribute('role','presentation'));
     root.querySelectorAll<HTMLButtonElement>('button').forEach(button=>{
-      if(button.getAttribute('aria-label')||button.textContent?.trim())return;
-      const label=button.title.trim();if(label)button.setAttribute('aria-label',label);
+      if(button.getAttribute('aria-label'))return;const text=button.textContent?.trim()??'',label=button.title.trim();
+      if(label&&(!text||/^[×+−↻◎▾▸⌄›]+$/.test(text)))button.setAttribute('aria-label',label);
     });
     for(const [selector,label] of controlLabels)root.querySelectorAll<HTMLElement>(selector).forEach(control=>{if(!control.getAttribute('aria-label'))control.setAttribute('aria-label',label);});
   };
