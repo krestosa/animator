@@ -1,7 +1,7 @@
 node_modules/
 dist/
 server-dist/
-runtime-dist/
+desktop-dist/
 coverage/
 .animator-browsers/
 .cache/
