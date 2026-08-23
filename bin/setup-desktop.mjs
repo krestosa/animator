@@ -14,6 +14,7 @@ fs.mkdirSync(npmCache,{recursive:true});
 const env=Object.fromEntries(Object.entries({
   ...process.env,
   ELECTRON_CACHE:electronCache,
+  electron_config_cache:electronCache,
   npm_config_cache:npmCache,
   npm_config_audit:'false',
   npm_config_fund:'false',
@@ -21,22 +22,31 @@ const env=Object.fromEntries(Object.entries({
   PLAYWRIGHT_BROWSERS_PATH:path.join(root,'.animator-browsers')
 }).filter((entry)=>typeof entry[1]==='string'));
 
-function npmInstall(){
+function run(command,args,options={}){
+  return new Promise((resolve,reject)=>{
+    const child=spawn(command,args,{cwd:root,env,stdio:'inherit',windowsHide:true,...options});
+    child.once('error',reject);
+    child.once('exit',value=>resolve(value??1));
+  });
+}
+
+async function npmInstall(){
   if(process.platform==='win32'){
     const command=process.env.ComSpec??process.env.COMSPEC??'C:\\Windows\\System32\\cmd.exe';
-    return spawn(command,['/d','/s','/c','npm install --no-audit --no-fund'],{cwd:root,env,stdio:'inherit',windowsHide:true});
+    return run(command,['/d','/s','/c','npm install --no-audit --no-fund']);
   }
   const npmCli=process.env.npm_execpath;
   return npmCli
-    ?spawn(process.execPath,[npmCli,'install','--no-audit','--no-fund'],{cwd:root,env,stdio:'inherit'})
-    :spawn('npm',['install','--no-audit','--no-fund'],{cwd:root,env,stdio:'inherit'});
+    ?run(process.execPath,[npmCli,'install','--no-audit','--no-fund'])
+    :run('npm',['install','--no-audit','--no-fund']);
 }
 
-const code=await new Promise((resolve,reject)=>{
-  const child=npmInstall();
-  child.once('error',reject);
-  child.once('exit',value=>resolve(value??1));
-});
+let code=await npmInstall();
+if(code!==0)process.exit(Number(code));
+
+const electronInstaller=path.join(root,'node_modules','electron','install.js');
+if(!fs.existsSync(electronInstaller))throw new Error(`Electron installer not found: ${electronInstaller}`);
+code=await run(process.execPath,[electronInstaller]);
 if(code!==0)process.exit(Number(code));
 
 const executable=process.platform==='win32'
