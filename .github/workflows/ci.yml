@@ -45,7 +45,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Electron desktop smoke
-        run: xvfb-run -a node_modules/.bin/electron ./desktop-dist/desktop/main.js --production --smoke-test
+        run: xvfb-run -a node_modules/.bin/electron ./desktop-dist/desktop/main.js --production --smoke-test --no-sandbox
       - name: Install browser runtimes
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Disk write safety
