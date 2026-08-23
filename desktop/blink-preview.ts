@@ -54,11 +54,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     const target=await ensureView();target.setVisible(true);window.contentView.addChildView(target);
     if(currentUrl===url)return;currentUrl=url;await target.webContents.loadURL(url);
   };
-  const close=async():Promise<void>=>{
-    currentUrl='';
-    if(view)view.setVisible(false);
-    if(!instrumentationEnabled){instrumentationEnabled=true;disposeView();}
-  };
+  const close=async():Promise<void>=>{currentUrl='';if(view)view.setVisible(false);};
   const setInstrumentation=async(enabled:boolean):Promise<{enabled:boolean}>=>{
     const nextEnabled=Boolean(enabled);
     if(nextEnabled===instrumentationEnabled)return{enabled:instrumentationEnabled};
