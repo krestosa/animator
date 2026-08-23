@@ -6,9 +6,10 @@ import { recordResumeRuntimeSource } from '../server/record-resume-runtime.js';
 import { seekRuntimeSource } from '../server/seek-runtime.js';
 import { mutationRuntimeSource } from '../server/mutation-runtime.js';
 import { auxiliaryRuntimeSource } from '../server/aux-runtime.js';
+import { collectPageAssetReferences, type PageAssetReference } from './page-asset-references.js';
 
 type Viewport={x:number;y:number;width:number;height:number;zoomFactor:number};
-type PageResource={url:string;initiatorType:string;resourceType:string;transferSize:number;decodedBodySize:number;mimeType:string;statusCode:number;method:string;fromCache:boolean;timestamp:number};
+type PageResource=PageAssetReference;
 export interface BlinkPreviewHandle{
   open:(url:string)=>Promise<void>;
   close:()=>Promise<void>;
@@ -142,7 +143,14 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     try{if(!instrumented||instrumented.webContents.isDestroyed())instrumented=await createView(true);view=instrumented;instrumentationEnabled=true;if(!resourceActive)showTarget(instrumented);startReload(instrumented,url);if(clean&&clean!==instrumented)await destroyTarget(clean);return{enabled:true};}
     catch(error){if(clean&&!clean.webContents.isDestroyed()){view=clean;instrumentationEnabled=false;if(!resourceActive)showTarget(clean);}if(instrumented&&instrumented!==prepared)await destroyTarget(instrumented);parkedInstrumented=prepared&&!prepared.webContents.isDestroyed()?prepared:null;throw error;}
   };
-  const resources=async():Promise<PageResource[]>=>[...networkResources.values()].sort((a,b)=>a.timestamp-b.timestamp||a.url.localeCompare(b.url));
+  const resources=async():Promise<PageResource[]>=>{
+    const merged=new Map<string,PageResource>(networkResources);
+    if(instrumentationEnabled&&view&&!view.webContents.isDestroyed()){
+      const references=await collectPageAssetReferences(view.webContents);
+      for(const reference of references)if(!merged.has(reference.url))merged.set(reference.url,reference);
+    }
+    return[...merged.values()].sort((a,b)=>a.timestamp-b.timestamp||a.url.localeCompare(b.url));
+  };
   const viewport=(value:Viewport):void=>{lastViewport=value;if(view)setGeometry(view,value);if(resourceView)setGeometry(resourceView,value);const active=resourceActive?resourceView:view;if(active&&!active.webContents.isDestroyed()){active.setVisible(true);window.contentView.addChildView(active);}};
   const command=(value:unknown):void=>{if(instrumentationEnabled&&view&&!view.webContents.isDestroyed())view.webContents.send('animator:blink:command',value);};
   const pageMessage=(event:Electron.IpcMainEvent,value:unknown):void=>{if(!instrumentationEnabled||!view||event.sender.id!==view.webContents.id||window.isDestroyed())return;window.webContents.send('animator:blink:message',value);};
