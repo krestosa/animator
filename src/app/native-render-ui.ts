@@ -54,8 +54,6 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
       const project:ProjectDescriptor={id:`blink-${hash(url)}`,root:url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:url,kind:'remote'};
       store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: Blink native render ${url}${instrumentationEnabled?'':' · clean'}`].slice(-100)});
       details.open=false;
-      await nextFrame();
-      await api.open(url);
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;openButton.disabled=false;openButton.textContent='Abrir en Blink';}
   };
@@ -65,7 +63,7 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
       const engine=browserEngine.value as BrowserEngine,selectedProfile=profile.value as BrowserProfile,width=selectedProfile==='mobile'?390:1100,height=selectedProfile==='mobile'?844:700;
       const response=await fetch('/api/browser-sessions/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url,width,height,engine,profile:selectedProfile})}),session=await response.json() as{id?:string;url?:string;engine?:BrowserEngine;profile?:BrowserProfile;width?:number;height?:number;external?:boolean;error?:string};
       if(!response.ok||!session.id)throw new Error(session.error??'No se pudo abrir el render alternativo');
-      const project:ProjectDescriptor={id:session.id,root:session.url??url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:session.url??url,kind:'remote',browserSessionId:session.id,browserEngine:session.engine??engine,browserProfile:session.profile??selectedProfile,browserWidth:session.width??width,browserHeight:session.height??height,browserExternal:session.external??false};
+      const project:ProjectDescriptor={id:session.id,root:session.url??url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:session.url??url,kind:'remote',browserSessionId:session.id,browserEngine:session.engine??engine,browserProfile:selectedProfile,browserWidth:session.width??width,browserHeight:session.height??height,browserExternal:session.external??false};
       store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: ${engine==='firefox'?'Firefox':'WebKit'} render ${url}`].slice(-100)});details.open=false;
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;altButton.disabled=false;altButton.textContent='Abrir render alternativo';}
@@ -85,5 +83,4 @@ function normalizeUrl(value:string):string|undefined{
   const candidate=hasScheme?raw:`${local?'http':'https'}://${raw}`;
   try{const url=new URL(candidate);return url.protocol==='http:'||url.protocol==='https:'?url.toString():undefined;}catch{return undefined;}
 }
-function nextFrame():Promise<void>{return new Promise(resolve=>requestAnimationFrame(()=>resolve()));}
 function hash(value:string):string{let result=2166136261;for(let index=0;index<value.length;index++){result^=value.charCodeAt(index);result=Math.imul(result,16777619);}return(result>>>0).toString(36);}
