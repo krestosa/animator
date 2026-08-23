@@ -69,11 +69,20 @@ async function createMainWindow():Promise<void>{
 }
 
 async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
-  const smoke=process.argv.includes('--smoke-test'),metrics=process.argv.includes('--metrics');
-  if(!smoke&&!metrics)return;
+  const smoke=process.argv.includes('--smoke-test'),nativeSmoke=process.argv.includes('--native-smoke-test'),metrics=process.argv.includes('--metrics');
+  if(!smoke&&!nativeSmoke&&!metrics)return;
   const mounted=await window.webContents.executeJavaScript("Boolean(document.querySelector('.app'))",true) as boolean;
   if(!mounted)throw new Error('Electron smoke test: Animator UI did not mount');
   if(smoke)console.log('Electron smoke test: UI mounted');
+  if(nativeSmoke){
+    if(!server)throw new Error('Native Blink smoke test: server unavailable');
+    const target=`${server.origin}/api/health`;
+    await window.webContents.executeJavaScript(`window.animatorDesktop?.blink.open(${JSON.stringify(target)})`,true);
+    await new Promise(resolve=>setTimeout(resolve,300));
+    if(window.contentView.children.length<1)throw new Error('Native Blink smoke test: WebContentsView was not attached');
+    console.log('Native Blink smoke test: WebContentsView attached and URL loaded');
+    await window.webContents.executeJavaScript('window.animatorDesktop?.blink.close()',true);
+  }
   if(metrics){
     await new Promise(resolve=>setTimeout(resolve,750));
     const processes=app.getAppMetrics().map(metric=>({pid:metric.pid,type:metric.type,name:metric.name??metric.serviceName??'',workingSetMb:roundMb(metric.memory.workingSetSize),cpuPercent:Number(metric.cpu.percentCPUUsage.toFixed(2))}));
