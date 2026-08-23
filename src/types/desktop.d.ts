@@ -1,0 +1,16 @@
+export {};
+
+declare global {
+  interface Window {
+    animatorDesktop?: {
+      blink: {
+        open:(url:string)=>Promise<void>;
+        close:()=>Promise<void>;
+        setViewport:(viewport:{x:number;y:number;width:number;height:number;zoomFactor:number})=>void;
+        command:(command:unknown)=>void;
+        onMessage:(handler:(message:unknown)=>void)=>void;
+        offMessage:(handler:(message:unknown)=>void)=>void;
+      };
+    };
+  }
+}
