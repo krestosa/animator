@@ -4,6 +4,7 @@ import { ensurePreviewOrigin } from '../preview-host.js';
 import { ensureNativePreviewOrigin } from '../native-preview-host.js';
 import { openRemotePreview } from '../remote-preview.js';
 import { FolderSelectionCancelled, pickProjectFolder } from '../folder-dialog.js';
+import {resolveProjectAsset,scanProjectAssets} from '../assets.js';
 
 export { FolderSelectionCancelled };
 
@@ -38,6 +39,9 @@ export class ProjectService {
     const {analyzeProject}=await import('../analysis.js');
     return analyzeProject(project);
   }
+
+  assets(id:string){const project=getProject(id);return project?scanProjectAssets(project):undefined;}
+  assetPath(id:string,filePath:string):string|undefined{const project=getProject(id);return project?resolveProjectAsset(project,filePath):undefined;}
 
   source(id:string,filePath:string):string|undefined{
     const project=getProject(id);if(!project)return undefined;
