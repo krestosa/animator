@@ -1,7 +1,7 @@
 import {store} from '../state/store';
 
 type AssetCategory='media'|'typography'|'lottie'|'source'|'styles'|'data'|'documents'|'other';
-type AssetRecord={id:string;path:string;name:string;extension:string;category:AssetCategory;kind:string;size:number;url:string;origin:'project'|'runtime';mimeType?:string;statusCode?:number;method?:string;fromCache?:boolean};
+type AssetRecord={id:string;path:string;name:string;extension:string;category:AssetCategory;kind:string;size:number;url:string;origin:'project'|'runtime';mimeType?:string|undefined;statusCode?:number|undefined;method?:string|undefined;fromCache?:boolean|undefined};
 type LocalAsset=Omit<AssetRecord,'id'|'url'|'origin'>;
 type RuntimeResource={url:string;initiatorType:string;resourceType?:string;transferSize:number;decodedBodySize:number;mimeType?:string;statusCode?:number;method?:string;fromCache?:boolean;timestamp?:number};
 const categories:AssetCategory[]=['media','typography','lottie','source','styles','data','documents','other'];
