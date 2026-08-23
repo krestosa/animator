@@ -13,13 +13,12 @@ export function mountAccessibilityRefinement(root:HTMLElement):()=>void{
       if(button.getAttribute('aria-label')||button.textContent?.trim())return;
       const label=button.title.trim();if(label)button.setAttribute('aria-label',label);
     });
-    const menu=root.querySelector<HTMLElement>('.toolbarMenu');if(menu)menu.setAttribute('role','menu');
   };
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(apply);};
   const activateInspectorTab=(event:KeyboardEvent):boolean=>{
     const tab=(event.target as Element|null)?.closest<HTMLButtonElement>('.rightPanel [role="tablist"] [role="tab"]');
     if(!tab||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return false;
-    const tabs=[...tab.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')??[]];if(!tabs.length)return false;
+    const tabs=[...(tab.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')??[])];if(!tabs.length)return false;
     event.preventDefault();let index=tabs.indexOf(tab);
     if(event.key==='Home')index=0;else if(event.key==='End')index=tabs.length-1;else index=(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
     const next=tabs[index];if(next){next.click();next.focus();}return true;
