@@ -8,11 +8,12 @@ import { mutationRuntimeSource } from '../server/mutation-runtime.js';
 import { auxiliaryRuntimeSource } from '../server/aux-runtime.js';
 
 type Viewport={x:number;y:number;width:number;height:number;zoomFactor:number};
-type PageResource={url:string;initiatorType:string;transferSize:number;decodedBodySize:number};
+type PageResource={url:string;initiatorType:string;resourceType:string;transferSize:number;decodedBodySize:number;mimeType:string;statusCode:number;method:string;fromCache:boolean;timestamp:number};
 export interface BlinkPreviewHandle{
   open:(url:string)=>Promise<void>;
   close:()=>Promise<void>;
   setInstrumentation:(enabled:boolean)=>Promise<{enabled:boolean}>;
+  resources:()=>Promise<PageResource[]>;
   cleanup:()=>Promise<void>;
 }
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
@@ -21,6 +22,29 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined;
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:false});
+  const networkResources=new Map<string,PageResource>();
+  const networkFilter={urls:['<all_urls>']};
+
+  const captureResource=(details:{url:string;resourceType?:string;method?:string;timestamp?:number;responseHeaders?:Record<string,string[]>;statusCode?:number;fromCache?:boolean}):void=>{
+    const url=String(details.url||'');if(!url)return;
+    const prior=networkResources.get(url),resourceType=String(details.resourceType||prior?.resourceType||'other'),headers=details.responseHeaders;
+    const contentLength=headerNumber(headers,'content-length'),mimeType=headerValue(headers,'content-type').split(';')[0]?.trim()||prior?.mimeType||'';
+    networkResources.set(url,{
+      url,
+      initiatorType:resourceType,
+      resourceType,
+      transferSize:Math.max(prior?.transferSize??0,contentLength),
+      decodedBodySize:Math.max(prior?.decodedBodySize??0,contentLength),
+      mimeType,
+      statusCode:Number(details.statusCode??prior?.statusCode??0)||0,
+      method:String(details.method||prior?.method||'GET'),
+      fromCache:Boolean(details.fromCache??prior?.fromCache??false),
+      timestamp:Number(details.timestamp??prior?.timestamp??Date.now())
+    });
+  };
+  targetSession.webRequest.onSendHeaders(networkFilter,details=>captureResource(details));
+  targetSession.webRequest.onResponseStarted(networkFilter,details=>captureResource(details));
+  targetSession.webRequest.onCompleted(networkFilter,details=>captureResource(details));
 
   const detachTarget=(target:WebContentsView):void=>{
     try{window.contentView.removeChildView(target);}catch{}
@@ -53,6 +77,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     const next=new WebContentsView({webPreferences:{...(instrumented?{preload}:{}),session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:false}});
     next.setBackgroundColor('#ffffff');next.setVisible(false);window.contentView.addChildView(next);
     next.webContents.setWindowOpenHandler(({url})=>{startReload(next,url);return{action:'deny'};});
+    next.webContents.on('did-navigate',(_event,url)=>{if(/^https?:\/\//i.test(url))currentUrl=url;});
     if(lastViewport)setGeometry(next,lastViewport);
     if(instrumented){
       try{
@@ -82,9 +107,10 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const open=async(url:string):Promise<void>=>{
     if(!/^https?:\/\//i.test(url))throw new Error('Blink preview only accepts http(s) URLs');
     const target=await ensureView();showTarget(target);
-    if(currentUrl===url)return;currentUrl=url;await target.webContents.loadURL(url);
+    if(currentUrl===url)return;
+    networkResources.clear();currentUrl=url;await target.webContents.loadURL(url);
   };
-  const close=async():Promise<void>=>{currentUrl='';if(view)view.setVisible(false);};
+  const close=async():Promise<void>=>{currentUrl='';networkResources.clear();if(view)view.setVisible(false);};
   const setInstrumentation=async(enabled:boolean):Promise<{enabled:boolean}>=>{
     const nextEnabled=Boolean(enabled);
     if(nextEnabled===instrumentationEnabled)return{enabled:instrumentationEnabled};
@@ -95,7 +121,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
       const instrumented=view;
       try{
         const clean=await createView(false);
-        if(instrumented){instrumented.setVisible(false);parkedInstrumented=instrumented;}
+        if(instrumented){instrumented.setVisible(false);parkedInstrumented=instrumented;instrumented.webContents.stop();startReload(instrumented,'about:blank');}
         view=clean;instrumentationEnabled=false;showTarget(clean);startReload(clean,url);
         return{enabled:false};
       }catch(error){if(instrumented)showTarget(instrumented);throw error;}
@@ -116,10 +142,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
       throw error;
     }
   };
-  const resources=async():Promise<PageResource[]>=>{
-    if(!instrumentationEnabled||!view||view.webContents.isDestroyed()||!currentUrl)return[];
-    return view.webContents.executeJavaScript(`(()=>{const found=new Map();const add=(raw,type='other',transfer=0,decoded=0)=>{if(!raw)return;try{const url=new URL(String(raw),document.baseURI).href;if(!/^https?:/.test(url))return;const prior=found.get(url);found.set(url,{url,initiatorType:prior?.initiatorType||type,transferSize:Math.max(prior?.transferSize||0,Number(transfer)||0),decodedBodySize:Math.max(prior?.decodedBodySize||0,Number(decoded)||0)});}catch{}};add(location.href,'document');for(const entry of performance.getEntriesByType('resource'))add(entry.name,entry.initiatorType,entry.transferSize,entry.decodedBodySize);for(const node of document.querySelectorAll('[src],[href],[poster],[data-src]'))for(const attr of ['src','href','poster','data-src'])add(node.getAttribute(attr),node.tagName.toLowerCase());for(const node of document.querySelectorAll('[srcset]'))for(const candidate of String(node.getAttribute('srcset')||'').split(','))add(candidate.trim().split(/\\s+/)[0],node.tagName.toLowerCase());return [...found.values()];})()`,true) as Promise<PageResource[]>;
-  };
+  const resources=async():Promise<PageResource[]>=>[...networkResources.values()].sort((a,b)=>a.timestamp-b.timestamp||a.url.localeCompare(b.url));
   const viewport=(value:Viewport):void=>{lastViewport=value;if(view){setGeometry(view,value);view.setVisible(true);window.contentView.addChildView(view);}};
   const command=(value:unknown):void=>{if(instrumentationEnabled&&view&&!view.webContents.isDestroyed())view.webContents.send('animator:blink:command',value);};
   const pageMessage=(event:Electron.IpcMainEvent,value:unknown):void=>{if(!instrumentationEnabled||!view||event.sender.id!==view.webContents.id||window.isDestroyed())return;window.webContents.send('animator:blink:message',value);};
@@ -134,11 +157,16 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
 
   const cleanup=async():Promise<void>=>{
     ipcMain.removeHandler('animator:blink:open');ipcMain.removeHandler('animator:blink:close');ipcMain.removeHandler('animator:blink:instrumentation');ipcMain.removeHandler('animator:blink:resources');ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
-    await disposeViews();
+    targetSession.webRequest.onSendHeaders(null);targetSession.webRequest.onResponseStarted(null);targetSession.webRequest.onCompleted(null);
+    networkResources.clear();await disposeViews();
   };
-  return{open,close,setInstrumentation,cleanup};
+  return{open,close,setInstrumentation,resources,cleanup};
 }
 
+function headerValue(headers:Record<string,string[]>|undefined,name:string):string{
+  if(!headers)return'';const key=Object.keys(headers).find(value=>value.toLowerCase()===name);return key?String(headers[key]?.[0]??''):'';
+}
+function headerNumber(headers:Record<string,string[]>|undefined,name:string):number{const value=Number(headerValue(headers,name));return Number.isFinite(value)&&value>0?value:0;}
 async function bounded<T>(label:string,promise:Promise<T>,timeoutMs:number):Promise<T>{
   let timer:ReturnType<typeof setTimeout>|undefined;
   const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} timed out after ${timeoutMs}ms`)),timeoutMs);});
