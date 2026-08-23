@@ -87,8 +87,8 @@ jobs:
             const page=await browser.newPage({viewport:{width:1536,height:900},deviceScaleFactor:1});
             await page.goto(base,{waitUntil:'networkidle'});
             await page.locator('.app').waitFor({state:'visible'});
-            const more=page.locator('.toolbarMore>summary');
-            if(await more.count())await more.click();
+            const more=page.locator('.toolbarMore');
+            if(await more.count())await more.locator('summary').click();
             const pathInput=page.locator('[data-path-input]');
             await pathInput.fill(path.join(process.cwd(),'fixture'));
             await page.locator('[data-action="open-project"]').click();
