@@ -47,12 +47,14 @@ export function mountAssetsBrowser(root:HTMLElement):()=>void{
       }else if(cachedLocalProjectId!==project.id){cachedLocalProjectId='';cachedLocalAssets=[];}
 
       const collected:AssetRecord[]=[...cachedLocalAssets],localPaths=new Set(cachedLocalAssets.map(item=>normalizePath(item.path)));
-      if(!project.browserSessionId){
-        try{
-          const resources=await window.animatorDesktop?.blink.resources()??[];
-          for(const resource of resources){const runtime=runtimeAsset(resource);if(!runtime)continue;let pathname='';try{pathname=normalizePath(decodeURIComponent(new URL(runtime.url).pathname));}catch{}if(localPaths.has(pathname))continue;if(!collected.some(item=>item.url===runtime.url))collected.push(runtime);}
-        }catch{}
-      }
+      let resources:RuntimeResource[]=[];
+      try{
+        if(project.browserSessionId){
+          const response=await fetch(`/api/browser-sessions/${encodeURIComponent(project.browserSessionId)}/resources`,{cache:'no-store'}),body=await response.json() as{resources?:RuntimeResource[]};
+          if(response.ok&&body.resources)resources=body.resources;
+        }else resources=await window.animatorDesktop?.blink.resources()??[];
+      }catch{}
+      for(const resource of resources){const runtime=runtimeAsset(resource);if(!runtime)continue;let pathname='';try{pathname=normalizePath(decodeURIComponent(new URL(runtime.url).pathname));}catch{}if(localPaths.has(pathname))continue;if(!collected.some(item=>item.url===runtime.url))collected.push(runtime);}
       if(request!==generation)return;
       assets=collected.sort((a,b)=>categoryOrder.indexOf(a.category)-categoryOrder.indexOf(b.category)||a.name.localeCompare(b.name));render();
     }finally{syncing=false;}
@@ -79,7 +81,7 @@ export function mountAssetsBrowser(root:HTMLElement):()=>void{
   };
   const input=():void=>render();
   const visibilityObserver=new MutationObserver(()=>{if(!section.hidden)void load({quiet:true});});visibilityObserver.observe(section,{attributes:true,attributeFilter:['hidden']});
-  const syncTimer=setInterval(()=>{const project=store.get().project;if(!section.hidden&&project&&!project.browserSessionId&&window.animatorDesktop?.blink)void load({quiet:true});},750);
+  const syncTimer=setInterval(()=>{const project=store.get().project;if(!section.hidden&&project&&(project.browserSessionId||window.animatorDesktop?.blink))void load({quiet:true});},750);
   section.addEventListener('click',click);search.addEventListener('input',input);
   const unsubscribe=store.subscribe(()=>{const id=store.get().project?.id??'';if(id!==lastProjectId){lastProjectId=id;cachedLocalProjectId='';cachedLocalAssets=[];void load();}});lastProjectId=store.get().project?.id??'';void load();
   return()=>{generation++;clearInterval(syncTimer);visibilityObserver.disconnect();unsubscribe();section.removeEventListener('click',click);search.removeEventListener('input',input);section.remove();};
@@ -102,7 +104,7 @@ function classifyRuntime(ext:string,resource:RuntimeResource):{category:AssetCat
   if(styleExt.has(ext)||type==='stylesheet'||mime==='text/css')return{category:'styles',kind:'Stylesheet',preview:'text'};
   if(ext==='wasm'||mime==='application/wasm')return{category:'source',kind:'WebAssembly',preview:'none'};
   if(sourceExt.has(ext)||type==='script'||/javascript|ecmascript/.test(mime))return{category:'source',kind:'Source',preview:'text'};
-  if(type==='websocket'||type==='websocket')return{category:'data',kind:'WebSocket',preview:'none'};
+  if(type==='websocket')return{category:'data',kind:'WebSocket',preview:'none'};
   if(type==='xhr')return{category:'data',kind:'XHR',preview:'text'};
   if(type==='fetch')return{category:'data',kind:'Fetch',preview:'text'};
   if(type==='eventsource')return{category:'data',kind:'EventSource',preview:'text'};
@@ -120,6 +122,6 @@ function formatBytes(value:number):string{if(value<1024)return`${value} B`;if(va
 function host(value:string):string{try{return new URL(value).hostname;}catch{return value;}}
 function normalizePath(value:string):string{return value.replace(/^\/+/, '').replace(/\\/g,'/');}
 function hash(value:string):string{let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36);}
-function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
+function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'})[char]??char);}
 function attr(value:string):string{return html(value);}
 function cssUrl(value:string):string{return value.replace(/["\\\n\r]/g,char=>`\\${char}`);}
