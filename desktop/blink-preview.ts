@@ -18,13 +18,13 @@ export interface BlinkPreviewHandle{
   openResource:(url:string)=>Promise<void>;
   closeResource:()=>Promise<void>;
   downloadResource:(url:string,suggestedName?:string)=>Promise<{saved:boolean;path?:string}>;
-  debugState:()=>{open:boolean;visible:boolean;resourceActive:boolean;attached:boolean;url:string};
+  debugState:()=>{open:boolean;visible:boolean;resourceActive:boolean;attached:boolean;url:string;hasViewport:boolean;viewport?:Viewport;hostAttached:boolean;attachError:string};
   cleanup:()=>Promise<void>;
 }
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
 
 export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
-  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true,previewOpen=false,attached:WebContentsView|null=null,hostAttached=false,canvasHandMode=false,canvasDragging=false,canvasDragTargetId=-1;
+  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true,previewOpen=false,attached:WebContentsView|null=null,hostAttached=false,canvasHandMode=false,canvasDragging=false,canvasDragTargetId=-1,lastAttachError='';
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:true});
   const networkResources=new Map<string,PageResource>();
@@ -72,7 +72,11 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     contents.on('blur',()=>{if(canvasDragTargetId===contents.id)stopCanvasDrag();});
     contents.on('destroyed',()=>{if(canvasDragTargetId===contents.id)stopCanvasDrag();});
   };
-  const mountHost=():void=>{if(hostAttached||window.isDestroyed())return;try{window.contentView.addChildView(clipHost);hostAttached=true;}catch{hostAttached=false;}};
+  const mountHost=():void=>{
+    if(hostAttached||window.isDestroyed())return;
+    try{window.contentView.addChildView(clipHost);hostAttached=true;lastAttachError='';}
+    catch(error){hostAttached=false;lastAttachError=`host: ${errorMessage(error)}`;console.warn('Blink canvas host attach failed',error);}
+  };
   const unmountHost=():void=>{if(!hostAttached||window.isDestroyed())return;try{window.contentView.removeChildView(clipHost);}catch{}hostAttached=false;};
   const unmountTarget=(target:WebContentsView|null):void=>{
     if(!target||target.webContents.isDestroyed())return;
@@ -113,9 +117,15 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     const active=activeTarget();
     for(const target of [view,resourceView])if(target&&target!==active)unmountTarget(target);
     if(!active||active.webContents.isDestroyed()||!previewVisible||!lastViewport){if(active)unmountTarget(active);unmountHost();return;}
-    if(!setGeometry(active,lastViewport)){unmountTarget(active);unmountHost();return;}
-    if(attached!==active){if(attached&&attached!==active)unmountTarget(attached);try{clipHost.addChildView(active);attached=active;}catch{attached=null;unmountHost();return;}}
-    mountHost();try{active.setVisible(true);}catch{}
+    if(!setGeometry(active,lastViewport)){lastAttachError='geometry: outside clip';unmountTarget(active);unmountHost();return;}
+    mountHost();
+    if(!hostAttached){unmountTarget(active);return;}
+    if(attached!==active){
+      if(attached&&attached!==active)unmountTarget(attached);
+      try{clipHost.addChildView(active);attached=active;lastAttachError='';}
+      catch(error){attached=null;lastAttachError=`child: ${errorMessage(error)}`;console.warn('Blink canvas child attach failed',error);unmountHost();return;}
+    }
+    try{active.setVisible(true);}catch(error){lastAttachError=`visible: ${errorMessage(error)}`;}
   };
   const cdp=async(target:WebContentsView,method:string,params?:Record<string,unknown>):Promise<void>=>{await bounded(`CDP ${method}`,target.webContents.debugger.sendCommand(method,params),5000);};
   const createView=async(instrumented:boolean):Promise<WebContentsView>=>{
@@ -214,7 +224,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const viewport=(value:Viewport):void=>{lastViewport=value;syncAttachedTarget();};
   const setVisible=(visible:boolean):void=>{previewVisible=Boolean(visible);syncAttachedTarget();};
-  const debugState=()=>({open:previewOpen,visible:previewVisible,resourceActive,attached:Boolean(attached&&!attached.webContents.isDestroyed()&&hostAttached),url:currentUrl});
+  const debugState=()=>({open:previewOpen,visible:previewVisible,resourceActive,attached:Boolean(attached&&!attached.webContents.isDestroyed()&&hostAttached),url:currentUrl,hasViewport:Boolean(lastViewport),...(lastViewport?{viewport:lastViewport}:{}),hostAttached,attachError:lastAttachError});
   const command=(value:unknown):void=>{
     const internal=value as{source?:unknown;type?:unknown;handMode?:unknown}|undefined;
     if(internal?.source==='animator-shell'&&internal.type==='SET_CANVAS_NAVIGATION'){canvasHandMode=Boolean(internal.handMode);if(!canvasHandMode)stopCanvasDrag();return;}
@@ -247,4 +257,5 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
 function headerValue(headers:Record<string,string[]>|undefined,name:string):string{if(!headers)return'';const key=Object.keys(headers).find(value=>value.toLowerCase()===name);return key?String(headers[key]?.[0]??''):'';}
 function headerNumber(headers:Record<string,string[]>|undefined,name:string):number{const value=Number(headerValue(headers,name));return Number.isFinite(value)&&value>0?value:0;}
 function safeFileName(value:string):string{return(value||'resource').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,180)||'resource';}
+function errorMessage(error:unknown):string{return error instanceof Error?error.message:String(error);}
 async function bounded<T>(label:string,promise:Promise<T>,timeoutMs:number):Promise<T>{let timer:ReturnType<typeof setTimeout>|undefined;const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} timed out after ${timeoutMs}ms`)),timeoutMs);});try{return await Promise.race([promise,timeout]);}finally{if(timer)clearTimeout(timer);}}
