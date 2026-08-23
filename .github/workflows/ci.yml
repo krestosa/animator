@@ -13,6 +13,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  windows-desktop-bootstrap:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Repository-local Electron setup
+        run: npm run desktop:setup
+      - name: Verify local Electron runtime
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'node_modules/electron/dist/electron.exe')) { throw 'Local Electron runtime missing' }
+      - name: Build desktop shell
+        run: npm run build:desktop
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 35
