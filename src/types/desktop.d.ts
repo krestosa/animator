@@ -1,6 +1,7 @@
 export {};
 
 type DesktopBlinkResource={url:string;initiatorType:string;resourceType:string;transferSize:number;decodedBodySize:number;mimeType:string;statusCode:number;method:string;fromCache:boolean;timestamp:number};
+type DesktopBlinkViewport={x:number;y:number;width:number;height:number;zoomFactor:number;clipX?:number;clipY?:number;clipWidth?:number;clipHeight?:number};
 
 declare global {
   interface Window {
@@ -15,7 +16,7 @@ declare global {
         downloadResource:(url:string,name?:string)=>Promise<{saved:boolean;path?:string}>;
         onResource:(handler:(resource:DesktopBlinkResource)=>void)=>void;
         offResource:(handler:(resource:DesktopBlinkResource)=>void)=>void;
-        setViewport:(viewport:{x:number;y:number;width:number;height:number;zoomFactor:number})=>void;
+        setViewport:(viewport:DesktopBlinkViewport)=>void;
         setVisible:(visible:boolean)=>void;
         command:(command:unknown)=>void;
         onMessage:(handler:(message:unknown)=>void)=>void;
