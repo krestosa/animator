@@ -2,11 +2,18 @@ import { store } from '../state/store';
 
 export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const api=window.animatorDesktop?.blink,device=root.querySelector<HTMLElement>('[data-device]'),webLoader=root.querySelector<HTMLDetailsElement>('.webLoader');if(!api||!device)return()=>{};
-  let disposed=false,currentKey='',generation=0,raf=0;
+  let disposed=false,currentKey='',generation=0,raf=0,lastOccluded:Boolean(webLoader?.open);
 
   const removeLegacyFrame=():void=>{if(store.get().project?.browserSessionId)return;device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());};
+  const blinkActive=():boolean=>{const project=store.get().project;return Boolean(project&&!project.browserSessionId);};
+  const syncSurfaceVisibility=():boolean=>{
+    const occluded=Boolean(webLoader?.open);lastOccluded=occluded;
+    api.setVisible(blinkActive()&&!occluded);
+    return occluded;
+  };
   const syncViewport=():void=>{
     raf=0;if(disposed||store.get().project?.browserSessionId)return;
+    if(syncSurfaceVisibility())return;
     const rect=device.getBoundingClientRect(),layoutWidth=Math.max(1,device.offsetWidth||rect.width),zoomFactor=Math.max(.05,rect.width/layoutWidth);
     if(rect.width<1||rect.height<1)return;
     api.setViewport({x:rect.left,y:rect.top,width:rect.width,height:rect.height,zoomFactor});
@@ -21,21 +28,23 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   };
 
   const sync=async():Promise<void>=>{
-    const project=store.get().project;if(!project||project.browserSessionId){currentKey='';generation++;await api.close();return;}
-    removeLegacyFrame();const key=`${project.id}:${project.selectedEntry}:${project.sourceUrl??''}`;scheduleViewport();if(key===currentKey)return;
+    const project=store.get().project;if(!project||project.browserSessionId){currentKey='';generation++;api.setVisible(false);await api.close();return;}
+    removeLegacyFrame();const key=`${project.id}:${project.selectedEntry}:${project.sourceUrl??''}`;scheduleViewport();if(key===currentKey){syncSurfaceVisibility();return;}
     currentKey=key;const request=++generation;
-    try{const url=await resolveUrl();if(disposed||request!==generation||!url)return;await api.open(url);removeLegacyFrame();scheduleViewport();}
+    try{const url=await resolveUrl();if(disposed||request!==generation||!url)return;await api.open(url);removeLegacyFrame();syncSurfaceVisibility();scheduleViewport();}
     catch(error){if(disposed||request!==generation)return;store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
   };
 
   const unsubscribe=store.subscribe(()=>void sync());
   const mutations=new MutationObserver(()=>{removeLegacyFrame();scheduleViewport();});mutations.observe(device,{childList:true,attributes:true,attributeFilter:['style','class']});
   const resize=new ResizeObserver(scheduleViewport);resize.observe(device);if(device.parentElement)resize.observe(device.parentElement);
-  const onWebLoaderToggle=():void=>{
-    const visible=!webLoader?.open;api.setVisible(visible);if(visible)scheduleViewport();
-  };
-  webLoader?.addEventListener('toggle',onWebLoaderToggle);
+  const syncLoaderState=():void=>{const occluded=Boolean(webLoader?.open);if(occluded===lastOccluded){syncSurfaceVisibility();return;}lastOccluded=occluded;syncSurfaceVisibility();if(!occluded)scheduleViewport();};
+  const loaderObserver=webLoader?new MutationObserver(syncLoaderState):null;loaderObserver?.observe(webLoader!,{attributes:true,attributeFilter:['open']});
+  const onWebLoaderToggle=():void=>syncLoaderState();
+  const loaderSummary=webLoader?.querySelector<HTMLElement>('summary');
+  const onLoaderPointerDown=():void=>{if(webLoader&&!webLoader.open){lastOccluded=true;api.setVisible(false);}};
+  webLoader?.addEventListener('toggle',onWebLoaderToggle);loaderSummary?.addEventListener('pointerdown',onLoaderPointerDown,true);
   window.addEventListener('resize',scheduleViewport);window.addEventListener('scroll',scheduleViewport,true);
-  api.setVisible(!webLoader?.open);void sync();
-  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(true);void api.close();};
+  syncSurfaceVisibility();void sync();
+  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();loaderObserver?.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);loaderSummary?.removeEventListener('pointerdown',onLoaderPointerDown,true);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(false);void api.close();};
 }
