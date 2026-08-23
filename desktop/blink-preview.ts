@@ -23,11 +23,12 @@ export interface BlinkPreviewHandle{
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
 
 export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
-  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false;
+  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true;
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:true});
   const networkResources=new Map<string,PageResource>();
   const networkFilter={urls:['<all_urls>']};
+  const uiProtocol=window.webContents.session.protocol;
 
   const publishResource=(resource:PageResource):void=>{if(!window.isDestroyed())window.webContents.send('animator:blink:resource',resource);};
   const captureResource=(details:{url:string;resourceType?:string;method?:string;timestamp?:number;responseHeaders?:Record<string,string[]>;statusCode?:number;fromCache?:boolean}):void=>{
@@ -77,7 +78,8 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     const x=Math.max(0,Math.round(value.x)),y=Math.max(0,Math.round(value.y)),width=Math.max(1,Math.round(value.width)),height=Math.max(1,Math.round(value.height)),zoom=Number.isFinite(value.zoomFactor)?Math.max(.05,value.zoomFactor):1;
     target.setBounds({x,y,width,height});target.webContents.setZoomFactor(zoom);
   };
-  const showTarget=(target:WebContentsView):void=>{if(lastViewport)setGeometry(target,lastViewport);target.setVisible(true);window.contentView.addChildView(target);};
+  const showTarget=(target:WebContentsView):void=>{if(lastViewport)setGeometry(target,lastViewport);target.setVisible(previewVisible);window.contentView.addChildView(target);};
+  const updateVisibility=():void=>{const active=resourceActive?resourceView:view;if(active&&!active.webContents.isDestroyed())active.setVisible(previewVisible);};
   const cdp=async(target:WebContentsView,method:string,params?:Record<string,unknown>):Promise<void>=>{await bounded(`CDP ${method}`,target.webContents.debugger.sendCommand(method,params),5000);};
   const createView=async(instrumented:boolean):Promise<WebContentsView>=>{
     const preload=fileURLToPath(new URL('./target-preload.cjs',import.meta.url));
@@ -102,6 +104,26 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const ensureView=async():Promise<WebContentsView>=>{if(view)return view;view=await createView(instrumentationEnabled);return view;};
   const startReload=(target:WebContentsView,url:string):void=>{if(!url||target.webContents.isDestroyed())return;void target.webContents.loadURL(url).catch(error=>{if(!target.webContents.isDestroyed())console.warn('Blink reload failed',error);});};
+
+  const resolveDomPreview=async(source:string):Promise<Response>=>{
+    if(!instrumentationEnabled||!view||view.webContents.isDestroyed())return new Response('',{status:404});
+    const match=/^dom:\/\/inline-svg\/(\d+)$/.exec(source);if(!match)return new Response('',{status:404});
+    const index=Number(match[1]);
+    try{
+      const svg=await view.webContents.executeJavaScript(`document.querySelectorAll('svg')[${index}]?.outerHTML??''`,true) as string;
+      return svg?new Response(svg,{status:200,headers:{'content-type':'image/svg+xml;charset=utf-8','cache-control':'no-store'}}):new Response('',{status:404});
+    }catch{return new Response('',{status:404});}
+  };
+  void uiProtocol.handle('animator-asset',async request=>{
+    try{
+      const source=new URL(request.url).searchParams.get('url')??'';
+      if(/^dom:\/\/inline-svg\/\d+$/.test(source))return await resolveDomPreview(source);
+      if(!/^https?:\/\//i.test(source))return new Response('',{status:404});
+      const response=await targetSession.fetch(source,{method:'GET',credentials:'include',cache:'force-cache'});
+      const headers=new Headers(response.headers);headers.set('access-control-allow-origin','*');
+      return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+    }catch{return new Response('',{status:502});}
+  }).catch(error=>console.warn('Animator asset protocol unavailable',error));
 
   const closeResource=async():Promise<void>=>{resourceActive=false;if(resourceView&&!resourceView.webContents.isDestroyed())resourceView.setVisible(false);if(view&&!view.webContents.isDestroyed())showTarget(view);};
   const openResource=async(url:string):Promise<void>=>{
@@ -151,7 +173,8 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     }
     return[...merged.values()].sort((a,b)=>a.timestamp-b.timestamp||a.url.localeCompare(b.url));
   };
-  const viewport=(value:Viewport):void=>{lastViewport=value;if(view)setGeometry(view,value);if(resourceView)setGeometry(resourceView,value);const active=resourceActive?resourceView:view;if(active&&!active.webContents.isDestroyed()){active.setVisible(true);window.contentView.addChildView(active);}};
+  const viewport=(value:Viewport):void=>{lastViewport=value;if(view)setGeometry(view,value);if(resourceView)setGeometry(resourceView,value);if(previewVisible){const active=resourceActive?resourceView:view;if(active&&!active.webContents.isDestroyed()){active.setVisible(true);window.contentView.addChildView(active);}}};
+  const setVisible=(visible:boolean):void=>{previewVisible=Boolean(visible);updateVisibility();};
   const command=(value:unknown):void=>{if(instrumentationEnabled&&view&&!view.webContents.isDestroyed())view.webContents.send('animator:blink:command',value);};
   const pageMessage=(event:Electron.IpcMainEvent,value:unknown):void=>{if(!instrumentationEnabled||!view||event.sender.id!==view.webContents.id||window.isDestroyed())return;window.webContents.send('animator:blink:message',value);};
 
@@ -163,13 +186,15 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   ipcMain.handle('animator:blink:resource-close',event=>{if(!validSender(event.sender.id))throw new Error('Invalid Blink preview sender');return closeResource();});
   ipcMain.handle('animator:blink:resource-download',(event,payload:{url?:unknown;name?:unknown})=>{if(!validSender(event.sender.id))throw new Error('Invalid Blink preview sender');return downloadResource(String(payload?.url??''),String(payload?.name??'resource'));});
   const viewportHandler=(event:Electron.IpcMainEvent,value:Viewport)=>{if(validSender(event.sender.id))viewport(value);};
+  const visibleHandler=(event:Electron.IpcMainEvent,value:boolean)=>{if(validSender(event.sender.id))setVisible(value);};
   const commandHandler=(event:Electron.IpcMainEvent,value:unknown)=>{if(validSender(event.sender.id))command(value);};
-  ipcMain.on('animator:blink:viewport',viewportHandler);ipcMain.on('animator:blink:command',commandHandler);ipcMain.on('animator:blink:page-message',pageMessage);
+  ipcMain.on('animator:blink:viewport',viewportHandler);ipcMain.on('animator:blink:visible',visibleHandler);ipcMain.on('animator:blink:command',commandHandler);ipcMain.on('animator:blink:page-message',pageMessage);
 
   const cleanup=async():Promise<void>=>{
     for(const channel of ['animator:blink:open','animator:blink:close','animator:blink:instrumentation','animator:blink:resources','animator:blink:resource-open','animator:blink:resource-close','animator:blink:resource-download'])ipcMain.removeHandler(channel);
-    ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
+    ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:visible',visibleHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
     targetSession.webRequest.onBeforeRequest(null);targetSession.webRequest.onSendHeaders(null);targetSession.webRequest.onResponseStarted(null);targetSession.webRequest.onCompleted(null);targetSession.webRequest.onBeforeRedirect(null);targetSession.webRequest.onErrorOccurred(null);
+    try{await uiProtocol.unhandle('animator-asset');}catch{}
     networkResources.clear();await disposeViews();
   };
   return{open,close,setInstrumentation,resources,openResource,closeResource,downloadResource,cleanup};
