@@ -18,12 +18,13 @@ export interface BlinkPreviewHandle{
   openResource:(url:string)=>Promise<void>;
   closeResource:()=>Promise<void>;
   downloadResource:(url:string,suggestedName?:string)=>Promise<{saved:boolean;path?:string}>;
+  debugState:()=>{open:boolean;visible:boolean;resourceActive:boolean;attached:boolean;url:string};
   cleanup:()=>Promise<void>;
 }
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
 
 export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
-  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true;
+  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,resourceView:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined,resourceActive=false,previewVisible=true,previewOpen=false,attached:WebContentsView|null=null;
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:true});
   const networkResources=new Map<string,PageResource>();
@@ -56,8 +57,14 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   targetSession.webRequest.onBeforeRedirect(networkFilter,details=>captureResource(details));
   targetSession.webRequest.onErrorOccurred(networkFilter,details=>captureResource(details));
 
-  const detachTarget=(target:WebContentsView):void=>{
+  const unmountTarget=(target:WebContentsView|null):void=>{
+    if(!target||target.webContents.isDestroyed())return;
+    try{target.setVisible(false);}catch{}
     try{window.contentView.removeChildView(target);}catch{}
+    if(attached===target)attached=null;
+  };
+  const detachTarget=(target:WebContentsView):void=>{
+    unmountTarget(target);
     try{if(target.webContents.debugger.isAttached())target.webContents.debugger.detach();}catch{}
   };
   const destroyTarget=async(target:WebContentsView|null):Promise<void>=>{
@@ -71,20 +78,27 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     });
   };
   const disposeViews=async():Promise<void>=>{
-    const active=view,parked=parkedInstrumented,resource=resourceView;view=null;parkedInstrumented=null;resourceView=null;
+    const active=view,parked=parkedInstrumented,resource=resourceView;view=null;parkedInstrumented=null;resourceView=null;attached=null;
     await destroyTarget(active);if(parked&&parked!==active)await destroyTarget(parked);if(resource&&resource!==active&&resource!==parked)await destroyTarget(resource);
   };
   const setGeometry=(target:WebContentsView,value:Viewport):void=>{
     const x=Math.max(0,Math.round(value.x)),y=Math.max(0,Math.round(value.y)),width=Math.max(1,Math.round(value.width)),height=Math.max(1,Math.round(value.height)),zoom=Number.isFinite(value.zoomFactor)?Math.max(.05,value.zoomFactor):1;
     target.setBounds({x,y,width,height});target.webContents.setZoomFactor(zoom);
   };
-  const showTarget=(target:WebContentsView):void=>{if(lastViewport)setGeometry(target,lastViewport);target.setVisible(previewVisible);window.contentView.addChildView(target);};
-  const updateVisibility=():void=>{const active=resourceActive?resourceView:view;if(active&&!active.webContents.isDestroyed())active.setVisible(previewVisible);};
+  const activeTarget=():WebContentsView|null=>resourceActive?resourceView:(previewOpen?view:null);
+  const syncAttachedTarget=():void=>{
+    const active=activeTarget();
+    for(const target of [view,resourceView])if(target&&target!==active)unmountTarget(target);
+    if(!active||active.webContents.isDestroyed()||!previewVisible){if(active)unmountTarget(active);return;}
+    if(lastViewport)setGeometry(active,lastViewport);
+    if(attached!==active){if(attached&&attached!==active)unmountTarget(attached);try{window.contentView.addChildView(active);attached=active;}catch{attached=null;return;}}
+    try{active.setVisible(true);}catch{}
+  };
   const cdp=async(target:WebContentsView,method:string,params?:Record<string,unknown>):Promise<void>=>{await bounded(`CDP ${method}`,target.webContents.debugger.sendCommand(method,params),5000);};
   const createView=async(instrumented:boolean):Promise<WebContentsView>=>{
     const preload=fileURLToPath(new URL('./target-preload.cjs',import.meta.url));
     const next=new WebContentsView({webPreferences:{...(instrumented?{preload}:{}),session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:false}});
-    next.setBackgroundColor('#ffffff');next.setVisible(false);window.contentView.addChildView(next);
+    next.setBackgroundColor('#ffffff');next.setVisible(false);
     next.webContents.setWindowOpenHandler(({url})=>{startReload(next,url);return{action:'deny'};});
     next.webContents.on('did-navigate',(_event,url)=>{if(next===view&&/^https?:\/\//i.test(url))currentUrl=url;});
     if(lastViewport)setGeometry(next,lastViewport);
@@ -100,9 +114,9 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const createResourceView=():WebContentsView=>{
     const next=new WebContentsView({webPreferences:{session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:true}});
-    next.setBackgroundColor('#ffffff');next.setVisible(false);window.contentView.addChildView(next);if(lastViewport)setGeometry(next,lastViewport);return next;
+    next.setBackgroundColor('#ffffff');next.setVisible(false);if(lastViewport)setGeometry(next,lastViewport);return next;
   };
-  const ensureView=async():Promise<WebContentsView>=>{if(view)return view;view=await createView(instrumentationEnabled);return view;};
+  const ensureView=async():Promise<WebContentsView>=>{if(view&&!view.webContents.isDestroyed())return view;view=await createView(instrumentationEnabled);return view;};
   const startReload=(target:WebContentsView,url:string):void=>{if(!url||target.webContents.isDestroyed())return;void target.webContents.loadURL(url).catch(error=>{if(!target.webContents.isDestroyed())console.warn('Blink reload failed',error);});};
 
   const resolveDomPreview=async(source:string):Promise<Response>=>{
@@ -121,17 +135,17 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
         if(/^dom:\/\/inline-svg\/\d+$/.test(source))return await resolveDomPreview(source);
         if(!/^https?:\/\//i.test(source))return new Response('',{status:404});
         const response=await targetSession.fetch(source,{method:'GET',credentials:'include',cache:'force-cache'});
-        const headers=new Headers(response.headers);headers.set('access-control-allow-origin','*');
+        const headers=new Headers(response.headers);headers.set('access-control-allow-origin','*');headers.set('cache-control','no-store');headers.delete('set-cookie');headers.delete('content-security-policy');
         return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
       }catch{return new Response('',{status:502});}
     });
   }catch(error){console.warn('Animator asset protocol unavailable',error);}
 
-  const closeResource=async():Promise<void>=>{resourceActive=false;if(resourceView&&!resourceView.webContents.isDestroyed())resourceView.setVisible(false);if(view&&!view.webContents.isDestroyed())showTarget(view);};
+  const closeResource=async():Promise<void>=>{resourceActive=false;unmountTarget(resourceView);syncAttachedTarget();};
   const openResource=async(url:string):Promise<void>=>{
     if(!/^(?:https?|blob|data):/i.test(url))throw new Error('Unsupported resource URL');
     const target=resourceView&&!resourceView.webContents.isDestroyed()?resourceView:(resourceView=createResourceView());
-    if(view&&!view.webContents.isDestroyed())view.setVisible(false);resourceActive=true;showTarget(target);
+    resourceActive=true;syncAttachedTarget();
     if(target.webContents.getURL()!==url)await target.webContents.loadURL(url);
   };
   const downloadResource=async(url:string,suggestedName='resource'):Promise<{saved:boolean;path?:string}>=>{
@@ -150,22 +164,23 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   };
   const open=async(url:string):Promise<void>=>{
     if(!/^https?:\/\//i.test(url))throw new Error('Blink preview only accepts http(s) URLs');
-    await closeResource();const target=await ensureView();showTarget(target);
-    if(currentUrl===url)return;
-    networkResources.clear();currentUrl=url;await target.webContents.loadURL(url);
+    await closeResource();const target=await ensureView();previewOpen=true;
+    const same=currentUrl===url;if(!same){networkResources.clear();currentUrl=url;}
+    syncAttachedTarget();if(same)return;
+    await target.webContents.loadURL(url);syncAttachedTarget();
   };
-  const close=async():Promise<void>=>{currentUrl='';networkResources.clear();resourceActive=false;if(resourceView)resourceView.setVisible(false);if(view)view.setVisible(false);};
+  const close=async():Promise<void>=>{previewOpen=false;currentUrl='';networkResources.clear();resourceActive=false;unmountTarget(resourceView);unmountTarget(view);};
   const setInstrumentation=async(enabled:boolean):Promise<{enabled:boolean}>=>{
     const nextEnabled=Boolean(enabled);if(nextEnabled===instrumentationEnabled)return{enabled:instrumentationEnabled};
-    const liveUrl=view&&!view.webContents.isDestroyed()?view.webContents.getURL():'';const url=/^https?:\/\//i.test(liveUrl)?liveUrl:currentUrl;currentUrl=url;
+    const url=currentUrl;
     if(!nextEnabled){
       const instrumented=view;
-      try{const clean=await createView(false);if(instrumented){instrumented.setVisible(false);parkedInstrumented=instrumented;instrumented.webContents.stop();startReload(instrumented,'about:blank');}view=clean;instrumentationEnabled=false;if(!resourceActive)showTarget(clean);startReload(clean,url);return{enabled:false};}
-      catch(error){if(instrumented&&!resourceActive)showTarget(instrumented);throw error;}
+      try{const clean=await createView(false);if(instrumented){unmountTarget(instrumented);parkedInstrumented=instrumented;instrumented.webContents.stop();startReload(instrumented,'about:blank');}view=clean;instrumentationEnabled=false;syncAttachedTarget();if(previewOpen&&url)startReload(clean,url);return{enabled:false};}
+      catch(error){if(instrumented){view=instrumented;syncAttachedTarget();}throw error;}
     }
-    const clean=view,prepared=parkedInstrumented;parkedInstrumented=null;if(clean)clean.setVisible(false);let instrumented=prepared;
-    try{if(!instrumented||instrumented.webContents.isDestroyed())instrumented=await createView(true);view=instrumented;instrumentationEnabled=true;if(!resourceActive)showTarget(instrumented);startReload(instrumented,url);if(clean&&clean!==instrumented)await destroyTarget(clean);return{enabled:true};}
-    catch(error){if(clean&&!clean.webContents.isDestroyed()){view=clean;instrumentationEnabled=false;if(!resourceActive)showTarget(clean);}if(instrumented&&instrumented!==prepared)await destroyTarget(instrumented);parkedInstrumented=prepared&&!prepared.webContents.isDestroyed()?prepared:null;throw error;}
+    const clean=view,prepared=parkedInstrumented;parkedInstrumented=null;if(clean)unmountTarget(clean);let instrumented=prepared;
+    try{if(!instrumented||instrumented.webContents.isDestroyed())instrumented=await createView(true);view=instrumented;instrumentationEnabled=true;syncAttachedTarget();if(previewOpen&&url)startReload(instrumented,url);if(clean&&clean!==instrumented)await destroyTarget(clean);return{enabled:true};}
+    catch(error){if(clean&&!clean.webContents.isDestroyed()){view=clean;instrumentationEnabled=false;syncAttachedTarget();}if(instrumented&&instrumented!==prepared)await destroyTarget(instrumented);parkedInstrumented=prepared&&!prepared.webContents.isDestroyed()?prepared:null;throw error;}
   };
   const resources=async():Promise<PageResource[]>=>{
     const merged=new Map<string,PageResource>(networkResources);
@@ -175,8 +190,9 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     }
     return[...merged.values()].sort((a,b)=>a.timestamp-b.timestamp||a.url.localeCompare(b.url));
   };
-  const viewport=(value:Viewport):void=>{lastViewport=value;if(view)setGeometry(view,value);if(resourceView)setGeometry(resourceView,value);if(previewVisible){const active=resourceActive?resourceView:view;if(active&&!active.webContents.isDestroyed()){active.setVisible(true);window.contentView.addChildView(active);}}};
-  const setVisible=(visible:boolean):void=>{previewVisible=Boolean(visible);updateVisibility();};
+  const viewport=(value:Viewport):void=>{lastViewport=value;if(view&&!view.webContents.isDestroyed())setGeometry(view,value);if(resourceView&&!resourceView.webContents.isDestroyed())setGeometry(resourceView,value);syncAttachedTarget();};
+  const setVisible=(visible:boolean):void=>{previewVisible=Boolean(visible);syncAttachedTarget();};
+  const debugState=()=>({open:previewOpen,visible:previewVisible,resourceActive,attached:Boolean(attached&&!attached.webContents.isDestroyed()),url:currentUrl});
   const command=(value:unknown):void=>{if(instrumentationEnabled&&view&&!view.webContents.isDestroyed())view.webContents.send('animator:blink:command',value);};
   const pageMessage=(event:Electron.IpcMainEvent,value:unknown):void=>{if(!instrumentationEnabled||!view||event.sender.id!==view.webContents.id||window.isDestroyed())return;window.webContents.send('animator:blink:message',value);};
 
@@ -199,7 +215,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     try{await uiProtocol.unhandle('animator-asset');}catch{}
     networkResources.clear();await disposeViews();
   };
-  return{open,close,setInstrumentation,resources,openResource,closeResource,downloadResource,cleanup};
+  return{open,close,setInstrumentation,resources,openResource,closeResource,downloadResource,debugState,cleanup};
 }
 
 function headerValue(headers:Record<string,string[]>|undefined,name:string):string{if(!headers)return'';const key=Object.keys(headers).find(value=>value.toLowerCase()===name);return key?String(headers[key]?.[0]??''):'';}
