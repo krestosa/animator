@@ -7,7 +7,7 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
   if(!window.animatorDesktop)return()=>{};
   const details=root.querySelector<HTMLDetailsElement>('.webLoader'),input=details?.querySelector<HTMLInputElement>('[data-web-url]'),legacyMode=details?.querySelector<HTMLSelectElement>('[data-web-engine]'),browserOptions=details?.querySelector<HTMLElement>('[data-browser-options]'),browserEngine=details?.querySelector<HTMLSelectElement>('[data-browser-engine]'),profile=details?.querySelector<HTMLSelectElement>('[data-browser-profile]'),openButton=details?.querySelector<HTMLButtonElement>('[data-web-open]');
   if(!details||!input||!legacyMode||!browserOptions||!browserEngine||!profile||!openButton)return()=>{};
-  legacyMode.value='browser';legacyMode.hidden=true;
+  legacyMode.value='browser';legacyMode.remove();
   const intro=details.querySelector<HTMLElement>('.webLoaderPanel>p');if(intro)intro.textContent='Blink se renderiza directamente dentro de Electron. No usa iframe, proxy, streaming ni reconstrucción.';
   const chromium=browserEngine.querySelector<HTMLOptionElement>('option[value="chromium"]');chromium?.remove();if(browserEngine.value==='chromium')browserEngine.value='firefox';
   openButton.textContent='Abrir en Blink';
