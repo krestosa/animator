@@ -21,6 +21,7 @@ export function mountRemoteOpen(root:HTMLElement):()=>void{
   toolbar.insertBefore(details,toolbar.querySelector('.grow'));
   const input=details.querySelector<HTMLInputElement>('[data-web-url]')!,engine=details.querySelector<HTMLSelectElement>('[data-web-engine]')!,browserEngine=details.querySelector<HTMLSelectElement>('[data-browser-engine]')!,profile=details.querySelector<HTMLSelectElement>('[data-browser-profile]')!,browserOptions=details.querySelector<HTMLElement>('[data-browser-options]')!,runtimeStatus=details.querySelector<HTMLElement>('[data-browser-runtime-status]')!;
   input.value=localStorage.getItem('animator.last-url')??'';engine.value=localStorage.getItem('animator.web-engine')==='browser'?'browser':'proxy';browserEngine.value=storedEngine();profile.value=localStorage.getItem('animator.browser-profile')==='mobile'?'mobile':'desktop';
+  if(window.animatorDesktop)return()=>{details.remove();};
   let opening=false,installing=false,disposed=false;
   const syncMode=():void=>{browserOptions.hidden=engine.value!=='browser';};
   const renderRuntimeStatus=(runtimes:RuntimeStatus[]):void=>{if(!disposed)runtimeStatus.textContent=runtimes.map(runtime=>`${runtime.label}: ${runtime.installed?'installed':'not installed'}`).join(' · ');};
