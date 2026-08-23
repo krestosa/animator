@@ -10,5 +10,5 @@
     "rootDir": ".",
     "types": ["node", "electron"]
   },
-  "include": ["desktop/**/*.ts"]
+  "include": ["desktop/**/*.ts", "desktop/**/*.cts"]
 }
