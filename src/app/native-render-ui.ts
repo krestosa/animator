@@ -10,6 +10,7 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
   legacyMode.value='browser';legacyMode.remove();
   const intro=details.querySelector<HTMLElement>('.webLoaderPanel>p');if(intro)intro.textContent='Blink se renderiza directamente dentro de Electron. No usa iframe, proxy, streaming ni reconstrucción.';
   const chromium=browserEngine.querySelector<HTMLOptionElement>('option[value="chromium"]');chromium?.remove();if(browserEngine.value==='chromium')browserEngine.value='firefox';
+  browserOptions.querySelector<HTMLInputElement>('[data-runtime-install][value="chromium"]')?.closest('label')?.remove();
   openButton.textContent='Abrir en Blink';
   const blinkLabel=document.createElement('div');blinkLabel.className='nativeRenderPrimary';blinkLabel.innerHTML='<strong>Render</strong><span>Blink · Electron nativo</span>';input.after(blinkLabel);
   const switcher=document.createElement('details');switcher.className='renderSwitcher';switcher.innerHTML='<summary>Cambiar render</summary>';
