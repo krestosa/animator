@@ -94,6 +94,11 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
     const target=`${server.origin}/api/health`;
     console.log('Native Blink smoke test: opening instrumented view');
     await bounded('native Blink open',blinkHandle.open(target),10000);
+    const loadedResources=await bounded('native Blink resources',blinkHandle.resources(),3000);
+    const documentResource=loadedResources.find(resource=>resource.url===target);
+    if(!documentResource)throw new Error(`Native Blink smoke test: Assets capture missed document ${target}`);
+    if(!['mainFrame','document'].includes(documentResource.resourceType))throw new Error(`Native Blink smoke test: unexpected document resource type ${documentResource.resourceType}`);
+    console.log(`Native Blink smoke test: Assets captured ${loadedResources.length} loaded resource(s)`);
     console.log('Native Blink smoke test: entering clean mode');
     const clean=await bounded('native Blink clean mode',blinkHandle.setInstrumentation(false),5000);
     if(clean.enabled!==false)throw new Error(`Native Blink smoke test: clean mode did not activate ${JSON.stringify(clean)}`);
@@ -101,7 +106,7 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
     console.log('Native Blink smoke test: restoring instrumentation');
     const instrumented=await bounded('native Blink instrumentation restore',blinkHandle.setInstrumentation(true),5000);
     if(instrumented.enabled!==true)throw new Error(`Native Blink smoke test: instrumentation did not reactivate ${JSON.stringify(instrumented)}`);
-    console.log('Native Blink smoke test: native view, clean reload and instrumented reload verified');
+    console.log('Native Blink smoke test: native view, assets capture, clean reload and instrumented reload verified');
     await bounded('native Blink close',blinkHandle.close(),3000);
   }
   if(metrics){
