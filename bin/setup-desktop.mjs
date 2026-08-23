@@ -11,16 +11,21 @@ const npmCache=path.join(cacheRoot,'npm');
 fs.mkdirSync(electronCache,{recursive:true});
 fs.mkdirSync(npmCache,{recursive:true});
 
-const npmCommand=process.platform==='win32'?'npm.cmd':'npm';
+const npmCli=process.env.npm_execpath;
+const command=npmCli?process.execPath:(process.platform==='win32'?'npm.cmd':'npm');
+const args=npmCli?[npmCli,'install','--no-audit','--no-fund']:['install','--no-audit','--no-fund'];
 const env={
   ...process.env,
   ELECTRON_CACHE:electronCache,
   npm_config_cache:npmCache,
+  npm_config_audit:'false',
+  npm_config_fund:'false',
+  npm_config_update_notifier:'false',
   PLAYWRIGHT_BROWSERS_PATH:path.join(root,'.animator-browsers')
 };
 
 const code=await new Promise((resolve,reject)=>{
-  const child=spawn(npmCommand,['install','--no-audit','--no-fund'],{cwd:root,env,stdio:'inherit',windowsHide:true});
+  const child=spawn(command,args,{cwd:root,env,stdio:'inherit',windowsHide:true,...(!npmCli&&process.platform==='win32'?{shell:true}:{})});
   child.once('error',reject);
   child.once('exit',value=>resolve(value??1));
 });
