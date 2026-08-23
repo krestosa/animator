@@ -1,127 +1,44 @@
 import {store} from '../state/store';
 
 type AssetCategory='media'|'typography'|'lottie'|'source'|'styles'|'data'|'documents'|'other';
-type AssetPreview='image'|'video'|'audio'|'font'|'lottie'|'text'|'none';
-type AssetRecord={id:string;path:string;name:string;extension:string;category:AssetCategory;kind:string;preview:AssetPreview;size:number;url:string;origin:'project'|'runtime'};
+type AssetRecord={id:string;path:string;name:string;extension:string;category:AssetCategory;kind:string;size:number;url:string;origin:'project'|'runtime';mimeType?:string;statusCode?:number;method?:string;fromCache?:boolean};
 type LocalAsset=Omit<AssetRecord,'id'|'url'|'origin'>;
 type RuntimeResource={url:string;initiatorType:string;resourceType?:string;transferSize:number;decodedBodySize:number;mimeType?:string;statusCode?:number;method?:string;fromCache?:boolean;timestamp?:number};
-
-const categoryOrder:AssetCategory[]=['media','typography','lottie','source','styles','data','documents','other'];
-const categoryLabels:Record<AssetCategory,string>={media:'Media',typography:'Typography',lottie:'Lottie',source:'Source',styles:'Styles',data:'Data',documents:'Documents',other:'Other'};
-const imageExt=new Set(['png','jpg','jpeg','webp','gif','avif','bmp','ico','svg']);
-const videoExt=new Set(['mp4','webm','mov','m4v','ogv','avi','mkv']);
-const audioExt=new Set(['mp3','wav','ogg','oga','m4a','aac','flac','opus']);
-const fontExt=new Set(['woff','woff2','ttf','otf','eot']);
-const sourceExt=new Set(['html','htm','js','mjs','cjs','jsx','ts','tsx','vue','svelte','astro','php','py','rb','rs','go','java','kt','swift','wasm']);
-const styleExt=new Set(['css','scss','sass','less','styl','pcss']);
-const dataExt=new Set(['json','json5','yaml','yml','xml','csv','tsv','toml','ini','map','webmanifest']);
-const documentExt=new Set(['md','mdx','txt','pdf']);
+const categories:AssetCategory[]=['media','typography','lottie','source','styles','data','documents','other'];
+const labels:Record<AssetCategory,string>={media:'Media',typography:'Typography',lottie:'Lottie',source:'Source',styles:'Styles',data:'Data',documents:'Documents',other:'Other'};
+const imageExt=new Set(['png','jpg','jpeg','webp','gif','avif','bmp','ico','svg']),videoExt=new Set(['mp4','webm','mov','m4v','ogv','avi','mkv']),audioExt=new Set(['mp3','wav','ogg','oga','m4a','aac','flac','opus']),fontExt=new Set(['woff','woff2','ttf','otf','eot']),sourceExt=new Set(['html','htm','js','mjs','cjs','jsx','ts','tsx','vue','svelte','astro','php','py','rb','rs','go','java','kt','swift','wasm']),styleExt=new Set(['css','scss','sass','less','styl','pcss']),dataExt=new Set(['json','json5','yaml','yml','xml','csv','tsv','toml','ini','map','webmanifest']),documentExt=new Set(['md','mdx','txt','pdf']);
 
 export function mountAssetsBrowser(root:HTMLElement):()=>void{
   const left=root.querySelector<HTMLElement>('.leftPanel');if(!left)return()=>{};
-  const section=document.createElement('section');section.className='assetsBrowser';section.dataset.assetsRegion='';section.innerHTML='<header class="assetsHeader"><h3>Assets <small data-assets-count>0</small></h3><button type="button" class="tiny" data-assets-refresh title="Refresh assets" aria-label="Refresh assets">↻</button></header><input class="assetsSearch" data-assets-search type="search" placeholder="Search assets" aria-label="Search assets"><div class="assetsFilters" data-assets-filters></div><div class="assetsGrid" data-assets-grid></div><div class="assetPreview" data-asset-preview hidden></div>';
-  left.append(section);
-  const search=section.querySelector<HTMLInputElement>('[data-assets-search]')!,filters=section.querySelector<HTMLElement>('[data-assets-filters]')!,grid=section.querySelector<HTMLElement>('[data-assets-grid]')!,preview=section.querySelector<HTMLElement>('[data-asset-preview]')!,count=section.querySelector<HTMLElement>('[data-assets-count]')!;
-  let assets:AssetRecord[]=[],active:'all'|AssetCategory='all',selectedId='',generation=0,lastProjectId='',cachedLocalProjectId='',cachedLocalAssets:AssetRecord[]=[],syncing=false;
-
-  const render=():void=>{
-    const query=search.value.trim().toLowerCase(),visible=assets.filter(asset=>(active==='all'||asset.category===active)&&(!query||`${asset.name} ${asset.path} ${asset.kind}`.toLowerCase().includes(query)));
-    count.textContent=String(assets.length);
-    const totals=new Map<AssetCategory,number>();for(const asset of assets)totals.set(asset.category,(totals.get(asset.category)??0)+1);
-    filters.innerHTML=[filterButton('all','All',assets.length,active==='all'),...categoryOrder.filter(category=>totals.has(category)).map(category=>filterButton(category,categoryLabels[category],totals.get(category)??0,active===category))].join('');
-    grid.innerHTML=visible.length?visible.map(asset=>assetCard(asset,asset.id===selectedId)).join(''):'<div class="assetsEmpty">No assets in this view</div>';
-    if(selectedId&&!assets.some(asset=>asset.id===selectedId)){selectedId='';preview.hidden=true;preview.replaceChildren();}
-  };
-
-  const load=async(options:{forceLocal?:boolean;quiet?:boolean}={}):Promise<void>=>{
-    if(syncing&&options.quiet)return;
-    const project=store.get().project,request=++generation;if(!project){assets=[];selectedId='';lastProjectId='';cachedLocalProjectId='';cachedLocalAssets=[];render();return;}
-    syncing=true;if(!options.quiet)grid.innerHTML='<div class="assetsEmpty">Scanning assets…</div>';
-    try{
-      if(project.kind!=='remote'&&!project.browserSessionId){
-        if(options.forceLocal||cachedLocalProjectId!==project.id){
-          const nextLocal:AssetRecord[]=[];
-          try{const response=await fetch(`/api/projects/${encodeURIComponent(project.id)}/assets`,{cache:'no-store'}),body=await response.json() as{assets?:LocalAsset[]};if(response.ok&&body.assets)for(const asset of body.assets)nextLocal.push({...asset,id:`project:${asset.path}`,url:`/api/projects/${encodeURIComponent(project.id)}/asset?path=${encodeURIComponent(asset.path)}`,origin:'project'});}catch{}
-          cachedLocalProjectId=project.id;cachedLocalAssets=nextLocal;
-        }
-      }else if(cachedLocalProjectId!==project.id){cachedLocalProjectId='';cachedLocalAssets=[];}
-
-      const collected:AssetRecord[]=[...cachedLocalAssets],localPaths=new Set(cachedLocalAssets.map(item=>normalizePath(item.path)));
-      let resources:RuntimeResource[]=[];
-      try{
-        if(project.browserSessionId){
-          const response=await fetch(`/api/browser-sessions/${encodeURIComponent(project.browserSessionId)}/resources`,{cache:'no-store'}),body=await response.json() as{resources?:RuntimeResource[]};
-          if(response.ok&&body.resources)resources=body.resources;
-        }else resources=await window.animatorDesktop?.blink.resources()??[];
-      }catch{}
-      for(const resource of resources){const runtime=runtimeAsset(resource);if(!runtime)continue;let pathname='';try{pathname=normalizePath(decodeURIComponent(new URL(runtime.url).pathname));}catch{}if(localPaths.has(pathname))continue;if(!collected.some(item=>item.url===runtime.url))collected.push(runtime);}
-      if(request!==generation)return;
-      assets=collected.sort((a,b)=>categoryOrder.indexOf(a.category)-categoryOrder.indexOf(b.category)||a.name.localeCompare(b.name));render();
-    }finally{syncing=false;}
-  };
-
-  const showPreview=async(asset:AssetRecord):Promise<void>=>{
-    selectedId=asset.id;render();preview.hidden=false;preview.innerHTML=previewShell(asset);
-    const body=preview.querySelector<HTMLElement>('[data-asset-preview-body]');if(!body)return;
-    if(asset.preview==='image')body.innerHTML=`<img src="${attr(asset.url)}" alt="${attr(asset.name)}">`;
-    else if(asset.preview==='video')body.innerHTML=`<video src="${attr(asset.url)}" controls preload="metadata"></video>`;
-    else if(asset.preview==='audio')body.innerHTML=`<audio src="${attr(asset.url)}" controls preload="metadata"></audio>`;
-    else if(asset.preview==='font'){const family=`asset-font-${hash(asset.id)}`,style=document.createElement('style');style.dataset.assetFontStyle='';style.textContent=`@font-face{font-family:${family};src:url("${cssUrl(asset.url)}")}`;preview.append(style);body.innerHTML=`<div class="assetFontSample" style="font-family:${family}">Aa Bb Cc<br><strong>0123456789</strong><small>The quick brown fox jumps over the lazy dog.</small></div>`;}
-    else if(asset.preview==='lottie'&&asset.extension==='.json'){
-      try{const response=await fetch(asset.url,{cache:'no-store'}),json=await response.json() as{v?:string;fr?:number;ip?:number;op?:number;w?:number;h?:number;layers?:unknown[]};const duration=json.fr&&json.op!==undefined&&json.ip!==undefined?Math.max(0,(json.op-json.ip)/json.fr):0;body.innerHTML=`<div class="lottieInfo"><b>Lottie ${html(json.v??'')}</b><span>${json.w??'?'} × ${json.h??'?'}</span><span>${json.fr??'?'} fps · ${duration?duration.toFixed(2)+' s':'duration n/a'}</span><span>${json.layers?.length??0} layers</span></div>`;}catch{body.innerHTML='<div class="assetsEmpty">Lottie metadata unavailable</div>';}
-    }else if(asset.preview==='text'&&asset.origin==='project'){
-      try{const response=await fetch(asset.url,{cache:'no-store'}),text=await response.text();body.innerHTML=`<pre>${html(text.slice(0,5000))}${text.length>5000?'\n…':''}</pre>`;}catch{body.innerHTML='<div class="assetsEmpty">Preview unavailable</div>';}
-    }else body.innerHTML=`<div class="assetFileGlyph">${html((asset.extension||'file').replace('.','').toUpperCase())}</div>`;
-  };
-
-  const click=(event:MouseEvent):void=>{
-    const filter=(event.target as Element|null)?.closest<HTMLButtonElement>('[data-assets-filter]');if(filter){active=(filter.dataset.assetsFilter??'all') as typeof active;render();return;}
-    if((event.target as Element|null)?.closest('[data-assets-refresh]')){void load({forceLocal:true});return;}
-    const card=(event.target as Element|null)?.closest<HTMLElement>('[data-asset-id]');if(card){const asset=assets.find(item=>item.id===card.dataset.assetId);if(asset)void showPreview(asset);}
-  };
-  const input=():void=>render();
-  const visibilityObserver=new MutationObserver(()=>{if(!section.hidden)void load({quiet:true});});visibilityObserver.observe(section,{attributes:true,attributeFilter:['hidden']});
-  const syncTimer=setInterval(()=>{const project=store.get().project;if(!section.hidden&&project&&(project.browserSessionId||window.animatorDesktop?.blink))void load({quiet:true});},750);
-  section.addEventListener('click',click);search.addEventListener('input',input);
-  const unsubscribe=store.subscribe(()=>{const id=store.get().project?.id??'';if(id!==lastProjectId){lastProjectId=id;cachedLocalProjectId='';cachedLocalAssets=[];void load();}});lastProjectId=store.get().project?.id??'';void load();
-  return()=>{generation++;clearInterval(syncTimer);visibilityObserver.disconnect();unsubscribe();section.removeEventListener('click',click);search.removeEventListener('input',input);section.remove();};
+  const section=document.createElement('section');section.className='assetsBrowser';section.dataset.assetsRegion='';section.innerHTML='<header class="assetsHeader"><div><h3>Assets <small data-assets-count>0</small></h3><small data-assets-status>Live references</small></div><button type="button" class="tiny" data-assets-refresh title="Refresh references">↻</button></header><input class="assetsSearch" data-assets-search type="search" placeholder="Search assets" aria-label="Search assets"><div class="assetsFilters" data-assets-filters></div><div class="assetsGrid" data-assets-grid></div><div class="assetPreview" data-asset-preview hidden></div>';left.append(section);
+  const search=section.querySelector<HTMLInputElement>('[data-assets-search]')!,filters=section.querySelector<HTMLElement>('[data-assets-filters]')!,grid=section.querySelector<HTMLElement>('[data-assets-grid]')!,preview=section.querySelector<HTMLElement>('[data-asset-preview]')!,count=section.querySelector<HTMLElement>('[data-assets-count]')!,status=section.querySelector<HTMLElement>('[data-assets-status]')!;
+  const local=new Map<string,AssetRecord>(),runtime=new Map<string,AssetRecord>();let active:'all'|AssetCategory='all',selectedId='',lastProjectId='',raf=0,disposed=false;
+  const all=():AssetRecord[]=>[...local.values(),...runtime.values()].sort((a,b)=>categories.indexOf(a.category)-categories.indexOf(b.category)||a.name.localeCompare(b.name));
+  const schedule=():void=>{if(disposed||raf)return;raf=requestAnimationFrame(()=>{raf=0;render();});};
+  const render=():void=>{const assets=all(),query=search.value.trim().toLowerCase(),visible=assets.filter(asset=>(active==='all'||asset.category===active)&&(!query||`${asset.name} ${asset.path} ${asset.kind} ${asset.mimeType??''}`.toLowerCase().includes(query))),totals=new Map<AssetCategory,number>();for(const asset of assets)totals.set(asset.category,(totals.get(asset.category)??0)+1);count.textContent=String(assets.length);status.textContent=`${runtime.size} runtime · ${local.size} local`;filters.innerHTML=[filterButton('all','All',assets.length,active==='all'),...categories.filter(category=>totals.has(category)).map(category=>filterButton(category,labels[category],totals.get(category)??0,active===category))].join('');grid.innerHTML=visible.length?visible.map(asset=>card(asset,asset.id===selectedId)).join(''):'<div class="assetsEmpty">No assets captured yet</div>';if(selectedId&&!assets.some(asset=>asset.id===selectedId)){selectedId='';preview.hidden=true;preview.replaceChildren();}};
+  const upsertRuntime=(resource:RuntimeResource):void=>{const asset=runtimeAsset(resource);if(!asset)return;runtime.set(asset.url,asset);schedule();};
+  const refreshRuntime=async():Promise<void>=>{const project=store.get().project;if(!project)return;try{let resources:RuntimeResource[]=[];if(project.browserSessionId){const response=await fetch(`/api/browser-sessions/${encodeURIComponent(project.browserSessionId)}/resources`,{cache:'no-store'}),body=await response.json() as{resources?:RuntimeResource[]};if(response.ok)resources=body.resources??[];}else resources=await window.animatorDesktop?.blink.resources()??[];for(const resource of resources)upsertRuntime(resource);}catch{}schedule();};
+  const refreshLocal=async(force=false):Promise<void>=>{const project=store.get().project;if(!project||project.kind==='remote'||project.browserSessionId){local.clear();schedule();return;}if(!force&&lastProjectId===project.id&&local.size)return;try{const response=await fetch(`/api/projects/${encodeURIComponent(project.id)}/assets`,{cache:'no-store'}),body=await response.json() as{assets?:LocalAsset[]};if(!response.ok)return;local.clear();for(const asset of body.assets??[])local.set(asset.path,{...asset,id:`project:${asset.path}`,url:`/api/projects/${encodeURIComponent(project.id)}/asset?path=${encodeURIComponent(asset.path)}`,origin:'project'});}catch{}schedule();};
+  const refresh=async(force=false):Promise<void>=>{const project=store.get().project;if(!project){local.clear();runtime.clear();schedule();return;}if(project.id!==lastProjectId){lastProjectId=project.id;local.clear();runtime.clear();selectedId='';}await Promise.all([refreshLocal(force),refreshRuntime()]);};
+  const select=(asset:AssetRecord):void=>{selectedId=asset.id;render();preview.hidden=false;preview.innerHTML=detail(asset);};
+  const openTab=(asset:AssetRecord):void=>{if(asset.origin!=='runtime'||!window.animatorDesktop?.blink)return;window.dispatchEvent(new CustomEvent('animator:resource-tab-open',{detail:{id:`asset-${hash(asset.url)}`,url:asset.url,name:asset.name}}));};
+  const download=async(asset:AssetRecord):Promise<void>=>{if(asset.origin==='runtime'&&window.animatorDesktop?.blink){try{await window.animatorDesktop.blink.downloadResource(asset.url,asset.name);}catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}return;}const anchor=document.createElement('a');anchor.href=asset.url;anchor.download=asset.name;anchor.click();};
+  const copy=async(asset:AssetRecord):Promise<void>=>{try{await navigator.clipboard.writeText(asset.url);}catch{}};
+  const click=(event:MouseEvent):void=>{const target=event.target as Element|null,filter=target?.closest<HTMLButtonElement>('[data-assets-filter]');if(filter){active=(filter.dataset.assetsFilter??'all') as typeof active;render();return;}if(target?.closest('[data-assets-refresh]')){void refresh(true);return;}const action=target?.closest<HTMLElement>('[data-asset-action]'),id=action?.dataset.assetId??target?.closest<HTMLElement>('[data-asset-id]')?.dataset.assetId;if(!id)return;const asset=all().find(item=>item.id===id);if(!asset)return;if(!action){select(asset);return;}const kind=action.dataset.assetAction;if(kind==='tab')openTab(asset);else if(kind==='download')void download(asset);else if(kind==='copy')void copy(asset);else select(asset);};
+  const onResource=(resource:RuntimeResource):void=>upsertRuntime(resource);window.animatorDesktop?.blink.onResource(onResource);
+  const visibility=new MutationObserver(()=>{if(!section.hidden)void refresh();});visibility.observe(section,{attributes:true,attributeFilter:['hidden']});const timer=window.setInterval(()=>{if(!section.hidden&&store.get().project?.browserSessionId)void refreshRuntime();},1500);
+  const unsubscribe=store.subscribe(()=>{const id=store.get().project?.id??'';if(id!==lastProjectId)void refresh();});section.addEventListener('click',click);search.addEventListener('input',schedule);void refresh();
+  return()=>{disposed=true;if(raf)cancelAnimationFrame(raf);clearInterval(timer);visibility.disconnect();unsubscribe();window.animatorDesktop?.blink.offResource(onResource);section.removeEventListener('click',click);search.removeEventListener('input',schedule);section.remove();};
 }
 
-function runtimeAsset(resource:RuntimeResource):AssetRecord|undefined{
-  let parsed:URL;try{parsed=new URL(resource.url);}catch{return undefined;}if(!['http:','https:','ws:','wss:'].includes(parsed.protocol))return undefined;
-  const rawName=decodeURIComponent(parsed.pathname.split('/').filter(Boolean).at(-1)??parsed.hostname),name=rawName||parsed.hostname,extension=(name.match(/\.([a-z0-9]+)$/i)?.[1]??'').toLowerCase(),description=classifyRuntime(extension,resource);
-  return{id:`runtime:${resource.url}`,path:resource.url,name,extension:extension?`.${extension}`:'',category:description.category,kind:description.kind,preview:description.preview,size:resource.decodedBodySize||resource.transferSize||0,url:resource.url,origin:'runtime'};
-}
-function classifyRuntime(ext:string,resource:RuntimeResource):{category:AssetCategory;kind:string;preview:AssetPreview}{
-  const type=String(resource.resourceType||resource.initiatorType||'other').toLowerCase(),mime=String(resource.mimeType||'').toLowerCase(),url=resource.url.toLowerCase();
-  if(ext==='lottie')return{category:'lottie',kind:'DotLottie',preview:'lottie'};
-  if(ext==='json'&&/lottie|animation/.test(url))return{category:'lottie',kind:'Lottie JSON',preview:'lottie'};
-  if(imageExt.has(ext)||type==='image'||mime.startsWith('image/'))return{category:'media',kind:ext==='svg'||mime==='image/svg+xml'?'Vector image':'Image',preview:'image'};
-  if(videoExt.has(ext)||mime.startsWith('video/'))return{category:'media',kind:'Video',preview:'video'};
-  if(audioExt.has(ext)||mime.startsWith('audio/'))return{category:'media',kind:'Audio',preview:'audio'};
-  if(type==='media')return{category:'media',kind:'Media',preview:'none'};
-  if(fontExt.has(ext)||type==='font'||mime.startsWith('font/')||/font|woff|opentype|truetype/.test(mime))return{category:'typography',kind:'Font',preview:'font'};
-  if(styleExt.has(ext)||type==='stylesheet'||mime==='text/css')return{category:'styles',kind:'Stylesheet',preview:'text'};
-  if(ext==='wasm'||mime==='application/wasm')return{category:'source',kind:'WebAssembly',preview:'none'};
-  if(sourceExt.has(ext)||type==='script'||/javascript|ecmascript/.test(mime))return{category:'source',kind:'Source',preview:'text'};
-  if(type==='websocket')return{category:'data',kind:'WebSocket',preview:'none'};
-  if(type==='xhr')return{category:'data',kind:'XHR',preview:'text'};
-  if(type==='fetch')return{category:'data',kind:'Fetch',preview:'text'};
-  if(type==='eventsource')return{category:'data',kind:'EventSource',preview:'text'};
-  if(type==='manifest'||ext==='webmanifest')return{category:'data',kind:'Manifest',preview:'text'};
-  if(type==='ping'||type==='cspreport')return{category:'data',kind:'Request',preview:'none'};
-  if(dataExt.has(ext)||/json|xml|yaml|csv|event-stream/.test(mime))return{category:'data',kind:'Data',preview:'text'};
-  if(documentExt.has(ext)||type==='mainframe'||type==='subframe'||type==='document'||mime==='text/html'||mime==='application/pdf')return{category:'documents',kind:type==='subframe'?'Frame':'Document',preview:'none'};
-  return{category:'other',kind:resource.resourceType||resource.initiatorType||'Resource',preview:'none'};
-}
-function filterButton(value:string,label:string,total:number,active:boolean):string{return`<button type="button" data-assets-filter="${attr(value)}" class="${active?'active':''}">${html(label)} <small>${total}</small></button>`;}
-function assetCard(asset:AssetRecord,selected:boolean):string{return`<button type="button" class="assetCard ${selected?'selected':''}" data-asset-id="${attr(asset.id)}"><span class="assetThumb">${thumb(asset)}</span><span class="assetCardText"><b>${html(asset.name)}</b><small>${html(categoryLabels[asset.category])} · ${html(asset.kind)}${asset.size?` · ${formatBytes(asset.size)}`:''}</small><em>${html(asset.origin==='runtime'?host(asset.url):asset.path)}</em></span></button>`;}
-function thumb(asset:AssetRecord):string{if(asset.preview==='image')return`<img src="${attr(asset.url)}" alt="">`;const labels:Record<AssetCategory,string>={media:'MEDIA',typography:'Aa',lottie:'LOT',source:'</>',styles:'CSS',data:'{}',documents:'DOC',other:'FILE'};return`<i data-category="${asset.category}">${labels[asset.category]}</i>`;}
-function previewShell(asset:AssetRecord):string{return`<header><div><b>${html(asset.name)}</b><small>${html(categoryLabels[asset.category])} · ${html(asset.kind)}${asset.size?` · ${formatBytes(asset.size)}`:''}</small></div></header><div class="assetPreviewBody" data-asset-preview-body></div><code>${html(asset.path)}</code>`;}
-function formatBytes(value:number):string{if(value<1024)return`${value} B`;if(value<1024*1024)return`${(value/1024).toFixed(value<10240?1:0)} KB`;return`${(value/1024/1024).toFixed(1)} MB`;}
-function host(value:string):string{try{return new URL(value).hostname;}catch{return value;}}
-function normalizePath(value:string):string{return value.replace(/^\/+/, '').replace(/\\/g,'/');}
+function runtimeAsset(resource:RuntimeResource):AssetRecord|undefined{let parsed:URL;try{parsed=new URL(resource.url);}catch{return undefined;}if(!['http:','https:','ws:','wss:','blob:','data:'].includes(parsed.protocol))return undefined;const raw=parsed.protocol==='data:'?'inline-data':decodeURIComponent(parsed.pathname.split('/').filter(Boolean).at(-1)??parsed.hostname),name=raw||parsed.hostname||'resource',ext=(name.match(/\.([a-z0-9]+)$/i)?.[1]??'').toLowerCase(),kind=classify(ext,resource);return{id:`runtime:${resource.url}`,path:resource.url,name,extension:ext?`.${ext}`:'',category:kind.category,kind:kind.kind,size:resource.decodedBodySize||resource.transferSize||0,url:resource.url,origin:'runtime',mimeType:resource.mimeType,statusCode:resource.statusCode,method:resource.method,fromCache:resource.fromCache};}
+function classify(ext:string,r:RuntimeResource):{category:AssetCategory;kind:string}{const type=String(r.resourceType||r.initiatorType||'other').toLowerCase(),mime=String(r.mimeType||'').toLowerCase(),url=r.url.toLowerCase();if(ext==='lottie'||(ext==='json'&&/lottie|animation/.test(url)))return{category:'lottie',kind:'Lottie'};if(imageExt.has(ext)||type==='image'||mime.startsWith('image/'))return{category:'media',kind:ext==='svg'||mime==='image/svg+xml'?'Vector image':'Image'};if(videoExt.has(ext)||mime.startsWith('video/'))return{category:'media',kind:'Video'};if(audioExt.has(ext)||mime.startsWith('audio/'))return{category:'media',kind:'Audio'};if(type==='media')return{category:'media',kind:'Media'};if(fontExt.has(ext)||type==='font'||mime.startsWith('font/')||/woff|opentype|truetype/.test(mime))return{category:'typography',kind:'Font'};if(styleExt.has(ext)||type==='stylesheet'||mime==='text/css')return{category:'styles',kind:'Stylesheet'};if(ext==='wasm'||mime==='application/wasm')return{category:'source',kind:'WebAssembly'};if(sourceExt.has(ext)||type==='script'||/javascript|ecmascript/.test(mime))return{category:'source',kind:'Source'};if(['websocket','xhr','fetch','eventsource','ping','cspreport'].includes(type))return{category:'data',kind:type==='websocket'?'WebSocket':type.toUpperCase()};if(type==='manifest'||ext==='webmanifest'||dataExt.has(ext)||/json|xml|yaml|csv|event-stream/.test(mime))return{category:'data',kind:'Data'};if(documentExt.has(ext)||['mainframe','subframe','document'].includes(type)||mime==='text/html'||mime==='application/pdf')return{category:'documents',kind:type==='subframe'?'Frame':'Document'};return{category:'other',kind:r.resourceType||r.initiatorType||'Resource'};}
+function card(a:AssetRecord,selected:boolean):string{return`<article class="assetCard ${selected?'selected':''}" data-asset-id="${attr(a.id)}"><button type="button" class="assetCardMain" data-asset-id="${attr(a.id)}"><span class="assetThumb"><i data-category="${a.category}">${glyph(a.category)}</i></span><span class="assetCardText"><b>${html(a.name)}</b><small>${html(labels[a.category])} · ${html(a.kind)}${a.size?` · ${formatBytes(a.size)}`:''}</small><em>${html(a.origin==='runtime'?host(a.url):a.path)}</em></span></button><span class="assetActions">${a.origin==='runtime'&&/^https?:/i.test(a.url)?`<button type="button" data-asset-action="tab" data-asset-id="${attr(a.id)}">Open tab</button><button type="button" data-asset-action="download" data-asset-id="${attr(a.id)}">Download</button>`:`<button type="button" data-asset-action="download" data-asset-id="${attr(a.id)}">Download</button>`}<button type="button" data-asset-action="copy" data-asset-id="${attr(a.id)}">Copy URL</button></span></article>`;}
+function detail(a:AssetRecord):string{return`<header><div><b>${html(a.name)}</b><small>${html(labels[a.category])} · ${html(a.kind)}</small></div></header><div class="assetRefInfo"><span>Reference only</span>${a.method?`<span>${html(a.method)}</span>`:''}${a.statusCode?`<span>${a.statusCode}</span>`:''}${a.mimeType?`<span>${html(a.mimeType)}</span>`:''}${a.fromCache?'<span>cache</span>':''}</div><code>${html(a.url)}</code>`;}
+function filterButton(value:string,label:string,total:number,on:boolean):string{return`<button type="button" data-assets-filter="${attr(value)}" class="${on?'active':''}">${html(label)} <small>${total}</small></button>`;}
+function glyph(category:AssetCategory):string{return({media:'MEDIA',typography:'Aa',lottie:'LOT',source:'</>',styles:'CSS',data:'{}',documents:'DOC',other:'FILE'} as Record<AssetCategory,string>)[category];}
+function formatBytes(v:number):string{if(v<1024)return`${v} B`;if(v<1048576)return`${(v/1024).toFixed(v<10240?1:0)} KB`;return`${(v/1048576).toFixed(1)} MB`;}
+function host(value:string):string{try{return new URL(value).hostname||new URL(value).protocol.replace(':','');}catch{return value;}}
 function hash(value:string):string{let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36);}
-function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
+function html(value:string):string{return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]??c);}
 function attr(value:string):string{return html(value);}
-function cssUrl(value:string):string{return value.replace(/["\\\n\r]/g,char=>`\\${char}`);}
