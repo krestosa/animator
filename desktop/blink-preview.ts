@@ -45,6 +45,9 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     target.setBounds({x,y,width,height});target.webContents.setZoomFactor(zoom);
   };
   const showTarget=(target:WebContentsView):void=>{if(lastViewport)setGeometry(target,lastViewport);target.setVisible(true);window.contentView.addChildView(target);};
+  const cdp=async(target:WebContentsView,method:string,params?:Record<string,unknown>):Promise<void>=>{
+    await bounded(`CDP ${method}`,target.webContents.debugger.sendCommand(method,params),5000);
+  };
   const createView=async(instrumented:boolean):Promise<WebContentsView>=>{
     const preload=fileURLToPath(new URL('./target-preload.js',import.meta.url));
     const next=new WebContentsView({webPreferences:{...(instrumented?{preload}:{}),session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:false}});
@@ -53,10 +56,15 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     if(lastViewport)setGeometry(next,lastViewport);
     if(instrumented){
       try{
+        await bounded('Blink instrumentation target init',next.webContents.loadURL('about:blank'),5000);
         next.webContents.debugger.attach('1.3');
-        await next.webContents.debugger.sendCommand('Page.enable');
-        for(const source of runtimeSources)await next.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument',{source});
-      }catch(error){console.warn('Blink instrumentation CDP attach failed',error);}
+        await cdp(next,'Page.enable');
+        for(const source of runtimeSources)await cdp(next,'Page.addScriptToEvaluateOnNewDocument',{source});
+      }catch(error){
+        console.warn('Blink instrumentation CDP attach failed',error);
+        await destroyTarget(next);
+        throw error;
+      }
     }
     return next;
   };
@@ -129,4 +137,10 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     await disposeViews();
   };
   return{open,close,setInstrumentation,cleanup};
+}
+
+async function bounded<T>(label:string,promise:Promise<T>,timeoutMs:number):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} timed out after ${timeoutMs}ms`)),timeoutMs);});
+  try{return await Promise.race([promise,timeout]);}finally{if(timer)clearTimeout(timer);}
 }
