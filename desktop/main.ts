@@ -59,6 +59,10 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
     let uiResources:Awaited<ReturnType<BlinkPreviewHandle['resources']>>=[];for(let attempt=0;attempt<50;attempt++){uiResources=await blinkHandle.resources();if(uiResources.some(resource=>resource.url===target))break;await new Promise(resolve=>setTimeout(resolve,100));}
     if(!uiResources.some(resource=>resource.url===target))throw new Error(`Native Blink UI smoke test: Blink did not navigate to ${target}`);
     const normalizedInput=await window.webContents.executeJavaScript(`document.querySelector('[data-web-url]')?.value||''`,true) as string;if(normalizedInput!==target)throw new Error(`Native Blink UI smoke test: URL was not normalized (${normalizedInput})`);
+    const beforePopup=blinkHandle.debugState();if(!beforePopup.open||!beforePopup.visible||!beforePopup.attached)throw new Error(`Native Blink UI smoke test: preview not visible with popup closed ${JSON.stringify(beforePopup)}`);
+    await window.webContents.executeJavaScript(`document.querySelector('.webLoader').open=true`,true);await new Promise(resolve=>setTimeout(resolve,150));const duringPopup=blinkHandle.debugState();if(!duringPopup.open||duringPopup.visible||duringPopup.attached)throw new Error(`Native Blink UI smoke test: preview overlapped open popup ${JSON.stringify(duringPopup)}`);
+    await window.webContents.executeJavaScript(`document.querySelector('.webLoader').open=false`,true);await new Promise(resolve=>setTimeout(resolve,150));const afterPopup=blinkHandle.debugState();if(!afterPopup.open||!afterPopup.visible||!afterPopup.attached)throw new Error(`Native Blink UI smoke test: preview did not restore after popup close ${JSON.stringify(afterPopup)}`);
+    console.log('Native Blink UI smoke test: popup occlusion and preview restore verified');
     console.log('Native Blink UI smoke test: protocol-less URL normalized and real button navigation verified');
     await bounded('native Blink UI close',blinkHandle.close(),3000);
 
