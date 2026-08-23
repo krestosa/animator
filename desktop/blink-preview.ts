@@ -9,6 +9,7 @@ import { mutationRuntimeSource } from '../server/mutation-runtime.js';
 import { auxiliaryRuntimeSource } from '../server/aux-runtime.js';
 
 type Viewport={x:number;y:number;width:number;height:number;zoomFactor:number};
+type PageResource={url:string;initiatorType:string;transferSize:number;decodedBodySize:number};
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
 
 export function installBlinkPreview(window:BrowserWindow):()=>Promise<void>{
@@ -36,6 +37,10 @@ export function installBlinkPreview(window:BrowserWindow):()=>Promise<void>{
     if(currentUrl===url)return;currentUrl=url;await target.webContents.loadURL(url);
   };
   const close=async():Promise<void>=>{currentUrl='';if(view)view.setVisible(false);};
+  const resources=async():Promise<PageResource[]>=>{
+    if(!view||view.webContents.isDestroyed()||!currentUrl)return[];
+    return view.webContents.executeJavaScript(`(()=>{const found=new Map();const add=(raw,type='other',transfer=0,decoded=0)=>{if(!raw)return;try{const url=new URL(String(raw),document.baseURI).href;if(!/^https?:/.test(url))return;const prior=found.get(url);found.set(url,{url,initiatorType:prior?.initiatorType||type,transferSize:Math.max(prior?.transferSize||0,Number(transfer)||0),decodedBodySize:Math.max(prior?.decodedBodySize||0,Number(decoded)||0)});}catch{}};add(location.href,'document');for(const entry of performance.getEntriesByType('resource'))add(entry.name,entry.initiatorType,entry.transferSize,entry.decodedBodySize);for(const node of document.querySelectorAll('[src],[href],[poster],[data-src]'))for(const attr of ['src','href','poster','data-src'])add(node.getAttribute(attr),node.tagName.toLowerCase());for(const node of document.querySelectorAll('[srcset]'))for(const candidate of String(node.getAttribute('srcset')||'').split(','))add(candidate.trim().split(/\\s+/)[0],node.tagName.toLowerCase());return [...found.values()];})()`,true) as Promise<PageResource[]>;
+  };
   const viewport=(value:Viewport):void=>{
     if(!view)return;const x=Math.max(0,Math.round(value.x)),y=Math.max(0,Math.round(value.y)),width=Math.max(1,Math.round(value.width)),height=Math.max(1,Math.round(value.height)),zoom=Number.isFinite(value.zoomFactor)?Math.max(.05,value.zoomFactor):1;
     view.setBounds({x,y,width,height});view.webContents.setZoomFactor(zoom);view.setVisible(true);window.contentView.addChildView(view);
@@ -45,12 +50,13 @@ export function installBlinkPreview(window:BrowserWindow):()=>Promise<void>{
 
   ipcMain.handle('animator:blink:open',(event,payload:{url?:unknown})=>{if(!validSender(event.sender.id))throw new Error('Invalid Blink preview sender');return open(String(payload?.url??''));});
   ipcMain.handle('animator:blink:close',event=>{if(!validSender(event.sender.id))throw new Error('Invalid Blink preview sender');return close();});
+  ipcMain.handle('animator:blink:resources',event=>{if(!validSender(event.sender.id))throw new Error('Invalid Blink preview sender');return resources();});
   const viewportHandler=(event:Electron.IpcMainEvent,value:Viewport)=>{if(validSender(event.sender.id))viewport(value);};
   const commandHandler=(event:Electron.IpcMainEvent,value:unknown)=>{if(validSender(event.sender.id))command(value);};
   ipcMain.on('animator:blink:viewport',viewportHandler);ipcMain.on('animator:blink:command',commandHandler);ipcMain.on('animator:blink:page-message',pageMessage);
 
   return async()=>{
-    ipcMain.removeHandler('animator:blink:open');ipcMain.removeHandler('animator:blink:close');ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
+    ipcMain.removeHandler('animator:blink:open');ipcMain.removeHandler('animator:blink:close');ipcMain.removeHandler('animator:blink:resources');ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
     if(view){window.contentView.removeChildView(view);if(view.webContents.debugger.isAttached())view.webContents.debugger.detach();view.webContents.close();view=null;}
   };
 }
