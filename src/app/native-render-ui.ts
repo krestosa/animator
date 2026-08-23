@@ -43,8 +43,10 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
     const url=normalizeUrl(input.value);if(!url||opening)return;opening=true;openButton.disabled=true;openButton.textContent='Abriendo Blink…';
     try{
       await api.close();const desired=instrumentationCheckbox.checked,state=await api.setInstrumentation(desired);instrumentationEnabled=state.enabled;updateInstrumentationUi();
-      const project:ProjectDescriptor={id:`blink-${hash(url)}`,root:url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:url,kind:'remote'};store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: Blink native render ${url}${instrumentationEnabled?'':' · clean'}`].slice(-100)});details.open=false;
-    }
+      const project:ProjectDescriptor={id:`blink-${hash(url)}`,root:url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:url,kind:'remote'};
+      store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: Blink native render ${url}${instrumentationEnabled?'':' · clean'}`].slice(-100)});
+      await api.open(url);details.open=false;
+    }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;openButton.disabled=false;openButton.textContent='Abrir en Blink';}
   };
   const openAlternate=async():Promise<void>=>{
