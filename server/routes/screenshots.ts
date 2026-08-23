@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { installBrowserRuntimes } from '../browser-session.js';
+import { installBrowserRuntimes } from '../browser/runtime-manager.js';
 
 export function createScreenshotRouter():Router{
   const router=Router();
