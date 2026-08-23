@@ -122,6 +122,6 @@ function formatBytes(value:number):string{if(value<1024)return`${value} B`;if(va
 function host(value:string):string{try{return new URL(value).hostname;}catch{return value;}}
 function normalizePath(value:string):string{return value.replace(/^\/+/, '').replace(/\\/g,'/');}
 function hash(value:string):string{let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36);}
-function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'})[char]??char);}
+function html(value:string):string{return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]??char);}
 function attr(value:string):string{return html(value);}
 function cssUrl(value:string):string{return value.replace(/["\\\n\r]/g,char=>`\\${char}`);}
