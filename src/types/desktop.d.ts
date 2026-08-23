@@ -16,6 +16,7 @@ declare global {
         onResource:(handler:(resource:DesktopBlinkResource)=>void)=>void;
         offResource:(handler:(resource:DesktopBlinkResource)=>void)=>void;
         setViewport:(viewport:{x:number;y:number;width:number;height:number;zoomFactor:number})=>void;
+        setVisible:(visible:boolean)=>void;
         command:(command:unknown)=>void;
         onMessage:(handler:(message:unknown)=>void)=>void;
         offMessage:(handler:(message:unknown)=>void)=>void;
