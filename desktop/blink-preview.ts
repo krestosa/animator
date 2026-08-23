@@ -18,7 +18,7 @@ export interface BlinkPreviewHandle{
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
 
 export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
-  let view:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined;
+  let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined;
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:false});
 
@@ -36,7 +36,10 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
       contents.close();
     });
   };
-  const disposeView=async():Promise<void>=>{const current=view;view=null;await destroyTarget(current);};
+  const disposeViews=async():Promise<void>=>{
+    const active=view,parked=parkedInstrumented;view=null;parkedInstrumented=null;
+    await destroyTarget(active);if(parked&&parked!==active)await destroyTarget(parked);
+  };
   const setGeometry=(target:WebContentsView,value:Viewport):void=>{
     const x=Math.max(0,Math.round(value.x)),y=Math.max(0,Math.round(value.y)),width=Math.max(1,Math.round(value.width)),height=Math.max(1,Math.round(value.height)),zoom=Number.isFinite(value.zoomFactor)?Math.max(.05,value.zoomFactor):1;
     target.setBounds({x,y,width,height});target.webContents.setZoomFactor(zoom);
@@ -46,7 +49,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     const preload=fileURLToPath(new URL('./target-preload.js',import.meta.url));
     const next=new WebContentsView({webPreferences:{...(instrumented?{preload}:{}),session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:false}});
     next.setBackgroundColor('#ffffff');next.setVisible(false);window.contentView.addChildView(next);
-    next.webContents.setWindowOpenHandler(({url})=>{void next.webContents.loadURL(url);return{action:'deny'};});
+    next.webContents.setWindowOpenHandler(({url})=>{startReload(next,url);return{action:'deny'};});
     if(lastViewport)setGeometry(next,lastViewport);
     if(instrumented){
       try{
@@ -62,7 +65,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
     view=await createView(instrumentationEnabled);return view;
   };
   const startReload=(target:WebContentsView,url:string):void=>{
-    if(!url)return;
+    if(!url||target.webContents.isDestroyed())return;
     void target.webContents.loadURL(url).catch(error=>{
       if(!target.webContents.isDestroyed())console.warn('Blink reload failed',error);
     });
@@ -77,20 +80,36 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const setInstrumentation=async(enabled:boolean):Promise<{enabled:boolean}>=>{
     const nextEnabled=Boolean(enabled);
     if(nextEnabled===instrumentationEnabled)return{enabled:instrumentationEnabled};
-    const previous=view,liveUrl=previous&&!previous.webContents.isDestroyed()?previous.webContents.getURL():'';
-    const url=/^https?:\/\//i.test(liveUrl)?liveUrl:currentUrl,previousEnabled=instrumentationEnabled;
-    view=null;if(previous)previous.setVisible(false);await destroyTarget(previous);
-    instrumentationEnabled=nextEnabled;currentUrl=url;
+    const liveUrl=view&&!view.webContents.isDestroyed()?view.webContents.getURL():'';
+    const url=/^https?:\/\//i.test(liveUrl)?liveUrl:currentUrl;currentUrl=url;
+
+    if(!nextEnabled){
+      const instrumented=view;
+      try{
+        const clean=await createView(false);
+        if(instrumented){instrumented.setVisible(false);parkedInstrumented=instrumented;}
+        view=clean;instrumentationEnabled=false;showTarget(clean);startReload(clean,url);
+        return{enabled:false};
+      }catch(error){if(instrumented)showTarget(instrumented);throw error;}
+    }
+
+    const clean=view,prepared=parkedInstrumented;parkedInstrumented=null;
+    if(clean)clean.setVisible(false);
+    let instrumented=prepared;
     try{
-      const next=await createView(instrumentationEnabled);view=next;showTarget(next);startReload(next,url);
-      return{enabled:instrumentationEnabled};
+      if(!instrumented||instrumented.webContents.isDestroyed())instrumented=await createView(true);
+      view=instrumented;instrumentationEnabled=true;showTarget(instrumented);startReload(instrumented,url);
+      if(clean&&clean!==instrumented)await destroyTarget(clean);
+      return{enabled:true};
     }catch(error){
-      await disposeView();instrumentationEnabled=previousEnabled;
-      const restored=await createView(instrumentationEnabled);view=restored;showTarget(restored);startReload(restored,url);throw error;
+      if(clean&&!clean.webContents.isDestroyed()){view=clean;instrumentationEnabled=false;showTarget(clean);}
+      if(instrumented&&instrumented!==prepared)await destroyTarget(instrumented);
+      parkedInstrumented=prepared&&!prepared.webContents.isDestroyed()?prepared:null;
+      throw error;
     }
   };
   const resources=async():Promise<PageResource[]>=>{
-    if(!view||view.webContents.isDestroyed()||!currentUrl)return[];
+    if(!instrumentationEnabled||!view||view.webContents.isDestroyed()||!currentUrl)return[];
     return view.webContents.executeJavaScript(`(()=>{const found=new Map();const add=(raw,type='other',transfer=0,decoded=0)=>{if(!raw)return;try{const url=new URL(String(raw),document.baseURI).href;if(!/^https?:/.test(url))return;const prior=found.get(url);found.set(url,{url,initiatorType:prior?.initiatorType||type,transferSize:Math.max(prior?.transferSize||0,Number(transfer)||0),decodedBodySize:Math.max(prior?.decodedBodySize||0,Number(decoded)||0)});}catch{}};add(location.href,'document');for(const entry of performance.getEntriesByType('resource'))add(entry.name,entry.initiatorType,entry.transferSize,entry.decodedBodySize);for(const node of document.querySelectorAll('[src],[href],[poster],[data-src]'))for(const attr of ['src','href','poster','data-src'])add(node.getAttribute(attr),node.tagName.toLowerCase());for(const node of document.querySelectorAll('[srcset]'))for(const candidate of String(node.getAttribute('srcset')||'').split(','))add(candidate.trim().split(/\\s+/)[0],node.tagName.toLowerCase());return [...found.values()];})()`,true) as Promise<PageResource[]>;
   };
   const viewport=(value:Viewport):void=>{lastViewport=value;if(view){setGeometry(view,value);view.setVisible(true);window.contentView.addChildView(view);}};
@@ -107,7 +126,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
 
   const cleanup=async():Promise<void>=>{
     ipcMain.removeHandler('animator:blink:open');ipcMain.removeHandler('animator:blink:close');ipcMain.removeHandler('animator:blink:instrumentation');ipcMain.removeHandler('animator:blink:resources');ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
-    await disposeView();
+    await disposeViews();
   };
   return{open,close,setInstrumentation,cleanup};
 }
