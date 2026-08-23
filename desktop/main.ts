@@ -1,6 +1,6 @@
 import '../server/ssd-safety.js';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, protocol, session, shell } from 'electron';
 import { startAnimatorServer, type AnimatorServerHandle } from '../server/index.js';
 import { installBlinkPreview, type BlinkPreviewHandle } from './blink-preview.js';
 
@@ -9,6 +9,7 @@ let server:AnimatorServerHandle|null=null;
 let blinkHandle:BlinkPreviewHandle|null=null;
 let quitting=false;
 
+protocol.registerSchemesAsPrivileged([{scheme:'animator-asset',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true}}]);
 app.commandLine.appendSwitch('disable-component-update');
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-breakpad');
@@ -61,7 +62,9 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
     console.log('Native Blink UI smoke test: protocol-less URL normalized and real button navigation verified');
     await bounded('native Blink UI close',blinkHandle.close(),3000);
 
-    console.log('Native Blink smoke test: opening instrumented view');await bounded('native Blink open',blinkHandle.open(target),10000);const loadedResources=await bounded('native Blink resources',blinkHandle.resources(),3000);const documentResource=loadedResources.find(resource=>resource.url===target);if(!documentResource)throw new Error(`Native Blink smoke test: Assets capture missed document ${target}`);if(!['mainFrame','document'].includes(documentResource.resourceType))throw new Error(`Native Blink smoke test: unexpected document resource type ${documentResource.resourceType}`);console.log(`Native Blink smoke test: Assets captured ${loadedResources.length} loaded resource(s)`);console.log('Native Blink smoke test: entering clean mode');const clean=await bounded('native Blink clean mode',blinkHandle.setInstrumentation(false),5000);if(clean.enabled!==false)throw new Error(`Native Blink smoke test: clean mode did not activate ${JSON.stringify(clean)}`);await new Promise(resolve=>setTimeout(resolve,250));console.log('Native Blink smoke test: restoring instrumentation');const instrumented=await bounded('native Blink instrumentation restore',blinkHandle.setInstrumentation(true),5000);if(instrumented.enabled!==true)throw new Error(`Native Blink smoke test: instrumentation did not reactivate ${JSON.stringify(instrumented)}`);console.log('Native Blink smoke test: native view, assets capture, clean reload and instrumented reload verified');await bounded('native Blink close',blinkHandle.close(),3000);
+    console.log('Native Blink smoke test: opening instrumented view');await bounded('native Blink open',blinkHandle.open(target),10000);const loadedResources=await bounded('native Blink resources',blinkHandle.resources(),3000);const documentResource=loadedResources.find(resource=>resource.url===target);if(!documentResource)throw new Error(`Native Blink smoke test: Assets capture missed document ${target}`);if(!['mainFrame','document'].includes(documentResource.resourceType))throw new Error(`Native Blink smoke test: unexpected document resource type ${documentResource.resourceType}`);
+    const assetPreviewUrl=`animator-asset://preview/?url=${encodeURIComponent(target)}`;const assetTransport=await window.webContents.executeJavaScript(`fetch(${JSON.stringify(assetPreviewUrl)}).then(async response=>({ok:response.ok,text:await response.text()})).catch(error=>({ok:false,text:String(error)}))`,true) as{ok:boolean;text:string};if(!assetTransport.ok||!assetTransport.text.includes('"ok":true'))throw new Error(`Native Blink smoke test: asset preview transport failed ${JSON.stringify(assetTransport)}`);console.log('Native Blink smoke test: cache-backed asset preview transport verified');
+    console.log(`Native Blink smoke test: Assets captured ${loadedResources.length} loaded resource(s)`);console.log('Native Blink smoke test: entering clean mode');const clean=await bounded('native Blink clean mode',blinkHandle.setInstrumentation(false),5000);if(clean.enabled!==false)throw new Error(`Native Blink smoke test: clean mode did not activate ${JSON.stringify(clean)}`);await new Promise(resolve=>setTimeout(resolve,250));console.log('Native Blink smoke test: restoring instrumentation');const instrumented=await bounded('native Blink instrumentation restore',blinkHandle.setInstrumentation(true),5000);if(instrumented.enabled!==true)throw new Error(`Native Blink smoke test: instrumentation did not reactivate ${JSON.stringify(instrumented)}`);console.log('Native Blink smoke test: native view, assets capture, clean reload and instrumented reload verified');await bounded('native Blink close',blinkHandle.close(),3000);
   }
   if(googleAssets){
     if(!blinkHandle)throw new Error('Google assets test: Blink runtime unavailable');const target='https://www.google.com/';
