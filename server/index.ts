@@ -11,6 +11,7 @@ import { createScreenshotRouter } from './routes/screenshots.js';
 import { BrowserControlService } from './services/browser-control-service.js';
 import { ProjectService } from './services/project-service.js';
 import { registerPreviewRoutes } from './services/preview-service.js';
+import { closeAllNativePreviewOrigins } from './native-preview-host.js';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 export type AnimatorServerHandle={host:string;port:number;origin:string;close:()=>Promise<void>};
@@ -34,7 +35,7 @@ export async function startAnimatorServer(options:AnimatorServerOptions={}):Prom
   const host=options.host??process.env.HOST??'127.0.0.1',requestedPort=options.port??Number(process.env.PORT||5173);
   const httpServer=await new Promise<ReturnType<typeof app.listen>>((resolve,reject)=>{const instance=app.listen(requestedPort,host,()=>resolve(instance));instance.once('error',reject);});
   const address=httpServer.address(),port=typeof address==='object'&&address?address.port:requestedPort,origin=`http://${host}:${port}`;let closed=false;
-  const close=async():Promise<void>=>{if(closed)return;closed=true;const {closeAllBrowserSessions}=await import('./browser-session.js');await closeAllBrowserSessions();if(vite)await vite.close();await new Promise<void>(resolve=>httpServer.close(()=>resolve()));};
+  const close=async():Promise<void>=>{if(closed)return;closed=true;closeAllNativePreviewOrigins();const {closeAllBrowserSessions}=await import('./browser-session.js');await closeAllBrowserSessions();if(vite)await vite.close();await new Promise<void>(resolve=>httpServer.close(()=>resolve()));};
   return{host,port,origin,close};
 }
 
