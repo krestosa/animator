@@ -2,7 +2,7 @@ import { store } from '../state/store';
 
 export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const api=window.animatorDesktop?.blink,device=root.querySelector<HTMLElement>('[data-device]'),stage=root.querySelector<HTMLElement>('.stage'),webLoader=root.querySelector<HTMLDetailsElement>('.webLoader'),app=root.querySelector<HTMLElement>('.app'),timeline=root.querySelector<HTMLElement>('.timeline');if(!api||!device||!stage)return()=>{};
-  let disposed=false,currentKey='',generation=0,raf=0;
+  let disposed=false,currentKey='',raf=0,syncRunning=false,syncQueued=false;
 
   const removeLegacyFrame=():void=>{if(store.get().project?.browserSessionId)return;device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());};
   const blinkActive=():boolean=>{const project=store.get().project;return Boolean(project&&!project.browserSessionId);};
@@ -55,21 +55,23 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
     if(!response.ok||!body.url)throw new Error(body.error??'Native preview unavailable');return body.url;
   };
 
-  const sync=async():Promise<void>=>{
-    const project=store.get().project;if(!project||project.browserSessionId){currentKey='';generation++;api.setVisible(false);await api.close();return;}
-    removeLegacyFrame();const key=`${project.id}:${project.selectedEntry}:${project.sourceUrl??''}`;syncViewport();if(key===currentKey){syncSurfaceVisibility();syncViewport();return;}
-    currentKey=key;const request=++generation;
+  const projectKey=():string=>{const project=store.get().project;return project&&!project.browserSessionId?`${project.id}:${project.selectedEntry}:${project.sourceUrl??''}`:'';};
+  const syncOnce=async():Promise<void>=>{
+    const project=store.get().project;if(!project||project.browserSessionId){if(!currentKey)return;currentKey='';api.setVisible(false);await api.close();return;}
+    removeLegacyFrame();const key=projectKey();syncViewport();if(key===currentKey){syncSurfaceVisibility();syncViewport();return;}
     try{
-      const url=await resolveUrl();if(disposed||request!==generation||!url)return;
+      const url=await resolveUrl();if(disposed||!url||projectKey()!==key)return;
       syncViewport();
       await api.open(url);
-      if(disposed||request!==generation)return;
-      removeLegacyFrame();syncSurfaceVisibility();syncViewport();
+      if(disposed||projectKey()!==key)return;
+      currentKey=key;removeLegacyFrame();syncSurfaceVisibility();syncViewport();
     }
-    catch(error){if(disposed||request!==generation)return;store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
+    catch(error){if(disposed||projectKey()!==key)return;currentKey='';store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
   };
+  const drainSync=async():Promise<void>=>{if(syncRunning)return;syncRunning=true;try{while(syncQueued&&!disposed){syncQueued=false;await syncOnce();}}finally{syncRunning=false;}};
+  const requestSync=():void=>{if(disposed)return;syncQueued=true;syncSurfaceVisibility();void drainSync();};
 
-  const unsubscribe=store.subscribe(()=>void sync());
+  const unsubscribe=store.subscribe(requestSync);
   const mutations=new MutationObserver(()=>{removeLegacyFrame();scheduleViewport();});mutations.observe(device,{childList:true,attributes:true,attributeFilter:['style','class']});
   const resize=new ResizeObserver(scheduleViewport);resize.observe(device);resize.observe(stage);if(timeline)resize.observe(timeline);
   const syncLoaderState=():void=>{const occluded=floatingOverlayOpen();syncSurfaceVisibility();if(!occluded)syncViewport();};
@@ -84,6 +86,6 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const onTimelineTransition=():void=>scheduleViewport();
   webLoader?.addEventListener('toggle',onWebLoaderToggle);loaderSummary?.addEventListener('pointerdown',onLoaderPointerDown,true);timeline?.addEventListener('transitionrun',onTimelineTransition);timeline?.addEventListener('transitionend',onTimelineTransition);root.addEventListener('animator:workspace-camera-change',onCameraChange);
   window.addEventListener('resize',scheduleViewport);window.addEventListener('scroll',scheduleViewport,true);
-  syncSurfaceVisibility();syncViewport();void sync();
-  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();loaderObserver?.disconnect();workspaceObserver?.disconnect();timelineObserver?.disconnect();floatingObserver.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);loaderSummary?.removeEventListener('pointerdown',onLoaderPointerDown,true);timeline?.removeEventListener('transitionrun',onTimelineTransition);timeline?.removeEventListener('transitionend',onTimelineTransition);root.removeEventListener('animator:workspace-camera-change',onCameraChange);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(false);void api.close();};
+  syncSurfaceVisibility();syncViewport();requestSync();
+  return()=>{disposed=true;syncQueued=false;unsubscribe();mutations.disconnect();resize.disconnect();loaderObserver?.disconnect();workspaceObserver?.disconnect();timelineObserver?.disconnect();floatingObserver.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);loaderSummary?.removeEventListener('pointerdown',onLoaderPointerDown,true);timeline?.removeEventListener('transitionrun',onTimelineTransition);timeline?.removeEventListener('transitionend',onTimelineTransition);root.removeEventListener('animator:workspace-camera-change',onCameraChange);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(false);void api.close();};
 }
