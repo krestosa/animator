@@ -2,11 +2,11 @@ import '../server/ssd-safety.js';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, session, shell } from 'electron';
 import { startAnimatorServer, type AnimatorServerHandle } from '../server/index.js';
-import { installBlinkPreview } from './blink-preview.js';
+import { installBlinkPreview, type BlinkPreviewHandle } from './blink-preview.js';
 
 let mainWindow:BrowserWindow|null=null;
 let server:AnimatorServerHandle|null=null;
-let blinkCleanup:(()=>Promise<void>)|null=null;
+let blinkHandle:BlinkPreviewHandle|null=null;
 let quitting=false;
 
 app.commandLine.appendSwitch('disable-component-update');
@@ -51,7 +51,7 @@ async function createMainWindow():Promise<void>{
     }
   });
   mainWindow=window;
-  blinkCleanup=installBlinkPreview(window);
+  blinkHandle=installBlinkPreview(window);
 
   window.webContents.setWindowOpenHandler(({url})=>{
     if(/^https?:\/\//i.test(url))void shell.openExternal(url);
@@ -90,15 +90,15 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
     console.log('Electron smoke test: UI mounted; tabs and overlay timeline verified');
   }
   if(nativeSmoke){
-    if(!server)throw new Error('Native Blink smoke test: server unavailable');
+    if(!server||!blinkHandle)throw new Error('Native Blink smoke test: runtime unavailable');
     const target=`${server.origin}/api/health`;
-    await window.webContents.executeJavaScript(`(async()=>{await window.animatorDesktop?.blink.open(${JSON.stringify(target)});return true;})()`,true);
-    const clean=await window.webContents.executeJavaScript('(async()=>await window.animatorDesktop?.blink.setInstrumentation(false))()',true) as{enabled?:boolean}|undefined;
-    if(clean?.enabled!==false)throw new Error(`Native Blink smoke test: clean mode did not activate ${JSON.stringify(clean)}`);
-    const instrumented=await window.webContents.executeJavaScript('(async()=>await window.animatorDesktop?.blink.setInstrumentation(true))()',true) as{enabled?:boolean}|undefined;
-    if(instrumented?.enabled!==true)throw new Error(`Native Blink smoke test: instrumentation did not reactivate ${JSON.stringify(instrumented)}`);
+    await blinkHandle.open(target);
+    const clean=await blinkHandle.setInstrumentation(false);
+    if(clean.enabled!==false)throw new Error(`Native Blink smoke test: clean mode did not activate ${JSON.stringify(clean)}`);
+    const instrumented=await blinkHandle.setInstrumentation(true);
+    if(instrumented.enabled!==true)throw new Error(`Native Blink smoke test: instrumentation did not reactivate ${JSON.stringify(instrumented)}`);
     console.log('Native Blink smoke test: native view, clean reload and instrumented reload verified');
-    await window.webContents.executeJavaScript('(async()=>window.animatorDesktop?.blink.close())()',true);
+    await blinkHandle.close();
   }
   if(metrics){
     await new Promise(resolve=>setTimeout(resolve,750));
@@ -116,8 +116,8 @@ function roundMb(kb:number):number{return Number((kb/1024).toFixed(1));}
 async function shutdown():Promise<void>{
   if(quitting)return;
   quitting=true;
-  const cleanupBlink=blinkCleanup;blinkCleanup=null;
-  if(cleanupBlink)await cleanupBlink().catch(()=>{});
+  const activeBlink=blinkHandle;blinkHandle=null;
+  if(activeBlink)await activeBlink.cleanup().catch(()=>{});
   const active=server;
   server=null;
   if(active)await active.close().catch(()=>{});
