@@ -19,15 +19,18 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
   switcher.append(browserOptions,altButton);openButton.after(switcher);browserOptions.hidden=false;
 
   const instrumentationButton=document.createElement('button');
-  instrumentationButton.type='button';instrumentationButton.className='iconButton blinkInstrumentationToggle active';instrumentationButton.dataset.blinkInstrumentation='';instrumentationButton.innerHTML=instrumentationIcon;instrumentationButton.setAttribute('aria-pressed','true');
+  instrumentationButton.type='button';instrumentationButton.className='blinkInstrumentationToggle active';instrumentationButton.dataset.blinkInstrumentation='';instrumentationButton.innerHTML=`${instrumentationIcon}<span data-blink-mode-label>Injected</span>`;instrumentationButton.setAttribute('aria-pressed','true');
   toolbar.insertBefore(instrumentationButton,toolbar.querySelector('.grow'));
+  const instrumentationLabel=instrumentationButton.querySelector<HTMLElement>('[data-blink-mode-label]');
   let instrumentationEnabled=true,togglingInstrumentation=false;
   const updateInstrumentationUi=():void=>{
     const project=store.get().project,blinkActive=Boolean(project&&!project.browserSessionId);
     instrumentationButton.hidden=!blinkActive;
     instrumentationButton.classList.toggle('active',instrumentationEnabled);
+    instrumentationButton.classList.toggle('clean',!instrumentationEnabled);
     instrumentationButton.setAttribute('aria-pressed',String(instrumentationEnabled));
-    instrumentationButton.title=instrumentationEnabled?'Desactivar instrumentación y recargar':'Reactivar instrumentación y recargar';
+    if(instrumentationLabel)instrumentationLabel.textContent=instrumentationEnabled?'Injected':'Clean';
+    instrumentationButton.title=instrumentationEnabled?'Cambiar a Clean: quitar preload/CDP de Animator, conservar sesión, cookies, storage y caché':'Cambiar a Injected: reactivar la instrumentación de Animator';
     instrumentationButton.setAttribute('aria-label',instrumentationButton.title);
   };
 
@@ -57,8 +60,8 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
     const desired=!instrumentationEnabled;
     try{
       const state=await api.setInstrumentation(desired);instrumentationEnabled=state.enabled;
-      const label=instrumentationEnabled?'reactivada':'desactivada temporalmente';
-      store.set({diagnostics:[...store.get().diagnostics,`info: Instrumentación Blink ${label}; página recargada`].slice(-100)});
+      const label=instrumentationEnabled?'Injected':'Clean';
+      store.set({diagnostics:[...store.get().diagnostics,`info: Blink ${label}; página recargada sobre la misma sesión y caché`].slice(-100)});
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{togglingInstrumentation=false;instrumentationButton.disabled=false;updateInstrumentationUi();}
   };
