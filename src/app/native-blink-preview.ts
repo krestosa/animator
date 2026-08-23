@@ -1,7 +1,7 @@
 import { store } from '../state/store';
 
 export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
-  const api=window.animatorDesktop?.blink,device=root.querySelector<HTMLElement>('[data-device]'),stage=root.querySelector<HTMLElement>('.stage'),webLoader=root.querySelector<HTMLDetailsElement>('.webLoader');if(!api||!device||!stage)return()=>{};
+  const api=window.animatorDesktop?.blink,device=root.querySelector<HTMLElement>('[data-device]'),stage=root.querySelector<HTMLElement>('.stage'),webLoader=root.querySelector<HTMLDetailsElement>('.webLoader'),app=root.querySelector<HTMLElement>('.app'),timeline=root.querySelector<HTMLElement>('.timeline');if(!api||!device||!stage)return()=>{};
   let disposed=false,currentKey='',generation=0,raf=0,lastOccluded=Boolean(webLoader?.open);
 
   const removeLegacyFrame=():void=>{if(store.get().project?.browserSessionId)return;device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());};
@@ -11,10 +11,18 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
     api.setVisible(blinkActive()&&!occluded);
     return occluded;
   };
+  const visibleClip=():DOMRect=>{
+    const stageRect=stage.getBoundingClientRect();let bottom=stageRect.bottom;
+    if(app?.classList.contains('timeline-open')&&timeline&&timeline.getAttribute('aria-hidden')!=='true'){
+      const appRect=app.getBoundingClientRect(),timelineHeight=Math.max(0,timeline.getBoundingClientRect().height||timeline.offsetHeight),timelineTop=appRect.bottom-timelineHeight;
+      bottom=Math.min(bottom,timelineTop);
+    }
+    return new DOMRect(stageRect.left,stageRect.top,Math.max(0,stageRect.width),Math.max(0,bottom-stageRect.top));
+  };
   const syncViewport=():boolean=>{
     if(disposed||store.get().project?.browserSessionId)return false;
     if(syncSurfaceVisibility())return false;
-    const rect=device.getBoundingClientRect(),clip=stage.getBoundingClientRect(),layoutWidth=Math.max(1,device.offsetWidth||rect.width),zoomFactor=Math.max(.05,rect.width/layoutWidth);
+    const rect=device.getBoundingClientRect(),clip=visibleClip(),layoutWidth=Math.max(1,device.offsetWidth||rect.width),zoomFactor=Math.max(.05,rect.width/layoutWidth);
     if(rect.width<1||rect.height<1||clip.width<1||clip.height<1)return false;
     api.setViewport({x:rect.left,y:rect.top,width:rect.width,height:rect.height,zoomFactor,clipX:clip.left,clipY:clip.top,clipWidth:clip.width,clipHeight:clip.height});
     return true;
@@ -49,15 +57,18 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
 
   const unsubscribe=store.subscribe(()=>void sync());
   const mutations=new MutationObserver(()=>{removeLegacyFrame();scheduleViewport();});mutations.observe(device,{childList:true,attributes:true,attributeFilter:['style','class']});
-  const resize=new ResizeObserver(scheduleViewport);resize.observe(device);resize.observe(stage);
+  const resize=new ResizeObserver(scheduleViewport);resize.observe(device);resize.observe(stage);if(timeline)resize.observe(timeline);
   const syncLoaderState=():void=>{const occluded=Boolean(webLoader?.open);lastOccluded=occluded;syncSurfaceVisibility();if(!occluded)syncViewport();};
   const loaderObserver=webLoader?new MutationObserver(syncLoaderState):null;loaderObserver?.observe(webLoader!,{attributes:true,attributeFilter:['open']});
+  const workspaceObserver=app?new MutationObserver(scheduleViewport):null;workspaceObserver?.observe(app!,{attributes:true,attributeFilter:['class']});
+  const timelineObserver=timeline?new MutationObserver(scheduleViewport):null;timelineObserver?.observe(timeline!,{attributes:true,attributeFilter:['aria-hidden','style','class']});
   const onWebLoaderToggle=():void=>syncLoaderState();
   const loaderSummary=webLoader?.querySelector<HTMLElement>('summary');
   const onLoaderPointerDown=():void=>{if(webLoader&&!webLoader.open){lastOccluded=true;api.setVisible(false);}};
   const onCameraChange=():void=>scheduleViewport();
-  webLoader?.addEventListener('toggle',onWebLoaderToggle);loaderSummary?.addEventListener('pointerdown',onLoaderPointerDown,true);root.addEventListener('animator:workspace-camera-change',onCameraChange);
+  const onTimelineTransition=():void=>scheduleViewport();
+  webLoader?.addEventListener('toggle',onWebLoaderToggle);loaderSummary?.addEventListener('pointerdown',onLoaderPointerDown,true);timeline?.addEventListener('transitionrun',onTimelineTransition);timeline?.addEventListener('transitionend',onTimelineTransition);root.addEventListener('animator:workspace-camera-change',onCameraChange);
   window.addEventListener('resize',scheduleViewport);window.addEventListener('scroll',scheduleViewport,true);
   syncSurfaceVisibility();syncViewport();void sync();
-  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();loaderObserver?.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);loaderSummary?.removeEventListener('pointerdown',onLoaderPointerDown,true);root.removeEventListener('animator:workspace-camera-change',onCameraChange);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(false);void api.close();};
+  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();loaderObserver?.disconnect();workspaceObserver?.disconnect();timelineObserver?.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);loaderSummary?.removeEventListener('pointerdown',onLoaderPointerDown,true);timeline?.removeEventListener('transitionrun',onTimelineTransition);timeline?.removeEventListener('transitionend',onTimelineTransition);root.removeEventListener('animator:workspace-camera-change',onCameraChange);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(false);void api.close();};
 }
