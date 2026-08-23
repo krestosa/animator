@@ -11,10 +11,7 @@ const npmCache=path.join(cacheRoot,'npm');
 fs.mkdirSync(electronCache,{recursive:true});
 fs.mkdirSync(npmCache,{recursive:true});
 
-const npmCli=process.env.npm_execpath;
-const command=npmCli?process.execPath:(process.platform==='win32'?'npm.cmd':'npm');
-const args=npmCli?[npmCli,'install','--no-audit','--no-fund']:['install','--no-audit','--no-fund'];
-const env={
+const env=Object.fromEntries(Object.entries({
   ...process.env,
   ELECTRON_CACHE:electronCache,
   npm_config_cache:npmCache,
@@ -22,10 +19,21 @@ const env={
   npm_config_fund:'false',
   npm_config_update_notifier:'false',
   PLAYWRIGHT_BROWSERS_PATH:path.join(root,'.animator-browsers')
-};
+}).filter((entry)=>typeof entry[1]==='string'));
+
+function npmInstall(){
+  if(process.platform==='win32'){
+    const command=process.env.ComSpec??process.env.COMSPEC??'C:\\Windows\\System32\\cmd.exe';
+    return spawn(command,['/d','/s','/c','npm install --no-audit --no-fund'],{cwd:root,env,stdio:'inherit',windowsHide:true});
+  }
+  const npmCli=process.env.npm_execpath;
+  return npmCli
+    ?spawn(process.execPath,[npmCli,'install','--no-audit','--no-fund'],{cwd:root,env,stdio:'inherit'})
+    :spawn('npm',['install','--no-audit','--no-fund'],{cwd:root,env,stdio:'inherit'});
+}
 
 const code=await new Promise((resolve,reject)=>{
-  const child=spawn(command,args,{cwd:root,env,stdio:'inherit',windowsHide:true,...(!npmCli&&process.platform==='win32'?{shell:true}:{})});
+  const child=npmInstall();
   child.once('error',reject);
   child.once('exit',value=>resolve(value??1));
 });
