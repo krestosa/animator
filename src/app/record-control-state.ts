@@ -1,13 +1,16 @@
 import {store} from '../state/store';
 
 export function mountRecordControlState(root:HTMLElement):()=>void{
-  const sync=():void=>{
+  let raf=0;
+  const apply=():void=>{
+    raf=0;
     const button=root.querySelector<HTMLButtonElement>('[data-action="record"]');
-    if(!button)return;
-    const state=store.get();
-    if(state.recording)button.disabled=false;
+    if(button&&store.get().recording)button.disabled=false;
+  };
+  const sync=():void=>{
+    if(!raf)raf=requestAnimationFrame(apply);
   };
   const unsubscribe=store.subscribe(sync);
   sync();
-  return unsubscribe;
+  return()=>{unsubscribe();if(raf)cancelAnimationFrame(raf);};
 }
