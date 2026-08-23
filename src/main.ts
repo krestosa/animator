@@ -13,6 +13,7 @@ import './app/editor-pro.css';
 import './app/viewport-screenshot.css';
 import './app/dense-layout.css';
 import './app/timeline-redesign.css';
+import './app/workspace-shell.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
@@ -33,6 +34,7 @@ import { mountLoadTimeline } from './app/load-timeline';
 import { mountDomLoadTree } from './app/dom-load-tree';
 import { mountControlSync } from './app/control-sync';
 import { mountViewportScreenshot } from './app/viewport-screenshot';
+import { mountWorkspaceShell } from './app/workspace-shell';
 import { installPreviewNavigationGate, mountRecordGate } from './app/record-gate';
 
 const root=document.querySelector<HTMLElement>('#root');
@@ -60,6 +62,7 @@ const cleanupPreviewTheme=mountPreviewTheme(root);
 const cleanupLoadTimeline=mountLoadTimeline(root);
 const cleanupDomLoadTree=mountDomLoadTree(root);
 const cleanupViewportScreenshot=mountViewportScreenshot(root);
-const cleanup=():void=>{cleanupViewportScreenshot();cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupNativeBlinkPreview();cleanupNativeRenderUi();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
+const cleanupWorkspaceShell=mountWorkspaceShell(root);
+const cleanup=():void=>{cleanupWorkspaceShell();cleanupViewportScreenshot();cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupNativeBlinkPreview();cleanupNativeRenderUi();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
 
 if(import.meta.hot)import.meta.hot.dispose(cleanup);
