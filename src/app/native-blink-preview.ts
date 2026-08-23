@@ -11,14 +11,20 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
     api.setVisible(blinkActive()&&!occluded);
     return occluded;
   };
-  const syncViewport=():void=>{
-    raf=0;if(disposed||store.get().project?.browserSessionId)return;
-    if(syncSurfaceVisibility())return;
+  const syncViewport=():boolean=>{
+    if(disposed||store.get().project?.browserSessionId)return false;
+    if(syncSurfaceVisibility())return false;
     const rect=device.getBoundingClientRect(),clip=stage.getBoundingClientRect(),layoutWidth=Math.max(1,device.offsetWidth||rect.width),zoomFactor=Math.max(.05,rect.width/layoutWidth);
-    if(rect.width<1||rect.height<1||clip.width<1||clip.height<1)return;
+    if(rect.width<1||rect.height<1||clip.width<1||clip.height<1)return false;
     api.setViewport({x:rect.left,y:rect.top,width:rect.width,height:rect.height,zoomFactor,clipX:clip.left,clipY:clip.top,clipWidth:clip.width,clipHeight:clip.height});
+    return true;
   };
-  const scheduleViewport=():void=>{if(!disposed&&!raf)raf=requestAnimationFrame(syncViewport);};
+  const scheduledViewport=():void=>{raf=0;syncViewport();};
+  const scheduleViewport=():void=>{
+    if(disposed)return;
+    syncViewport();
+    if(!raf)raf=requestAnimationFrame(scheduledViewport);
+  };
 
   const resolveUrl=async():Promise<string|undefined>=>{
     const project=store.get().project;if(!project||project.browserSessionId)return undefined;
@@ -29,16 +35,22 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
 
   const sync=async():Promise<void>=>{
     const project=store.get().project;if(!project||project.browserSessionId){currentKey='';generation++;api.setVisible(false);await api.close();return;}
-    removeLegacyFrame();const key=`${project.id}:${project.selectedEntry}:${project.sourceUrl??''}`;scheduleViewport();if(key===currentKey){syncSurfaceVisibility();return;}
+    removeLegacyFrame();const key=`${project.id}:${project.selectedEntry}:${project.sourceUrl??''}`;syncViewport();if(key===currentKey){syncSurfaceVisibility();syncViewport();return;}
     currentKey=key;const request=++generation;
-    try{const url=await resolveUrl();if(disposed||request!==generation||!url)return;await api.open(url);removeLegacyFrame();syncSurfaceVisibility();scheduleViewport();}
+    try{
+      const url=await resolveUrl();if(disposed||request!==generation||!url)return;
+      syncViewport();
+      await api.open(url);
+      if(disposed||request!==generation)return;
+      removeLegacyFrame();syncSurfaceVisibility();syncViewport();
+    }
     catch(error){if(disposed||request!==generation)return;store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
   };
 
   const unsubscribe=store.subscribe(()=>void sync());
   const mutations=new MutationObserver(()=>{removeLegacyFrame();scheduleViewport();});mutations.observe(device,{childList:true,attributes:true,attributeFilter:['style','class']});
   const resize=new ResizeObserver(scheduleViewport);resize.observe(device);resize.observe(stage);
-  const syncLoaderState=():void=>{const occluded=Boolean(webLoader?.open);if(occluded===lastOccluded){syncSurfaceVisibility();return;}lastOccluded=occluded;syncSurfaceVisibility();if(!occluded)scheduleViewport();};
+  const syncLoaderState=():void=>{const occluded=Boolean(webLoader?.open);lastOccluded=occluded;syncSurfaceVisibility();if(!occluded)syncViewport();};
   const loaderObserver=webLoader?new MutationObserver(syncLoaderState):null;loaderObserver?.observe(webLoader!,{attributes:true,attributeFilter:['open']});
   const onWebLoaderToggle=():void=>syncLoaderState();
   const loaderSummary=webLoader?.querySelector<HTMLElement>('summary');
@@ -46,6 +58,6 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const onCameraChange=():void=>scheduleViewport();
   webLoader?.addEventListener('toggle',onWebLoaderToggle);loaderSummary?.addEventListener('pointerdown',onLoaderPointerDown,true);root.addEventListener('animator:workspace-camera-change',onCameraChange);
   window.addEventListener('resize',scheduleViewport);window.addEventListener('scroll',scheduleViewport,true);
-  syncSurfaceVisibility();void sync();
+  syncSurfaceVisibility();syncViewport();void sync();
   return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();loaderObserver?.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);loaderSummary?.removeEventListener('pointerdown',onLoaderPointerDown,true);root.removeEventListener('animator:workspace-camera-change',onCameraChange);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(false);void api.close();};
 }
