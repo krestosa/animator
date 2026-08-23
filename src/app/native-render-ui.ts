@@ -54,6 +54,7 @@ export function mountNativeRenderUi(root:HTMLElement):()=>void{
       const project:ProjectDescriptor={id:`blink-${hash(url)}`,root:url,entries:['/'],selectedEntry:'/',tree:[],sourceUrl:url,kind:'remote'};
       store.set({project,analysis:emptyAnalysis,motionTracks:[],events:[],elements:[],selectedElementId:undefined,selectedAnimationId:undefined,playhead:0,diagnostics:[...store.get().diagnostics,`info: Blink native render ${url}${instrumentationEnabled?'':' · clean'}`].slice(-100)});
       details.open=false;
+      await nextFrame();
       await api.open(url);
     }catch(error){store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
     finally{opening=false;openButton.disabled=false;openButton.textContent='Abrir en Blink';}
@@ -84,4 +85,5 @@ function normalizeUrl(value:string):string|undefined{
   const candidate=hasScheme?raw:`${local?'http':'https'}://${raw}`;
   try{const url=new URL(candidate);return url.protocol==='http:'||url.protocol==='https:'?url.toString():undefined;}catch{return undefined;}
 }
+function nextFrame():Promise<void>{return new Promise(resolve=>requestAnimationFrame(()=>resolve()));}
 function hash(value:string):string{let result=2166136261;for(let index=0;index<value.length;index++){result^=value.charCodeAt(index);result=Math.imul(result,16777619);}return(result>>>0).toString(36);}
