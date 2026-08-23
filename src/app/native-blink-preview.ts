@@ -2,7 +2,7 @@ import { store } from '../state/store';
 
 export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const api=window.animatorDesktop?.blink,device=root.querySelector<HTMLElement>('[data-device]'),stage=root.querySelector<HTMLElement>('.stage'),webLoader=root.querySelector<HTMLDetailsElement>('.webLoader'),app=root.querySelector<HTMLElement>('.app'),timeline=root.querySelector<HTMLElement>('.timeline');if(!api||!device||!stage)return()=>{};
-  let disposed=false,currentKey='',raf=0,syncRunning=false,syncQueued=false;
+  let disposed=false,currentKey='',raf=0,syncRunning=false,syncQueued=false,nativeOpen=false;
 
   const removeLegacyFrame=():void=>{if(store.get().project?.browserSessionId)return;device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());};
   const blinkActive=():boolean=>{const project=store.get().project;return Boolean(project&&!project.browserSessionId);};
@@ -56,17 +56,18 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   };
 
   const projectKey=():string=>{const project=store.get().project;return project&&!project.browserSessionId?`${project.id}:${project.selectedEntry}:${project.sourceUrl??''}`:'';};
+  const closeNative=async():Promise<void>=>{currentKey='';nativeOpen=false;api.setVisible(false);await api.close();};
   const syncOnce=async():Promise<void>=>{
-    const project=store.get().project;if(!project||project.browserSessionId){if(!currentKey)return;currentKey='';api.setVisible(false);await api.close();return;}
-    removeLegacyFrame();const key=projectKey();syncViewport();if(key===currentKey){syncSurfaceVisibility();syncViewport();return;}
+    const project=store.get().project;if(!project||project.browserSessionId){if(!nativeOpen&&!currentKey)return;await closeNative();return;}
+    removeLegacyFrame();const key=projectKey();syncViewport();if(key===currentKey&&nativeOpen){syncSurfaceVisibility();syncViewport();return;}
     try{
       const url=await resolveUrl();if(disposed||!url||projectKey()!==key)return;
       syncViewport();
-      await api.open(url);
+      await api.open(url);nativeOpen=true;
       if(disposed||projectKey()!==key)return;
       currentKey=key;removeLegacyFrame();syncSurfaceVisibility();syncViewport();
     }
-    catch(error){if(disposed||projectKey()!==key)return;currentKey='';store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
+    catch(error){if(disposed||projectKey()!==key)return;try{await closeNative();}catch{}store.set({diagnostics:[...store.get().diagnostics,`error: ${error instanceof Error?error.message:String(error)}`].slice(-100)});}
   };
   const drainSync=async():Promise<void>=>{if(syncRunning)return;syncRunning=true;try{while(syncQueued&&!disposed){syncQueued=false;await syncOnce();}}finally{syncRunning=false;}};
   const requestSync=():void=>{if(disposed)return;syncQueued=true;syncSurfaceVisibility();void drainSync();};
