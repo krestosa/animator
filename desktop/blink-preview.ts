@@ -58,8 +58,9 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const setInstrumentation=async(enabled:boolean):Promise<{enabled:boolean}>=>{
     const nextEnabled=Boolean(enabled);
     if(nextEnabled===instrumentationEnabled)return{enabled:instrumentationEnabled};
-    instrumentationEnabled=nextEnabled;
-    const url=currentUrl;disposeView();
+    const liveUrl=view&&!view.webContents.isDestroyed()?view.webContents.getURL():'';
+    const url=/^https?:\/\//i.test(liveUrl)?liveUrl:currentUrl;
+    instrumentationEnabled=nextEnabled;currentUrl=url;disposeView();
     if(url){const target=await ensureView();target.setVisible(true);window.contentView.addChildView(target);await target.webContents.loadURL(url);}
     return{enabled:instrumentationEnabled};
   };
