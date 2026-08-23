@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('animatorDesktop',{
   blink:{
     open:(url:string)=>ipcRenderer.invoke('animator:blink:open',{url}),
     close:()=>ipcRenderer.invoke('animator:blink:close'),
+    setInstrumentation:(enabled:boolean)=>ipcRenderer.invoke('animator:blink:instrumentation',{enabled}),
     resources:()=>ipcRenderer.invoke('animator:blink:resources'),
     setViewport:(viewport:Viewport)=>ipcRenderer.send('animator:blink:viewport',viewport),
     command:(command:unknown)=>ipcRenderer.send('animator:blink:command',command),
