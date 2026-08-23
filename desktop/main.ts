@@ -112,17 +112,27 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
   if(googleAssets){
     if(!blinkHandle)throw new Error('Google assets test: Blink runtime unavailable');
     const target='https://www.google.com/';
-    console.log(`Google assets test: opening ${target}`);
-    await bounded('Google Blink open',blinkHandle.open(target),20000);
-    await new Promise(resolve=>setTimeout(resolve,1500));
+    console.log(`Google assets UI test: opening ${target} through the real web dropdown`);
+    const opened=await window.webContents.executeJavaScript(`(()=>{
+      const details=document.querySelector('.webLoader'),input=document.querySelector('[data-web-url]'),button=document.querySelector('[data-web-open]');
+      if(!(details instanceof HTMLDetailsElement)||!(input instanceof HTMLInputElement)||!(button instanceof HTMLButtonElement))return false;
+      details.open=true;input.value=${JSON.stringify(target)};input.dispatchEvent(new Event('input',{bubbles:true}));button.click();return true;
+    })()`,true) as boolean;
+    if(!opened)throw new Error('Google assets UI test: web dropdown controls unavailable');
+    const projectReady=await pollRenderer<boolean>(window,`(()=>{const tab=document.querySelector('.workspaceTab.active');return Boolean(tab&&/google/i.test(tab.textContent||''));})()`,15000,false);
+    if(!projectReady)throw new Error('Google assets UI test: Google project tab did not become active');
+    await new Promise(resolve=>setTimeout(resolve,1800));
+    const assetsTab=await window.webContents.executeJavaScript(`(()=>{const button=[...document.querySelectorAll('[data-left-panel-tab]')].find(node=>node.getAttribute('aria-label')==='Assets');if(!(button instanceof HTMLButtonElement))return false;button.click();return true;})()`,true) as boolean;
+    if(!assetsTab)throw new Error('Google assets UI test: Assets rail button unavailable');
+    const assetCount=await pollRenderer<number>(window,`Number(document.querySelector('[data-assets-count]')?.textContent||'0')`,10000,0,value=>value>0);
+    const panel=await window.webContents.executeJavaScript(`(()=>({count:Number(document.querySelector('[data-assets-count]')?.textContent||'0'),status:document.querySelector('[data-assets-status]')?.textContent||'',rows:[...document.querySelectorAll('.assetCardText')].slice(0,20).map(node=>node.textContent?.trim()||'')}))()`,true) as{count:number;status:string;rows:string[]};
     const resources=await bounded('Google asset inventory',blinkHandle.resources(),5000);
-    const counts:Record<string,number>={};
-    for(const resource of resources)counts[resource.resourceType]=(counts[resource.resourceType]??0)+1;
-    const samples=resources.slice(0,25).map(resource=>({type:resource.resourceType,mime:resource.mimeType,url:resource.url}));
-    console.log(`Google assets test: ${resources.length} references ${JSON.stringify(counts)}`);
-    console.log(`Google assets samples: ${JSON.stringify(samples)}`);
-    if(resources.length<2)throw new Error(`Google assets test: expected multiple loaded assets, got ${resources.length}`);
-    if(!resources.some(resource=>!['mainFrame','document'].includes(resource.resourceType)))throw new Error('Google assets test: no non-document asset references captured');
+    const counts:Record<string,number>={};for(const resource of resources)counts[resource.resourceType]=(counts[resource.resourceType]??0)+1;
+    console.log(`Google assets UI test: panel=${JSON.stringify(panel)} inventory=${resources.length} types=${JSON.stringify(counts)}`);
+    console.log(`Google assets samples: ${JSON.stringify(resources.slice(0,25).map(resource=>({type:resource.resourceType,mime:resource.mimeType,url:resource.url})))}`);
+    if(assetCount<=0||panel.count<=0)throw new Error(`Google assets UI test: Assets panel remained empty (${panel.count})`);
+    if(resources.length<2)throw new Error(`Google assets UI test: expected multiple loaded assets, got ${resources.length}`);
+    if(!resources.some(resource=>!['mainFrame','document'].includes(resource.resourceType)))throw new Error('Google assets UI test: no non-document asset references captured');
     await bounded('Google Blink close',blinkHandle.close(),3000);
   }
   if(metrics){
@@ -136,6 +146,11 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
   app.exit(0);
 }
 
+async function pollRenderer<T>(window:BrowserWindow,expression:string,timeoutMs:number,fallback:T,accept?:(value:T)=>boolean):Promise<T>{
+  const started=Date.now();let last=fallback;
+  while(Date.now()-started<timeoutMs){try{last=await window.webContents.executeJavaScript(expression,true) as T;if(accept?accept(last):Boolean(last))return last;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}
+  return last;
+}
 function roundMb(kb:number):number{return Number((kb/1024).toFixed(1));}
 async function bounded<T>(label:string,promise:Promise<T>,timeoutMs:number):Promise<T>{
   let timer:ReturnType<typeof setTimeout>|undefined;
