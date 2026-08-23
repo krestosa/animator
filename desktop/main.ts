@@ -92,13 +92,17 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
   if(nativeSmoke){
     if(!server||!blinkHandle)throw new Error('Native Blink smoke test: runtime unavailable');
     const target=`${server.origin}/api/health`;
-    await blinkHandle.open(target);
-    const clean=await blinkHandle.setInstrumentation(false);
+    console.log('Native Blink smoke test: opening instrumented view');
+    await bounded('native Blink open',blinkHandle.open(target),10000);
+    console.log('Native Blink smoke test: entering clean mode');
+    const clean=await bounded('native Blink clean mode',blinkHandle.setInstrumentation(false),5000);
     if(clean.enabled!==false)throw new Error(`Native Blink smoke test: clean mode did not activate ${JSON.stringify(clean)}`);
-    const instrumented=await blinkHandle.setInstrumentation(true);
+    await new Promise(resolve=>setTimeout(resolve,250));
+    console.log('Native Blink smoke test: restoring instrumentation');
+    const instrumented=await bounded('native Blink instrumentation restore',blinkHandle.setInstrumentation(true),5000);
     if(instrumented.enabled!==true)throw new Error(`Native Blink smoke test: instrumentation did not reactivate ${JSON.stringify(instrumented)}`);
     console.log('Native Blink smoke test: native view, clean reload and instrumented reload verified');
-    await blinkHandle.close();
+    await bounded('native Blink close',blinkHandle.close(),3000);
   }
   if(metrics){
     await new Promise(resolve=>setTimeout(resolve,750));
@@ -106,12 +110,17 @@ async function runDiagnosticMode(window:BrowserWindow):Promise<void>{
     const workingSetMb=Number(processes.reduce((sum,item)=>sum+item.workingSetMb,0).toFixed(1));
     console.log(JSON.stringify({workingSetMb,processes},null,2));
   }
-  await shutdown();
+  await bounded('Electron shutdown',shutdown(),5000);
   window.destroy();
   app.exit(0);
 }
 
 function roundMb(kb:number):number{return Number((kb/1024).toFixed(1));}
+async function bounded<T>(label:string,promise:Promise<T>,timeoutMs:number):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} timed out after ${timeoutMs}ms`)),timeoutMs);});
+  try{return await Promise.race([promise,timeout]);}finally{if(timer)clearTimeout(timer);}
+}
 
 async function shutdown():Promise<void>{
   if(quitting)return;
