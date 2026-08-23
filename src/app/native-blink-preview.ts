@@ -6,8 +6,20 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
 
   const removeLegacyFrame=():void=>{if(store.get().project?.browserSessionId)return;device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());};
   const blinkActive=():boolean=>{const project=store.get().project;return Boolean(project&&!project.browserSessionId);};
+  const overlaps=(a:DOMRect,b:DOMRect):boolean=>a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;
+  const floatingOverlayOpen=():boolean=>{
+    const stageRect=stage.getBoundingClientRect();
+    for(const element of root.querySelectorAll<HTMLElement>('dialog[open],details[open]')){
+      if(timeline?.contains(element))continue;
+      if(element===webLoader)return true;
+      const rect=element.getBoundingClientRect();if(rect.width<1||rect.height<1||!overlaps(rect,stageRect))continue;
+      if(element instanceof HTMLDialogElement)return true;
+      const position=getComputedStyle(element).position;if(position==='absolute'||position==='fixed'||position==='sticky')return true;
+    }
+    return false;
+  };
   const syncSurfaceVisibility=():boolean=>{
-    const occluded=Boolean(webLoader?.open);lastOccluded=occluded;
+    const occluded=floatingOverlayOpen();lastOccluded=occluded;
     api.setVisible(blinkActive()&&!occluded);
     return occluded;
   };
@@ -58,10 +70,11 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const unsubscribe=store.subscribe(()=>void sync());
   const mutations=new MutationObserver(()=>{removeLegacyFrame();scheduleViewport();});mutations.observe(device,{childList:true,attributes:true,attributeFilter:['style','class']});
   const resize=new ResizeObserver(scheduleViewport);resize.observe(device);resize.observe(stage);if(timeline)resize.observe(timeline);
-  const syncLoaderState=():void=>{const occluded=Boolean(webLoader?.open);lastOccluded=occluded;syncSurfaceVisibility();if(!occluded)syncViewport();};
+  const syncLoaderState=():void=>{const occluded=floatingOverlayOpen();lastOccluded=occluded;syncSurfaceVisibility();if(!occluded)syncViewport();};
   const loaderObserver=webLoader?new MutationObserver(syncLoaderState):null;loaderObserver?.observe(webLoader!,{attributes:true,attributeFilter:['open']});
   const workspaceObserver=app?new MutationObserver(scheduleViewport):null;workspaceObserver?.observe(app!,{attributes:true,attributeFilter:['class']});
   const timelineObserver=timeline?new MutationObserver(scheduleViewport):null;timelineObserver?.observe(timeline!,{attributes:true,attributeFilter:['aria-hidden','style','class']});
+  const floatingObserver=new MutationObserver(scheduleViewport);floatingObserver.observe(root,{subtree:true,attributes:true,attributeFilter:['open']});
   const onWebLoaderToggle=():void=>syncLoaderState();
   const loaderSummary=webLoader?.querySelector<HTMLElement>('summary');
   const onLoaderPointerDown=():void=>{if(webLoader&&!webLoader.open){lastOccluded=true;api.setVisible(false);}};
@@ -70,5 +83,5 @@ export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   webLoader?.addEventListener('toggle',onWebLoaderToggle);loaderSummary?.addEventListener('pointerdown',onLoaderPointerDown,true);timeline?.addEventListener('transitionrun',onTimelineTransition);timeline?.addEventListener('transitionend',onTimelineTransition);root.addEventListener('animator:workspace-camera-change',onCameraChange);
   window.addEventListener('resize',scheduleViewport);window.addEventListener('scroll',scheduleViewport,true);
   syncSurfaceVisibility();syncViewport();void sync();
-  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();loaderObserver?.disconnect();workspaceObserver?.disconnect();timelineObserver?.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);loaderSummary?.removeEventListener('pointerdown',onLoaderPointerDown,true);timeline?.removeEventListener('transitionrun',onTimelineTransition);timeline?.removeEventListener('transitionend',onTimelineTransition);root.removeEventListener('animator:workspace-camera-change',onCameraChange);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(false);void api.close();};
+  return()=>{disposed=true;generation++;unsubscribe();mutations.disconnect();resize.disconnect();loaderObserver?.disconnect();workspaceObserver?.disconnect();timelineObserver?.disconnect();floatingObserver.disconnect();webLoader?.removeEventListener('toggle',onWebLoaderToggle);loaderSummary?.removeEventListener('pointerdown',onLoaderPointerDown,true);timeline?.removeEventListener('transitionrun',onTimelineTransition);timeline?.removeEventListener('transitionend',onTimelineTransition);root.removeEventListener('animator:workspace-camera-change',onCameraChange);window.removeEventListener('resize',scheduleViewport);window.removeEventListener('scroll',scheduleViewport,true);if(raf)cancelAnimationFrame(raf);api.setVisible(false);void api.close();};
 }
