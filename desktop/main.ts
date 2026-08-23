@@ -30,7 +30,7 @@ async function createMainWindow():Promise<void>{
   const production=app.isPackaged||process.argv.includes('--production');
   server=await startAnimatorServer({host:'127.0.0.1',port:0,production});
   const uiSession=session.fromPartition('animator-ui',{cache:false});
-  const preload=fileURLToPath(new URL('./preload.js',import.meta.url));
+  const preload=fileURLToPath(new URL('./preload.cjs',import.meta.url));
   const window=new BrowserWindow({width:1440,height:900,minWidth:960,minHeight:640,show:false,autoHideMenuBar:true,backgroundColor:'#101010',webPreferences:{preload,session:uiSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:true}});
   mainWindow=window;blinkHandle=installBlinkPreview(window);
   window.webContents.setWindowOpenHandler(({url})=>{if(/^https?:\/\//i.test(url))void shell.openExternal(url);return{action:'deny'};});
