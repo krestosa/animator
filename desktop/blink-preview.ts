@@ -21,7 +21,7 @@ const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,
 export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   let view:WebContentsView|null=null,parkedInstrumented:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined;
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
-  const targetSession=session.fromPartition('animator-blink',{cache:false});
+  const targetSession=session.fromPartition('animator-blink',{cache:true});
   const networkResources=new Map<string,PageResource>();
   const networkFilter={urls:['<all_urls>']};
 
