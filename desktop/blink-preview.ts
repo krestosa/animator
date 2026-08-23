@@ -80,7 +80,7 @@ export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   const showTarget=(target:WebContentsView):void=>{if(lastViewport)setGeometry(target,lastViewport);target.setVisible(true);window.contentView.addChildView(target);};
   const cdp=async(target:WebContentsView,method:string,params?:Record<string,unknown>):Promise<void>=>{await bounded(`CDP ${method}`,target.webContents.debugger.sendCommand(method,params),5000);};
   const createView=async(instrumented:boolean):Promise<WebContentsView>=>{
-    const preload=fileURLToPath(new URL('./target-preload.js',import.meta.url));
+    const preload=fileURLToPath(new URL('./target-preload.cjs',import.meta.url));
     const next=new WebContentsView({webPreferences:{...(instrumented?{preload}:{}),session:targetSession,nodeIntegration:false,contextIsolation:true,sandbox:true,spellcheck:false,backgroundThrottling:false}});
     next.setBackgroundColor('#ffffff');next.setVisible(false);window.contentView.addChildView(next);
     next.webContents.setWindowOpenHandler(({url})=>{startReload(next,url);return{action:'deny'};});
