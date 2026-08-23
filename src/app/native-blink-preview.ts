@@ -2,7 +2,7 @@ import { store } from '../state/store';
 
 export function mountNativeBlinkPreview(root:HTMLElement):()=>void{
   const api=window.animatorDesktop?.blink,device=root.querySelector<HTMLElement>('[data-device]'),webLoader=root.querySelector<HTMLDetailsElement>('.webLoader');if(!api||!device)return()=>{};
-  let disposed=false,currentKey='',generation=0,raf=0,lastOccluded:Boolean(webLoader?.open);
+  let disposed=false,currentKey='',generation=0,raf=0,lastOccluded=Boolean(webLoader?.open);
 
   const removeLegacyFrame=():void=>{if(store.get().project?.browserSessionId)return;device.querySelectorAll<HTMLIFrameElement>('[data-preview-frame]').forEach(frame=>frame.remove());};
   const blinkActive=():boolean=>{const project=store.get().project;return Boolean(project&&!project.browserSessionId);};
