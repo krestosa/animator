@@ -9,9 +9,15 @@ import { auxiliaryRuntimeSource } from '../server/aux-runtime.js';
 
 type Viewport={x:number;y:number;width:number;height:number;zoomFactor:number};
 type PageResource={url:string;initiatorType:string;transferSize:number;decodedBodySize:number};
+export interface BlinkPreviewHandle{
+  open:(url:string)=>Promise<void>;
+  close:()=>Promise<void>;
+  setInstrumentation:(enabled:boolean)=>Promise<{enabled:boolean}>;
+  cleanup:()=>Promise<void>;
+}
 const runtimeSources=[gateRuntimeSource,runtimeSource,recordResumeRuntimeSource,seekRuntimeSource,mutationRuntimeSource,auxiliaryRuntimeSource];
 
-export function installBlinkPreview(window:BrowserWindow):()=>Promise<void>{
+export function installBlinkPreview(window:BrowserWindow):BlinkPreviewHandle{
   let view:WebContentsView|null=null,currentUrl='',instrumentationEnabled=true,lastViewport:Viewport|undefined;
   const validSender=(senderId:number):boolean=>senderId===window.webContents.id;
   const targetSession=session.fromPartition('animator-blink',{cache:false});
@@ -77,8 +83,9 @@ export function installBlinkPreview(window:BrowserWindow):()=>Promise<void>{
   const commandHandler=(event:Electron.IpcMainEvent,value:unknown)=>{if(validSender(event.sender.id))command(value);};
   ipcMain.on('animator:blink:viewport',viewportHandler);ipcMain.on('animator:blink:command',commandHandler);ipcMain.on('animator:blink:page-message',pageMessage);
 
-  return async()=>{
+  const cleanup=async():Promise<void>=>{
     ipcMain.removeHandler('animator:blink:open');ipcMain.removeHandler('animator:blink:close');ipcMain.removeHandler('animator:blink:instrumentation');ipcMain.removeHandler('animator:blink:resources');ipcMain.off('animator:blink:viewport',viewportHandler);ipcMain.off('animator:blink:command',commandHandler);ipcMain.off('animator:blink:page-message',pageMessage);
     disposeView();
   };
+  return{open,close,setInstrumentation,cleanup};
 }
