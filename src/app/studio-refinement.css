@@ -1,0 +1,102 @@
+/* Final structural refinement layer */
+.workspace.studioWorkspace{grid-template-columns:var(--left-panel) 32px minmax(0,1fr) var(--right-panel)!important}
+.studioToolRail{min-width:32px!important;width:32px!important;padding:4px 0!important;background:#12110f!important}
+.studioToolRail button{width:31px!important;min-width:31px!important;height:31px!important;min-height:31px!important;border-left-width:2px!important}
+.studioToolRail svg{width:14px!important;height:14px!important}
+.studioToolRail .primaryIcon{margin-top:4px!important;background:transparent!important;color:#c26122!important;border-left-color:#a84d16!important}
+.studioToolRail .primaryIcon:hover{background:#262019!important;color:#e37a30!important}
+.studioToolRailDivider{width:20px!important;margin:5px auto!important;background:#302c27!important}
+
+.previewArea{grid-template-rows:28px minmax(0,1fr) 34px!important}
+.previewChrome{height:28px!important;min-height:28px!important;padding:0 9px!important}
+.studioViewerFooter{height:34px!important;padding:0 8px!important}
+.studioViewerTransport{height:28px!important}
+.studioViewerTransport button,.studioViewerTransport select{height:28px!important;min-height:28px!important}
+
+.timelineTop.studioTimelineHeader{height:48px!important;min-height:48px!important;grid-template-columns:184px minmax(0,1fr) auto!important}
+.studioTimelineIdentity{padding:6px 10px!important}
+.studioTimelineTools .timelineProTools{height:47px!important}
+.previewEditorControls.studioTimelineControls{height:47px!important}
+.timelineToolGroup{height:30px!important}
+.timelineToolGroup button{height:27px!important;min-height:27px!important;padding-inline:8px!important}
+.timelineClose{top:11px!important}
+
+/* One restrained palette for the whole timeline. Type is communicated by label and structure, not rainbow color. */
+.v2TypeDot{width:6px!important;height:6px!important;border-radius:0!important;background:#71685e!important;box-shadow:none!important}
+.v2TypeDot[data-animation-type="css-animation"],
+.v2TypeDot[data-animation-type="css-transition"],
+.v2TypeDot[data-animation-type="web-animation"],
+.v2TypeDot[data-animation-type="javascript"],
+.v2TypeDot[data-animation-type="raf"],
+.v2TypeDot[data-animation-type="runtime-style"],
+.v2TypeDot[data-animation-type="unknown"]{background:#756d63!important}
+.v2GroupRow.selected .v2TypeDot,.v2InstanceRow.selected .v2TypeDot{background:#c45b1a!important}
+
+.v2Clip[data-animation-type="css-animation"],
+.v2Clip[data-animation-type="css-transition"],
+.v2Clip[data-animation-type="web-animation"],
+.v2Clip[data-animation-type="javascript"],
+.v2Clip[data-animation-type="raf"],
+.v2Clip[data-animation-type="runtime-style"],
+.v2Clip[data-animation-type="unknown"]{
+  background:#453225!important;
+  border:0!important;
+  border-left:3px solid #82502d!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  filter:none!important;
+}
+.v2Clip[data-animation-type="css-transition"],.v2Clip[data-animation-type="runtime-style"]{background:#3c3026!important;border-left-color:#6f5944!important}
+.v2Clip[data-animation-type="web-animation"],.v2Clip[data-animation-type="raf"]{background:#493024!important;border-left-color:#8d4b26!important}
+.v2Clip[data-animation-type="javascript"]{background:#4b3825!important;border-left-color:#96652d!important}
+.v2Clip[data-runtime-state="finished"],.v2Clip[data-runtime-state="idle"]{opacity:.72!important}
+.v2Clip:hover{background:#573621!important;border-left-color:#bd5a1d!important;filter:none!important}
+.v2Clip.selected,
+.v2Clip.selected[data-animation-type="css-animation"],
+.v2Clip.selected[data-animation-type="css-transition"],
+.v2Clip.selected[data-animation-type="web-animation"],
+.v2Clip.selected[data-animation-type="javascript"],
+.v2Clip.selected[data-animation-type="raf"],
+.v2Clip.selected[data-animation-type="runtime-style"],
+.v2Clip.selected[data-animation-type="unknown"]{
+  background:#653417!important;
+  border:0!important;
+  border-left:3px solid #d06a25!important;
+  outline:1px solid #a84d16!important;
+  outline-offset:-1px!important;
+  box-shadow:none!important;
+  filter:none!important;
+}
+.v2ClipLabel{color:#ded5ca!important;text-shadow:none!important;font-weight:600!important;letter-spacing:.01em!important}
+.v2GroupClip{border-style:solid!important;opacity:.86!important}
+.v2GroupClip .v2ClipLabel{color:#c8beb3!important}
+
+.v2LaneIcon,.v2LaneIcon.event,.v2LaneIcon.lifecycle,.v2LaneIcon.dom,.v2LaneIcon.network{border-radius:0!important;background:#766e64!important}
+.v2LaneIcon.event{background:#a76731!important}
+.v2DomMark,.v2LifecycleMark,.v2NetworkBar,
+.v2NetworkBar[data-resource-type="img"],
+.v2NetworkBar[data-resource-type="css"],
+.v2NetworkBar[data-resource-type="link"],
+.v2NetworkBar[data-resource-type="script"]{
+  border-radius:0!important;
+  background:#554234!important;
+  border:0!important;
+  border-left:2px solid #846040!important;
+  box-shadow:none!important;
+  filter:none!important;
+}
+.v2LifecycleMark{background:#8b542d!important;border-left:0!important}
+.v2DomMark{background:#6c5541!important}
+.v2NetworkBar:hover{background:#66452f!important;border-left-color:#b65b20!important;filter:none!important}
+.v2Event,.v2Event.cluster{background:#a65b26!important;border-radius:0!important;box-shadow:none!important;color:#f1d8c3!important}
+
+/* Active state uses one visual grammar everywhere. */
+.timelineToolGroup button.active,.studioViewerTransport button.active,.rightPanel nav button.active{color:#f1c7a8!important}
+.timelineToolGroup button.active{background:#2d2119!important;box-shadow:inset 0 -2px 0 #a84d16!important}
+
+/* Reduce visual noise from inherited badges/cards. */
+.v2LaneCount{height:15px!important;min-width:16px!important;padding:0 3px!important;border:0!important;border-left:1px solid #4a443d!important;border-radius:0!important;background:transparent!important;color:#776f65!important}
+.groupCount{border:0!important;border-left:1px solid #4a443d!important;background:transparent!important}
+
+@media(max-width:1180px){.timelineTop.studioTimelineHeader{grid-template-columns:150px minmax(0,1fr) auto!important}}
+@media(max-width:900px){.workspace.studioWorkspace{grid-template-columns:var(--left-panel) 30px minmax(260px,1fr) var(--right-panel)!important}.studioToolRail{width:30px!important;min-width:30px!important}.studioToolRail button{width:29px!important;min-width:29px!important}.timelineTop.studioTimelineHeader{grid-template-columns:116px minmax(0,1fr) auto!important}}
