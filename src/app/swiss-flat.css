@@ -1,0 +1,51 @@
+:root{--vl-window:#141311;--vl-content:#181715;--vl-sidebar:#1d1c19;--vl-sidebar-solid:#1d1c19;--vl-toolbar:#211f1c;--vl-toolbar-solid:#211f1c;--vl-inspector:#1d1c19;--vl-timeline:#131210;--vl-control:#292724;--vl-control-hover:#33302c;--vl-control-active:#3c3833;--vl-separator:#3b3833;--vl-separator-soft:#2c2a27;--vl-text:#f1eee8;--vl-secondary:#b9b4aa;--vl-tertiary:#817b72;--vl-accent:#b95718;--vl-accent-fill:#71330f;--vl-accent-strong:#d06a25;--vl-radius:2px;--vl-radius-sm:2px;--vl-font:"Helvetica Neue",Helvetica,Arial,"Segoe UI",sans-serif}
+html,body,#root,.app{background:var(--vl-window)!important}
+.workspaceTabs,.toolbar,.leftPanel,.rightPanel,.leftPanelTabContent,.previewChrome,.rightPanel nav,.timelineTop{backdrop-filter:none!important;box-shadow:none!important;background-image:none!important}
+.workspaceTabs{background:#1d1c19!important;border-bottom:1px solid var(--vl-separator)!important}
+.toolbar{background:#211f1c!important;border-bottom:1px solid var(--vl-separator)!important}
+.workspaceTab,.workspaceTabClose,.toolbar button,.toolbar select,.toolbar input,.toolbarMore>summary,.webLoader>summary,.blinkInstrumentationToggle,.leftPanelTab,.tree summary,.tree button,.row,.motionRow,.globalSearch input,.search,.leftPanel select,.previewChrome select,.previewMode,.rightPanel nav button,.badges span,.controlGrid input,.controlGrid select,.easingEditor input,.keyframeCard input,.keyframeCard select,.transformGrid input,.transformOrigin input,.easingEditor,.keyframeCard,.tiny,.sourceView pre,.exportView pre,.canvasControls,.canvasControls button,.toolbarMenu,.webLoaderPanel{border-radius:2px!important}
+.workspaceTab.active{background:#302d29!important;color:var(--vl-text)!important;box-shadow:none!important}
+.workspaceTab i{background:var(--vl-accent)!important}
+.toolbarCluster+.toolbarCluster:before,.timelineIdentity:after{background:var(--vl-separator)!important}
+.toolbar button,.toolbarMore>summary,.webLoader>summary,.blinkInstrumentationToggle{transition:background 80ms linear,color 80ms linear!important}
+.toolbar button:active,.toolbarMore>summary:active,.webLoader>summary:active{transform:none!important}
+.toolbarCreate .primaryIcon{background:var(--vl-accent)!important;color:#fff4e9!important}
+.toolbarCreate .primaryIcon:hover{background:var(--vl-accent-strong)!important}
+.toolbarTransport{background:transparent!important;border:1px solid var(--vl-separator)!important;border-radius:2px!important;padding:1px!important}
+.toolbarMenu,.webLoaderPanel{background:#24221f!important;border:1px solid #49453f!important;box-shadow:none!important;backdrop-filter:none!important}
+.workspace{background:var(--vl-content)!important}
+.leftPanel,.rightPanel{background:var(--vl-sidebar)!important;backdrop-filter:none!important}
+.leftPanelTabRail{background:#181715!important}
+.leftPanelTab.active{background:transparent!important;color:#f3eee7!important}
+.leftPanelTab.active:before{top:3px!important;bottom:3px!important;width:3px!important;background:var(--vl-accent)!important}
+.leftPanelTabContent{background:#1d1c19!important}
+.leftPanelTabContent h3,.inspector h3,.sourceView h3,.exportView h3{font-weight:700!important;letter-spacing:.08em!important;color:#d2ccc2!important}
+.tree summary,.tree button,.row,.motionRow,[data-global-results] button{border-radius:0!important}
+.tree summary:hover,.tree button:hover,.row:hover,.motionRow:hover,[data-global-results] button:hover{background:#292724!important}
+.row.selected,.motionRow.selected{background:var(--vl-accent-fill)!important;color:#fff4e9!important;box-shadow:inset 3px 0 0 var(--vl-accent)!important}
+.globalSearch input,.search,.leftPanel select{background:#171614!important;border:1px solid #46423d!important}
+.globalSearch input:focus,.search:focus,.leftPanel select:focus{border-color:var(--vl-accent)!important;box-shadow:none!important}
+.groupCount{border-radius:2px!important;background:#302d29!important;color:#c8c1b7!important}
+.previewArea{background:#181715!important}
+.previewChrome{background:#1d1c19!important;border-bottom:1px solid var(--vl-separator)!important}
+.previewMode{border-radius:2px!important;background:#292724!important}
+.stage{background:#151412!important;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px)!important;background-size:24px 24px!important}
+.device{border-radius:0!important;box-shadow:0 0 0 1px #45413b!important}
+.canvasControls{background:#211f1c!important;border:1px solid #49453f!important;box-shadow:none!important;backdrop-filter:none!important}
+.rightPanel nav{background:#181715!important;border-bottom:1px solid var(--vl-separator)!important}
+.rightPanel nav button{border-radius:0!important}
+.rightPanel nav button.active{background:transparent!important;color:#f1eee8!important;box-shadow:inset 0 -2px 0 var(--vl-accent)!important}
+.badges span{border-radius:2px!important;background:#292724!important}
+.controlGrid input,.controlGrid select,.easingEditor input,.keyframeCard input,.keyframeCard select,.transformGrid input,.transformOrigin input{background:#171614!important;border:1px solid #45413b!important}
+.controlGrid input:focus,.controlGrid select:focus,.easingEditor input:focus,.keyframeCard input:focus,.keyframeCard select:focus,.transformGrid input:focus,.transformOrigin input:focus{border-color:var(--vl-accent)!important;box-shadow:none!important}
+.easingEditor,.keyframeCard{background:transparent!important;border:1px solid var(--vl-separator)!important;box-shadow:none!important}
+.timeline{background:var(--vl-timeline)!important;border-top:1px solid #4a453e!important;box-shadow:none!important}
+.timelineTop{background:#1d1b18!important;border-bottom:1px solid #3b3732!important}
+.timeline button,.timeline select,.timeline input{border-radius:2px!important;box-shadow:none!important}
+.timelineTrackHeader,.timelineLane,.timelineRuler{border-color:#2e2b27!important}
+.timelineTrackHeader.selected,.timelineLane.selected{background:#211b16!important}
+.timelineClip,.timelineBlock,[data-clip]{border-radius:1px!important;box-shadow:none!important}
+.timelineClip.selected,.timelineBlock.selected,[data-clip].selected{outline:1px solid var(--vl-accent)!important;outline-offset:-1px!important}
+.timelinePlayhead,.playhead,[data-playhead]{color:var(--vl-accent)!important;border-color:var(--vl-accent)!important}
+::selection{background:#8d4318!important;color:#fff!important}
+:focus-visible{outline:1px solid var(--vl-accent)!important;outline-offset:1px!important}
