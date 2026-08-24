@@ -184,7 +184,6 @@
 .inspector button,.sourceView button,.exportView button{height:var(--pg-control)!important;min-height:var(--pg-control)!important;padding:0 var(--pg-space-2)!important;border-radius:0!important}
 
 /* Timeline: header and lane grid use the same label-column token */
-.timeline{--timeline-label-width:var(--timeline-label-width,240px)}
 .timelineTop.studioTimelineHeader{
   min-height:48px!important;
   height:48px!important;
