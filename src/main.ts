@@ -23,6 +23,7 @@ import './app/layout-groups.css';
 import './app/visual-language.css';
 import './app/inspector-refinement.css';
 import './app/control-consistency.css';
+import './app/swiss-flat.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
