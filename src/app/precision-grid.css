@@ -1,0 +1,227 @@
+:root{
+  --pg-unit:4px;
+  --pg-space-1:4px;
+  --pg-space-2:8px;
+  --pg-space-3:12px;
+  --pg-space-4:16px;
+  --pg-space-5:20px;
+  --pg-control-sm:24px;
+  --pg-control:28px;
+  --pg-header:32px;
+  --pg-command:36px;
+  --pg-tool-rail:32px;
+  --pg-left-panel:240px;
+  --pg-right-panel:296px;
+  --pg-font-caption:9px;
+  --pg-font-label:10px;
+  --pg-font-body:11px;
+  --pg-font-title:12px;
+  --pg-leading-tight:1.2;
+  --pg-leading-body:1.4;
+  --pg-label-column:92px;
+}
+
+/* Master application grid */
+.app{
+  grid-template-rows:var(--pg-header) var(--pg-command) minmax(0,1fr) var(--timeline-height)!important;
+}
+.workspace.studioWorkspace{
+  --left-panel:var(--pg-left-panel)!important;
+  --right-panel:var(--pg-right-panel)!important;
+  grid-template-columns:var(--left-panel) var(--pg-tool-rail) minmax(0,1fr) var(--right-panel)!important;
+}
+.workspaceTabs{height:var(--pg-header)!important;min-height:var(--pg-header)!important;grid-template-columns:88px minmax(0,1fr) auto!important}
+.toolbar.studioCommandBar{height:var(--pg-command)!important;min-height:var(--pg-command)!important;padding:0 var(--pg-space-2)!important}
+.studioCommandLeft,.studioCommandRight,.studioCommandEdit{height:calc(var(--pg-command) - 1px)!important}
+.previewArea{grid-template-rows:var(--pg-header) minmax(0,1fr) var(--pg-command)!important}
+.previewChrome{height:var(--pg-header)!important;min-height:var(--pg-header)!important;padding:0 var(--pg-space-3)!important}
+.studioViewerFooter{height:var(--pg-command)!important;padding:0 var(--pg-space-2)!important}
+.rightPanel{grid-template-rows:var(--pg-header) minmax(0,1fr)!important}
+.rightPanel nav{height:var(--pg-header)!important;min-height:var(--pg-header)!important}
+
+/* One compact type scale */
+.app{font-size:var(--pg-font-body)!important;line-height:var(--pg-leading-body)!important}
+.workspaceBrand strong,.studioCommandLabel,.rightPanel nav:before,.timelineTop b,.leftPanelTabContent h3,.inspector h3,.sourceView h3,.exportView h3,.inspector h4,.exportView h4,.timelineToolGroup small{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif!important;
+}
+.workspaceBrand strong{font-size:var(--pg-font-label)!important;line-height:1!important;letter-spacing:.1em!important}
+.workspaceTab,.workspaceResourceTab,.rightPanel nav button,.leftPanelTabContent h3,.inspector h3,.sourceView h3,.exportView h3{
+  font-size:var(--pg-font-label)!important;
+  line-height:var(--pg-leading-tight)!important;
+}
+.studioCommandLabel,.rightPanel nav:before,.inspector h4,.exportView h4,.previewMode,.timelineToolGroup small,.projectRoot,.workspaceTabMeta{
+  font-size:var(--pg-font-caption)!important;
+  line-height:var(--pg-leading-tight)!important;
+}
+.tree summary,.tree button,.row,.motionRow,[data-global-results] button,.inspector,.sourceView,.exportView,.controlGrid input,.controlGrid select,.controlGrid textarea,.controlGrid button{
+  font-size:var(--pg-font-body)!important;
+}
+.v2GroupTitle,.v2InstanceLabel button span,.v2ClipLabel{font-size:var(--pg-font-body)!important}
+
+/* Document tabs: strict baseline and equal interaction height */
+.workspaceTabList{height:var(--pg-header)!important;align-items:stretch!important}
+.workspaceTab,.workspaceResourceTab{
+  height:var(--pg-header)!important;
+  min-height:var(--pg-header)!important;
+  min-width:120px!important;
+  padding:0 var(--pg-space-3)!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:var(--pg-space-2)!important;
+  line-height:1!important;
+}
+.workspaceTab.active:after{height:2px!important}
+.workspaceResourceTabWrap{height:var(--pg-header)!important;align-items:stretch!important}
+.workspaceTabClose{top:6px!important;right:4px!important;width:20px!important;height:20px!important;min-width:20px!important;min-height:20px!important}
+.workspaceTabMeta{height:var(--pg-header)!important;padding:0 var(--pg-space-3)!important;display:flex!important;align-items:center!important}
+
+/* Global controls use only 24 / 28 px heights */
+.studioCommandBar button,.studioCommandBar summary,.studioCommandBar select,.studioCommandBar input,
+.studioViewerFooter button,.studioViewerFooter select,.previewChrome select,
+.timelineToolGroup button,.previewEditorControls button,.previewFrameCluster,.previewAutoCapture,
+.rightPanel button,.rightPanel select,.rightPanel input,.rightPanel textarea,
+.leftPanel input,.leftPanel select{
+  min-height:var(--pg-control)!important;
+  height:var(--pg-control)!important;
+  box-sizing:border-box!important;
+}
+.studioCommandBar .iconButton,.studioCommandEdit button,.studioViewerTransport button,.studioCapture button{
+  width:var(--pg-control)!important;
+  min-width:var(--pg-control)!important;
+  padding:0!important;
+}
+.studioCommandBar svg,.studioViewerFooter svg,.studioToolRail svg{width:14px!important;height:14px!important}
+.previewChrome select,.studioViewerView select{height:var(--pg-control-sm)!important;min-height:var(--pg-control-sm)!important}
+
+/* Command bar optical alignment */
+.studioCommandLeft{gap:var(--pg-space-1)!important;flex:1 1 auto!important;max-width:680px!important}
+.studioCommandRight{gap:var(--pg-space-1)!important}
+.studioCommandLabel{height:var(--pg-command)!important;padding:0 var(--pg-space-3) 0 var(--pg-space-1)!important;margin-right:var(--pg-space-1)!important;display:flex!important;align-items:center!important}
+.studioCommandLeft [data-path-input]{height:var(--pg-control)!important;min-height:var(--pg-control)!important;padding:0 var(--pg-space-2)!important}
+.studioCommandEdit{margin-left:var(--pg-space-2)!important;padding-left:var(--pg-space-2)!important;gap:0!important}
+
+/* Left navigator: shared row rhythm */
+.leftPanel{grid-template-columns:var(--pg-tool-rail) minmax(0,1fr)!important}
+.leftPanelTabRail{width:var(--pg-tool-rail)!important;min-width:var(--pg-tool-rail)!important;padding:var(--pg-space-1) 0!important}
+.leftPanelTab{
+  width:var(--pg-tool-rail)!important;
+  min-width:var(--pg-tool-rail)!important;
+  height:var(--pg-header)!important;
+  min-height:var(--pg-header)!important;
+}
+.leftPanelTab.active:before{width:2px!important}
+.leftPanelTabContent>section{padding:var(--pg-space-3)!important;border-bottom:1px solid var(--studio-line-soft)!important}
+.leftPanelTabContent h3{margin:0 0 var(--pg-space-3)!important;min-height:16px!important;display:flex!important;align-items:center!important;gap:var(--pg-space-2)!important}
+.projectRoot{margin:0 0 var(--pg-space-2)!important;padding:0 0 var(--pg-space-2)!important}
+.tree summary,.tree button,.row,[data-global-results] button{
+  min-height:var(--pg-control)!important;
+  height:auto!important;
+  padding:4px var(--pg-space-2)!important;
+  display:flex!important;
+  align-items:center!important;
+}
+.motionRow{min-height:36px!important;padding:6px 34px 6px var(--pg-space-2)!important}
+.globalSearch input,.search,.leftPanel select{height:var(--pg-control)!important;min-height:var(--pg-control)!important;margin-bottom:var(--pg-space-2)!important;padding:0 var(--pg-space-2)!important}
+
+/* Editing rail aligns exactly with navigator rail */
+.studioToolRail{width:var(--pg-tool-rail)!important;min-width:var(--pg-tool-rail)!important;padding:var(--pg-space-1) 0!important}
+.studioToolRail button{width:var(--pg-tool-rail)!important;min-width:var(--pg-tool-rail)!important;height:var(--pg-header)!important;min-height:var(--pg-header)!important}
+.studioToolRailDivider{width:20px!important;margin:var(--pg-space-1) auto!important}
+
+/* Viewer chrome / footer share the same horizontal grid */
+.previewChrome{gap:var(--pg-space-2)!important;font-size:var(--pg-font-caption)!important}
+.previewChrome>*{align-self:center!important}
+.studioViewerFooter{grid-template-columns:minmax(120px,1fr) auto minmax(120px,1fr)!important;column-gap:var(--pg-space-2)!important}
+.studioCapture{grid-column:1!important;justify-self:start!important;display:flex!important;align-items:center!important;gap:var(--pg-space-2)!important;min-width:0!important}
+.studioViewerTransport{grid-column:2!important;height:var(--pg-control)!important;align-self:center!important}
+.studioViewerTransport button,.studioViewerTransport select{height:var(--pg-control)!important;min-height:var(--pg-control)!important}
+.studioViewerView{grid-column:3!important;gap:var(--pg-space-2)!important}
+.studioViewerView [data-viewport-label]{min-width:64px!important;font-size:var(--pg-font-caption)!important}
+.recordStateBadge{font-size:var(--pg-font-caption)!important;letter-spacing:.06em!important}
+
+/* Device frame must not change semantic viewport dimensions */
+.device{border:0!important;outline:1px solid #403c35!important;outline-offset:0!important;box-sizing:content-box!important}
+.device iframe,[data-preview-frame],[data-browser-snapshot-frame]{border:0!important;box-sizing:border-box!important}
+
+/* Inspector: 32px tab header, 28px field rhythm, fixed label column */
+.rightPanel nav{grid-template-columns:72px repeat(3,minmax(0,1fr))!important;align-items:stretch!important}
+.rightPanel nav:before{height:var(--pg-header)!important;padding:0 var(--pg-space-3)!important;align-items:center!important}
+.rightPanel nav button{
+  height:var(--pg-header)!important;
+  min-height:var(--pg-header)!important;
+  padding:0 var(--pg-space-2)!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  line-height:1!important;
+}
+.inspector,.sourceView,.exportView{padding:0 var(--pg-space-3) var(--pg-space-4)!important}
+.inspector>h3,.sourceView>h3,.exportView>h3{
+  min-height:var(--pg-header)!important;
+  margin:0 calc(var(--pg-space-3) * -1) var(--pg-space-3)!important;
+  padding:0 var(--pg-space-3)!important;
+  display:flex!important;
+  align-items:center!important;
+}
+.inspector h4,.exportView h4{margin:var(--pg-space-4) 0 var(--pg-space-2)!important;padding-top:var(--pg-space-3)!important}
+.controlGrid{
+  grid-template-columns:var(--pg-label-column) minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:0!important;
+}
+.controlGrid label{min-height:var(--pg-control)!important}
+.controlGrid label>span,.controlGrid>label:not(:has(input,select,textarea,button)){
+  min-height:var(--pg-control)!important;
+  display:flex!important;
+  align-items:center!important;
+  padding-right:var(--pg-space-2)!important;
+  color:#8d857b!important;
+  font-size:var(--pg-font-label)!important;
+}
+.controlGrid input,.controlGrid select,.controlGrid textarea{width:100%!important;min-width:0!important;padding-inline:var(--pg-space-2)!important}
+.inspector .actions,.sourceView .actions,.exportView .actions{gap:var(--pg-space-1)!important;margin:var(--pg-space-2) 0 var(--pg-space-3)!important}
+.inspector button,.sourceView button,.exportView button{height:var(--pg-control)!important;min-height:var(--pg-control)!important;padding:0 var(--pg-space-2)!important;border-radius:0!important}
+
+/* Timeline: header and lane grid use the same label-column token */
+.timeline{--timeline-label-width:var(--timeline-label-width,240px)}
+.timelineTop.studioTimelineHeader{
+  min-height:48px!important;
+  height:48px!important;
+  grid-template-columns:var(--timeline-label-width,240px) minmax(0,1fr) auto!important;
+  align-items:stretch!important;
+}
+.studioTimelineIdentity{padding:0 var(--pg-space-3)!important;display:grid!important;grid-template-columns:1fr auto!important;grid-template-rows:1fr 1fr!important;align-items:center!important;column-gap:var(--pg-space-2)!important}
+.studioTimelineIdentity>b{align-self:end!important;font-size:var(--pg-font-label)!important;line-height:1!important;letter-spacing:.08em!important}
+.studioTimelineIdentity>[data-playhead-label]{grid-column:2;grid-row:1 / span 2;align-self:center!important;font-size:var(--pg-font-label)!important}
+.studioTimelineIdentity>.muted{align-self:start!important;font-size:var(--pg-font-caption)!important;line-height:1!important}
+.studioTimelineTools .timelineProTools,.previewEditorControls.studioTimelineControls{height:47px!important;align-items:center!important}
+.timelineToolGroup{height:var(--pg-header)!important;align-items:center!important;gap:0!important}
+.timelineToolGroup button{height:var(--pg-control)!important;min-height:var(--pg-control)!important;padding:0 var(--pg-space-2)!important}
+.timelineToolGroup small{padding:0 var(--pg-space-2)!important}
+.v2Row{min-height:var(--pg-control)!important}
+.v2InstanceRow{height:var(--pg-control)!important}
+.v2GroupRow{height:36px!important}
+.v2Label{padding:0 var(--pg-space-2)!important;gap:var(--pg-space-1)!important}
+.v2Disclosure,.v2Inspect,.v2DetailToggle{width:var(--pg-control-sm)!important;min-width:var(--pg-control-sm)!important;height:var(--pg-control-sm)!important;min-height:var(--pg-control-sm)!important}
+.v2Clip{top:7px!important;height:14px!important}
+
+/* Shared focus and disabled language */
+button:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[role="tab"]:focus-visible{
+  outline:1px solid var(--studio-accent-hi)!important;
+  outline-offset:-1px!important;
+}
+button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.38!important}
+
+@media(max-width:1180px){
+  :root{--pg-left-panel:220px;--pg-right-panel:276px;--pg-label-column:84px}
+  .workspaceTabMeta{display:none!important}
+  .rightPanel nav{grid-template-columns:60px repeat(3,minmax(0,1fr))!important}
+}
+@media(max-width:960px){
+  :root{--pg-left-panel:196px;--pg-right-panel:252px;--pg-label-column:76px}
+  .workspaceBrand strong,.studioCommandLabel{display:none!important}
+  .workspaceTabs{grid-template-columns:36px minmax(0,1fr)!important}
+  .workspaceTabMeta{display:none!important}
+  .studioViewerFooter{grid-template-columns:auto 1fr auto!important}
+}
