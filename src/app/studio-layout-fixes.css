@@ -1,5 +1,7 @@
 :root{--ui-accent:#a84d16!important;--ui-accent-soft:#3a2115!important;--ui-focus:#c45b1a!important}
 input[type="checkbox"],input[type="radio"],input[type="range"]{accent-color:#a84d16!important}
+.workspaceMark:before,.workspaceMark:after{display:none!important;content:none!important}
+.diagnostics{right:8px!important;bottom:8px!important;max-width:420px!important;padding:6px 9px!important;border:1px solid #49443d!important;border-left:3px solid #7c542f!important;border-radius:0!important;background:#171613!important;color:#9c9489!important;box-shadow:none!important;font:9px/1.35 ui-monospace,Consolas,monospace!important}
 .studioCommandBar>.studioCommandUtilityFirst{margin-left:auto!important}
 .studioCommandBar>.studioCommandUtility{flex:0 0 auto!important}
 .studioCommandLeft{flex:1 1 auto!important;min-width:0!important;max-width:620px!important}
