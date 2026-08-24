@@ -3,6 +3,7 @@ type MoveEntry={node:HTMLElement;parent:Node;next:ChildNode|null};
 export function mountLayoutGroups(root:HTMLElement):()=>void{
   const moved:MoveEntry[]=[];
   const created:HTMLElement[]=[];
+  const utilityNodes:HTMLElement[]=[];
 
   const remember=(node:HTMLElement):void=>{
     if(moved.some(entry=>entry.node===node))return;
@@ -32,13 +33,10 @@ export function mountLayoutGroups(root:HTMLElement):()=>void{
     move(toolbar.querySelector('[data-action="pick-folder"]'),commandLeft);
     const label=document.createElement('span');label.className='studioCommandLabel';label.textContent='PROJECT';commandLeft.prepend(label);created.push(label);
 
-    const commandRight=make('studioCommandRight',toolbar,toolbar.querySelector('.grow'));
-    const more=toolbar.querySelector<HTMLElement>('.toolbarMore');
-    const loader=toolbar.querySelector<HTMLElement>('.webLoader');
-    const instrumentation=toolbar.querySelector<HTMLElement>('.blinkInstrumentationToggle');
-    if(instrumentation)move(instrumentation,commandRight);
-    if(loader&&loader.parentElement===toolbar)move(loader,commandRight);
-    if(more&&more.parentElement===toolbar)move(more,commandRight);
+    for(const selector of ['.blinkInstrumentationToggle','.webLoader','.toolbarMore']){
+      const node=toolbar.querySelector<HTMLElement>(`:scope > ${selector}`);if(node){node.classList.add('studioCommandUtility');utilityNodes.push(node);}
+    }
+    utilityNodes[0]?.classList.add('studioCommandUtilityFirst');
   }
 
   if(workspace&&preview){
@@ -97,6 +95,7 @@ export function mountLayoutGroups(root:HTMLElement):()=>void{
 
   return()=>{
     toolbar?.classList.remove('studioCommandBar');workspace?.classList.remove('studioWorkspace');timelineTop?.classList.remove('studioTimelineHeader');timelineTop?.querySelector('.previewEditorControls')?.classList.remove('studioTimelineControls');
+    for(const node of utilityNodes)node.classList.remove('studioCommandUtility','studioCommandUtilityFirst');
     for(const entry of [...moved].reverse()){
       const {node,parent,next}=entry;if(!parent.isConnected&&parent!==root)continue;
       parent.insertBefore(node,next&&next.parentNode===parent?next:null);
