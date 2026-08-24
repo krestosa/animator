@@ -19,6 +19,7 @@ import './app/assets-browser.css';
 import './app/infinite-canvas.css';
 import './app/accessibility-refinement.css';
 import './app/product-layout.css';
+import './app/layout-groups.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
@@ -45,6 +46,7 @@ import { mountWorkspaceShell } from './app/workspace-shell';
 import { mountAssetsBrowser } from './app/assets-browser';
 import { mountLeftPanelTabs } from './app/left-panel-tabs';
 import { mountAccessibilityRefinement } from './app/accessibility-refinement';
+import { mountLayoutGroups } from './app/layout-groups';
 import { installPreviewNavigationGate, mountRecordGate } from './app/record-gate';
 
 const root=document.querySelector<HTMLElement>('#root');
@@ -78,6 +80,7 @@ const cleanupWorkspaceShell=mountWorkspaceShell(root);
 const cleanupAssetsBrowser=mountAssetsBrowser(root);
 const cleanupLeftPanelTabs=mountLeftPanelTabs(root);
 const cleanupAccessibility=mountAccessibilityRefinement(root);
-const cleanup=():void=>{cleanupAccessibility();cleanupLeftPanelTabs();cleanupAssetsBrowser();cleanupWorkspaceShell();cleanupViewportScreenshot();cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupInfiniteCanvas();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupNativeBlinkPreview();cleanupNativeRenderUi();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordControlState();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
+const cleanupLayoutGroups=mountLayoutGroups(root);
+const cleanup=():void=>{cleanupLayoutGroups();cleanupAccessibility();cleanupLeftPanelTabs();cleanupAssetsBrowser();cleanupWorkspaceShell();cleanupViewportScreenshot();cleanupDomLoadTree();cleanupLoadTimeline();cleanupPreviewTheme();cleanupInfiniteCanvas();cleanupPreviewCamera();cleanupBrowserPreview();cleanupTimelineTools();cleanupNativeBlinkPreview();cleanupNativeRenderUi();cleanupRemoteOpen();cleanupMotionCatalog();cleanupPreviewEditor();cleanupPreviewOrigin();cleanupTimelineLabels();cleanupTimeline();cleanupPolish();cleanupExtras();cleanupRecordViewHistory();cleanupRecordControlState();cleanupRecordGate();cleanupControlSync();cleanupApp();cleanupNavigationGate();};
 
 if(import.meta.hot)import.meta.hot.dispose(cleanup);
