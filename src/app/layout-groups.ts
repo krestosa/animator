@@ -51,14 +51,16 @@ export function mountLayoutGroups(root:HTMLElement):()=>void{
     workspace.classList.add('studioWorkspace');
     const rail=make('studioToolRail',workspace,preview);
     move(root.querySelector('[data-action="picker"]'),rail);
-    move(root.querySelector('[data-action="record"]'),rail);
-    move(root.querySelector('[data-record-state]'),rail);
     move(root.querySelector('.primaryIcon[data-open-create-motion]'),rail);
     move(root.querySelector('[data-timeline-toggle]'),rail);
 
     const railDivider=document.createElement('span');railDivider.className='studioToolRailDivider';rail.insertBefore(railDivider,rail.querySelector('[data-timeline-toggle]'));created.push(railDivider);
 
     const footer=make('studioViewerFooter',preview,null);
+    const status=make('studioViewerStatus',footer,null);
+    move(root.querySelector('[data-action="record"]'),status);
+    move(root.querySelector('[data-record-state]'),status);
+
     const transport=make('studioViewerTransport',footer,null);
     move(root.querySelector('[data-action="previous-event"]'),transport);
     move(root.querySelector('[data-action="restart"]'),transport);
