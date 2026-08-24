@@ -1,26 +1,26 @@
 import { store } from '../state/store';
 
 export function mountTimelineLabelFit(root:HTMLElement):()=>void{
-  let raf=0,stableWidth=228,lastProjectContext=projectContext();
+  let raf=0,stableWidth=216,lastProjectContext=projectContext();
   const viewport=root.querySelector<HTMLElement>('[data-timeline-v2]');
   if(!viewport)return()=>{};
   const timeline=viewport.closest<HTMLElement>('.timeline');
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(measure);};
   const measure=():void=>{
     raf=0;
-    const baseWidth=viewport.clientWidth<900?188:viewport.clientWidth<1200?208:228;
-    const maxWidth=Math.max(baseWidth,Math.min(300,Math.floor(viewport.clientWidth*.24)));
+    const baseWidth=viewport.clientWidth<900?184:viewport.clientWidth<1200?200:216;
+    const maxWidth=Math.max(baseWidth,Math.min(264,Math.floor(viewport.clientWidth*.21)));
     const context=projectContext();if(context!==lastProjectContext){lastProjectContext=context;stableWidth=baseWidth;}
     let desired=baseWidth,seen=0;
     for(const label of viewport.querySelectorAll<HTMLElement>('.v2GroupRow .v2Label,.v2InstanceRow .v2Label')){
       if(seen++>500)break;
       const content=label.querySelector<HTMLElement>('.v2GroupButton,.v2InstanceLabel button[data-v2-instance]');if(!content)continue;
       const primary=content.querySelector<HTMLElement>('span'),secondary=content.querySelector<HTMLElement>('small');
-      const primaryWidth=primary?.scrollWidth??0;
-      const secondaryWidth=Math.min(secondary?.scrollWidth??0,180);
+      const primaryWidth=Math.min(primary?.scrollWidth??0,188);
+      const secondaryWidth=Math.min(secondary?.scrollWidth??0,152);
       const natural=Math.max(primaryWidth,secondaryWidth);
       const fixed=[...label.children].filter(child=>child!==content).reduce((sum,child)=>sum+(child as HTMLElement).offsetWidth,0);
-      desired=Math.max(desired,natural+fixed+24);
+      desired=Math.max(desired,natural+fixed+20);
     }
     desired=Math.max(baseWidth,Math.min(maxWidth,Math.ceil(desired)));
     stableWidth=Math.min(maxWidth,Math.max(baseWidth,stableWidth,desired));
