@@ -31,7 +31,15 @@ export function mountLayoutGroups(root:HTMLElement):()=>void{
     toolbar.classList.add('studioCommandBar');
     const commandLeft=make('studioCommandLeft',toolbar,toolbar.firstChild);
     move(toolbar.querySelector('[data-action="pick-folder"]'),commandLeft);
+    move(toolbar.querySelector('[data-path-input]'),commandLeft);
+    move(toolbar.querySelector('[data-action="open-project"]'),commandLeft);
     const label=document.createElement('span');label.className='studioCommandLabel';label.textContent='PROJECT';commandLeft.prepend(label);created.push(label);
+
+    const firstUtility=toolbar.querySelector<HTMLElement>(':scope > .blinkInstrumentationToggle,:scope > .webLoader,:scope > .toolbarMore,:scope > .grow');
+    const edit=make('studioCommandEdit',toolbar,firstUtility);
+    move(toolbar.querySelector('[data-action="undo"]'),edit);
+    move(toolbar.querySelector('[data-action="redo"]'),edit);
+    move(toolbar.querySelector('[data-action="clear-overrides"]'),edit);
 
     for(const selector of ['.blinkInstrumentationToggle','.webLoader','.toolbarMore']){
       const node=toolbar.querySelector<HTMLElement>(`:scope > ${selector}`);if(node){node.classList.add('studioCommandUtility');utilityNodes.push(node);}
