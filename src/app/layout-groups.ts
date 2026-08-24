@@ -17,8 +17,7 @@ export function mountLayoutGroups(root:HTMLElement):()=>void{
   if(toolbar){
     const grow=toolbar.querySelector<HTMLElement>('.grow');
     wrap('toolbarCluster toolbarProject',[
-      toolbar.querySelector('[data-action="pick-folder"]'),
-      toolbar.querySelector('.webLoader')
+      toolbar.querySelector('[data-action="pick-folder"]')
     ]);
     wrap('toolbarCluster toolbarCapture',[
       toolbar.querySelector('[data-action="picker"]'),
@@ -34,8 +33,7 @@ export function mountLayoutGroups(root:HTMLElement):()=>void{
       toolbar.querySelector('[data-playback-rate]')
     ]);
     wrap('toolbarCluster toolbarCreate',[
-      toolbar.querySelector('.primaryIcon[data-open-create-motion]'),
-      toolbar.querySelector('.toolbarMore')
+      toolbar.querySelector('.primaryIcon[data-open-create-motion]')
     ],grow);
     wrap('toolbarCluster toolbarView',[
       toolbar.querySelector('[data-timeline-toggle]'),
