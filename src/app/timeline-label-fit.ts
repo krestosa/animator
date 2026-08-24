@@ -1,24 +1,28 @@
 import { store } from '../state/store';
 
 export function mountTimelineLabelFit(root:HTMLElement):()=>void{
-  let raf=0,stableWidth=260,lastProjectContext=projectContext();
+  let raf=0,stableWidth=228,lastProjectContext=projectContext();
   const viewport=root.querySelector<HTMLElement>('[data-timeline-v2]');
   if(!viewport)return()=>{};
   const schedule=():void=>{if(!raf)raf=requestAnimationFrame(measure);};
   const measure=():void=>{
     raf=0;
-    const context=projectContext();if(context!==lastProjectContext){lastProjectContext=context;stableWidth=260;}
-    let desired=260,seen=0;
+    const baseWidth=viewport.clientWidth<900?188:viewport.clientWidth<1200?208:228;
+    const maxWidth=Math.max(baseWidth,Math.min(300,Math.floor(viewport.clientWidth*.24)));
+    const context=projectContext();if(context!==lastProjectContext){lastProjectContext=context;stableWidth=baseWidth;}
+    let desired=baseWidth,seen=0;
     for(const label of viewport.querySelectorAll<HTMLElement>('.v2GroupRow .v2Label,.v2InstanceRow .v2Label')){
       if(seen++>500)break;
       const content=label.querySelector<HTMLElement>('.v2GroupButton,.v2InstanceLabel button[data-v2-instance]');if(!content)continue;
       const primary=content.querySelector<HTMLElement>('span'),secondary=content.querySelector<HTMLElement>('small');
-      const natural=Math.max(primary?.scrollWidth??0,secondary?.scrollWidth??0);
+      const primaryWidth=primary?.scrollWidth??0;
+      const secondaryWidth=Math.min(secondary?.scrollWidth??0,180);
+      const natural=Math.max(primaryWidth,secondaryWidth);
       const fixed=[...label.children].filter(child=>child!==content).reduce((sum,child)=>sum+(child as HTMLElement).offsetWidth,0);
-      desired=Math.max(desired,natural+fixed+34);
+      desired=Math.max(desired,natural+fixed+24);
     }
-    desired=Math.max(260,Math.min(440,Math.ceil(desired)));
-    stableWidth=Math.max(stableWidth,desired);
+    desired=Math.max(baseWidth,Math.min(maxWidth,Math.ceil(desired)));
+    stableWidth=Math.min(maxWidth,Math.max(baseWidth,stableWidth,desired));
     const current=Number.parseFloat(getComputedStyle(viewport).getPropertyValue('--timeline-label-width'));
     if(!Number.isFinite(current)||Math.abs(current-stableWidth)>1)viewport.style.setProperty('--timeline-label-width',`${stableWidth}px`,'important');
     for(const row of viewport.querySelectorAll<HTMLElement>('.v2GroupRow,.v2InstanceRow'))updateDisclosure(row);
