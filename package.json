@@ -3,19 +3,29 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
+  "main": "desktop-dist/desktop/main.js",
   "bin": {
     "animator": "./bin/animator.mjs"
   },
   "scripts": {
     "dev": "tsx watch --import ./server/ssd-safety.ts server/index.ts",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "npm run build:ui && npm run build:server && npm run build:desktop",
+    "build:ui": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:desktop": "tsc -p tsconfig.desktop.json",
     "start": "node --import ./server-dist/server/ssd-safety.js server-dist/server/index.js --production",
     "animator": "node ./bin/animator.mjs",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "desktop:setup": "node ./bin/setup-desktop.mjs",
+    "desktop:dev": "npm run build:server && npm run build:desktop && electron ./desktop-dist/desktop/main.js",
+    "desktop:start": "npm run build:ui && npm run build:server && npm run build:desktop && electron ./desktop-dist/desktop/main.js --production",
+    "desktop:smoke": "npm run build:ui && npm run build:server && npm run build:desktop && electron ./desktop-dist/desktop/main.js --production --smoke-test",
+    "desktop:metrics": "npm run build:ui && npm run build:server && npm run build:desktop && electron ./desktop-dist/desktop/main.js --production --metrics",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.desktop.json --noEmit",
     "test": "vitest run",
     "test:e2e": "node e2e/timeline.mjs && node e2e/record-gate.mjs && node e2e/view-history.mjs && node e2e/browser-preview.mjs && node e2e/control-plane.mjs && node e2e/viewport-screenshot.mjs && node e2e/theme-live.mjs",
-    "setup:browser": "playwright install chromium firefox webkit",
-    "setup:browsers": "playwright install chromium firefox webkit"
+    "setup:browser": "playwright install firefox webkit",
+    "setup:browsers": "playwright install firefox webkit",
+    "setup:test-browsers": "playwright install chromium firefox webkit"
   },
   "dependencies": {
     "express": "^5.1.0",
@@ -28,6 +38,7 @@
     "@playwright/test": "^1.55.0",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",
+    "electron": "43.4.0",
     "tsx": "^4.20.5",
     "vite": "^7.1.3",
     "vitest": "^3.2.4"

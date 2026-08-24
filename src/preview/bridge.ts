@@ -45,6 +45,8 @@ export function connectPreview(iframe:HTMLIFrameElement|null):()=>void {
     };
     void poll();return()=>{disposed=true;controller.abort();if(pollTimer)clearTimeout(pollTimer);window.removeEventListener('message',snapshotHandler);};
   }
+  const native=window.animatorDesktop?.blink;
+  if(native){const nativeHandler=(value:unknown)=>{if(!disposed&&isPreviewMessage(value))handle(value);};native.onMessage(nativeHandler);return()=>{disposed=true;native.offMessage(nativeHandler);};}
   if(!iframe)return()=>{disposed=true;};
   const handler=(event:MessageEvent<unknown>)=>{if(event.source!==iframe.contentWindow||!isPreviewMessage(event.data))return;handle(event.data);};
   window.addEventListener('message',handler);return()=>{disposed=true;window.removeEventListener('message',handler);};
@@ -65,9 +67,15 @@ export function sendCommand(iframe:HTMLIFrameElement|null,command:EditorCommandI
       window.dispatchEvent(new CustomEvent(RECORDING_STATE_EVENT,{detail}));
     }).catch(()=>{});return;
   }
+  const native=window.animatorDesktop?.blink;if(native){postNativeCommand(native,command);return;}
   if(iframe)postFrameCommand(iframe,command);
 }
 function postBrowserCommand(sessionId:string,command:EditorCommandInput):Promise<Response>{return fetch(`/api/browser-sessions/${encodeURIComponent(sessionId)}/command`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(command)});}
+function postNativeCommand(native:NonNullable<Window['animatorDesktop']>['blink'],command:EditorCommandInput):void{
+  if(command.type==='SET_RECORDING'){const requestedAt=Date.now();if(command.enabled)native.command({source:'animator-timeline',type:'RELEASE_TIMELINE'});native.command({source:'animator-editor',...command,requestedAt});return;}
+  if(command.type==='CLEAR_OVERRIDES'||command.type==='RECALCULATE_VIEWPORT'){native.command({source:'animator-timeline',...command});native.command({source:'animator-editor',...command});return;}
+  native.command({source:timelineCommands.has(command.type)?'animator-timeline':'animator-editor',...command});
+}
 function postFrameCommand(iframe:HTMLIFrameElement,command:EditorCommandInput):void{
   const target=iframe.contentWindow;if(!target)return;
   if(command.type==='SET_RECORDING'){const requestedAt=Date.now();if(command.enabled)target.postMessage({source:'animator-timeline',type:'RELEASE_TIMELINE'},'*');target.postMessage({source:'animator-editor',...command,requestedAt},'*');return;}

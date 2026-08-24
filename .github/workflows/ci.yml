@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - mvp
+      - electron-light
   pull_request:
   workflow_dispatch:
 
@@ -12,6 +13,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  windows-desktop-bootstrap:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Repository-local Electron setup
+        run: npm run desktop:setup
+      - name: Verify local Electron runtime
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'node_modules/electron/dist/electron.exe')) { throw 'Local Electron runtime missing' }
+      - name: Build desktop shell
+        run: npm run build:desktop
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -28,6 +48,7 @@ jobs:
             .
             !node_modules
             !.animator-browsers
+            !.cache
           include-hidden-files: true
           retention-days: 1
       - name: Setup Node
@@ -42,6 +63,8 @@ jobs:
         run: npm run test
       - name: Build
         run: npm run build
+      - name: Electron desktop and native Blink smoke
+        run: xvfb-run -a node_modules/.bin/electron ./desktop-dist/desktop/main.js --production --smoke-test --native-smoke-test --no-sandbox
       - name: Install browser runtimes
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Disk write safety
@@ -64,8 +87,8 @@ jobs:
             const page=await browser.newPage({viewport:{width:1536,height:900},deviceScaleFactor:1});
             await page.goto(base,{waitUntil:'networkidle'});
             await page.locator('.app').waitFor({state:'visible'});
-            const more=page.locator('.toolbarMore>summary');
-            if(await more.count())await more.click();
+            const more=page.locator('.toolbarMore');
+            if(await more.count())await more.locator('summary').click();
             const pathInput=page.locator('[data-path-input]');
             await pathInput.fill(path.join(process.cwd(),'fixture'));
             await page.locator('[data-action="open-project"]').click();
@@ -82,8 +105,12 @@ jobs:
           name: animator-ui-actual-${{ github.sha }}
           path: animator-ui-actual.png
           retention-days: 1
+      - name: Layout grid E2E
+        run: node e2e/layout-grid.mjs
       - name: Timeline E2E
         run: node e2e/timeline.mjs
+      - name: Timeline isolation E2E
+        run: node e2e/timeline-isolation.mjs
       - name: Record and input gate E2E
         run: node e2e/record-gate.mjs
       - name: Recorded viewport E2E

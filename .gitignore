@@ -1,7 +1,9 @@
 node_modules/
 dist/
 server-dist/
+desktop-dist/
 coverage/
 .animator-browsers/
+.cache/
 .DS_Store
 *.log

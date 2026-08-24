@@ -1,0 +1,136 @@
+/* Optical refinement on top of the shared 4px grid. */
+
+/* Stronger hierarchy without increasing density. */
+.leftPanelTabContent h3,
+.inspector>h3,.sourceView>h3,.exportView>h3,
+.timelineTop.studioTimelineHeader .studioTimelineIdentity>b{
+  font-size:11px!important;
+  font-weight:700!important;
+  letter-spacing:.075em!important;
+  color:#d9d2c8!important;
+}
+.inspector h4,.exportView h4,.studioCommandLabel,.rightPanel nav:before{
+  font-size:9px!important;
+  font-weight:700!important;
+  letter-spacing:.11em!important;
+  color:#817970!important;
+}
+.projectRoot,.workspaceTabMeta,.previewChrome,.v2GroupButton small,.v2InstanceLabel button small{
+  color:#817970!important;
+}
+
+/* Document tabs: clearer selected state and less dead padding. */
+.workspaceBrand{padding-inline:12px!important}
+.workspaceTab,.workspaceResourceTab{min-width:116px!important;max-width:204px!important;padding-inline:12px!important;color:#8f877d!important}
+.workspaceTab:hover,.workspaceResourceTab:hover{background:#211f1b!important;color:#d6cfc5!important}
+.workspaceTab.active,.workspaceResourceTab.active{background:#211f1b!important;color:#f0e9df!important;font-weight:600!important}
+.workspaceTab.active:after,.workspaceResourceTab.active:after{height:2px!important;background:#b6541a!important}
+.workspaceTabClose{color:#675f56!important}
+.workspaceResourceTabWrap:hover .workspaceTabClose,.workspaceResourceTabWrap:has(.workspaceResourceTab.active) .workspaceTabClose{color:#9e958a!important}
+
+/* Buttons: visible affordance without turning the UI into a card system. */
+.studioViewerTransport,
+.studioCommandEdit,
+.timelineToolGroup,
+.previewFrameCluster{
+  border-color:#3b3731!important;
+}
+.studioViewerTransport button,
+.studioCommandEdit button,
+.timelineToolGroup button,
+.previewFrameCluster button{
+  color:#9f978c!important;
+}
+.studioViewerTransport button:hover,
+.studioCommandEdit button:hover,
+.timelineToolGroup button:hover,
+.previewFrameCluster button:hover{
+  background:#25221d!important;
+  color:#f0e9df!important;
+}
+.studioViewerTransport button:active,
+.studioCommandEdit button:active,
+.timelineToolGroup button:active,
+.previewFrameCluster button:active{
+  background:#30251d!important;
+  color:#f4d3bb!important;
+}
+.studioViewerTransport button+button,
+.studioCommandEdit button+button,
+.timelineToolGroup button+button,
+.previewFrameCluster button+button{
+  border-left:1px solid #302d28!important;
+}
+button:disabled,select:disabled,input:disabled,textarea:disabled{opacity:.32!important}
+
+/* Main editing rail: selected tool reads as a tool, not a decoration. */
+.studioToolRail button{color:#756e65!important}
+.studioToolRail button:hover{background:#211f1b!important;color:#d7d0c7!important}
+.studioToolRail button.active,.studioToolRail button[aria-pressed="true"]{
+  background:#241d18!important;
+  color:#f0d7c3!important;
+  border-left-color:#b6541a!important;
+}
+.studioToolRail .primaryIcon{color:#c86627!important}
+
+/* Navigator: align text and selection bars to the same 4px rhythm. */
+.leftPanelTabContent>section{padding:12px!important}
+.tree summary,.tree button,.row,[data-global-results] button{padding-left:8px!important;padding-right:8px!important}
+.tree summary:hover,.tree button:hover,.row:hover,[data-global-results] button:hover{background:#211f1b!important}
+.row.selected,.motionRow.selected{background:#271f19!important;border-left-color:#b6541a!important;color:#f1e8dd!important}
+
+/* Viewer chrome: metadata is quiet, the document selector remains readable. */
+.previewChrome{border-bottom-color:#34312c!important}
+.previewChrome select{font-size:10px!important;color:#bcb3a8!important;padding-inline:4px 20px!important}
+.previewMode{font-size:9px!important;color:#958b80!important}
+.studioViewerFooter{border-top-color:#34312c!important}
+.studioCapture{height:28px!important}
+.recordStateBadge{color:#a07862!important;min-width:30px!important;text-align:left!important}
+.studioCapture [data-action="record"][data-recording-state="recording"]{background:#342019!important;color:#d87752!important}
+.studioViewerView select{min-width:68px!important}
+
+/* Inspector: tabs behave as a single segmented header, content has stronger rows. */
+.rightPanel nav{grid-template-columns:68px repeat(3,minmax(0,1fr))!important}
+.rightPanel nav:before{border-right:1px solid #34312c!important}
+.rightPanel nav button{border-right:1px solid #302d28!important;color:#7f776e!important}
+.rightPanel nav button:last-child{border-right:0!important}
+.rightPanel nav button:hover{background:#211f1b!important;color:#cfc7bd!important}
+.rightPanel nav button.active{background:#221d18!important;color:#f0e7dc!important;box-shadow:inset 0 -2px 0 #b6541a!important}
+.inspector>h3,.sourceView>h3,.exportView>h3{border-bottom-color:#34312c!important;background:#181714!important}
+.controlGrid{border-top-color:#34312c!important}
+.controlGrid label{border-bottom:1px solid #292621!important}
+.controlGrid input,.controlGrid select,.controlGrid textarea{
+  background:#13120f!important;
+  border:1px solid #39352f!important;
+  color:#d4ccc1!important;
+}
+.controlGrid input:hover,.controlGrid select:hover,.controlGrid textarea:hover{border-color:#4a443d!important}
+.controlGrid input:focus,.controlGrid select:focus,.controlGrid textarea:focus{border-color:#a84d16!important}
+.inspector button,.sourceView button,.exportView button{background:#211f1b!important;color:#a9a096!important;border:1px solid #35312c!important}
+.inspector button:hover,.sourceView button:hover,.exportView button:hover{background:#29251f!important;color:#eee6db!important;border-color:#47413a!important}
+
+/* Timeline: temporal area is primary; labels and metadata stay compact. */
+.timelineTop.studioTimelineHeader{border-bottom-color:#39352f!important}
+.studioTimelineIdentity{border-right:1px solid #39352f!important}
+.studioTimelineIdentity>[data-playhead-label]{font-variant-numeric:tabular-nums!important;color:#bf6934!important}
+.studioTimelineIdentity>.muted{color:#6e665d!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+.studioTimelineTools{min-width:0!important;overflow:hidden!important}
+.studioTimelineTools .timelineProTools{padding-inline:8px!important;gap:8px!important;min-width:0!important}
+.timelineToolGroup{min-width:0!important;flex:0 1 auto!important}
+.timelineToolGroup button{font-size:9px!important;font-weight:600!important}
+.timelineToolGroup small{font-size:9px!important;color:#746c62!important;white-space:nowrap!important}
+.v2Label{box-shadow:none!important;border-right-color:#39352f!important}
+.v2GroupTitle{font-weight:650!important;color:#d5cdc2!important}
+.v2GroupButton small,.v2InstanceLabel button small{font-size:9px!important}
+.v2LaneCount,.groupCount{font-size:9px!important;font-variant-numeric:tabular-nums!important}
+.v2ClipLabel{font-size:10px!important;font-weight:600!important}
+
+/* Panel resize affordance becomes visible only when useful. */
+.panelResizer,.timelineResizer{background:transparent!important}
+.panelResizer:hover,.panelResizer:focus-visible,.timelineResizer:hover,.timelineResizer:focus-visible{background:#a84d1638!important}
+
+@media(max-width:1180px){
+  .rightPanel nav{grid-template-columns:56px repeat(3,minmax(0,1fr))!important}
+  .studioTimelineTools .timelineProTools{gap:4px!important;padding-inline:4px!important}
+  .timelineToolGroup button{padding-inline:6px!important}
+}

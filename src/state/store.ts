@@ -26,7 +26,7 @@ export const store={
     const projectChanged=Object.prototype.hasOwnProperty.call(patch,'project')&&projectContext(patch.project)!==projectContext(state.project);
     const {events,...canonicalPatch}=patch;
     const recordingPatch=events!==undefined?replaceRecordedEvents(state,events):{};
-    state={...state,...canonicalPatch,...recordingPatch,...(projectChanged?emptyHistory():{})};emit();
+    state={...state,...canonicalPatch,...recordingPatch,...(projectChanged?{...emptyHistory(),selectedElementId:undefined,selectedAnimationId:undefined}:{})};emit();
   },
   getMotionTrack(id:string|undefined):MotionTrack|undefined{return id?state.motionTracks.find(track=>track.id===id):undefined;},
   updateMotionTrack(id:string,patch:MotionTrackPatch,record=true):void{
