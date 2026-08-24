@@ -18,6 +18,7 @@ import './app/left-panel-tabs.css';
 import './app/assets-browser.css';
 import './app/infinite-canvas.css';
 import './app/accessibility-refinement.css';
+import './app/product-layout.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
