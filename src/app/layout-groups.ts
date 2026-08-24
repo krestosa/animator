@@ -1,79 +1,106 @@
-type RestoreEntry={wrapper:HTMLElement;parent:Node};
+type MoveEntry={node:HTMLElement;parent:Node;next:ChildNode|null};
 
 export function mountLayoutGroups(root:HTMLElement):()=>void{
-  const restored:RestoreEntry[]=[];
-  const wrap=(className:string,nodes:Array<Element|null|undefined>,before?:Node|null):HTMLElement|null=>{
-    const items=nodes.filter((node):node is HTMLElement=>node instanceof HTMLElement&&node.parentElement!==null);
-    if(!items.length)return null;
-    const parent=items[0]?.parentElement;if(!parent||items.some(item=>item.parentElement!==parent))return null;
-    const wrapper=document.createElement('span');wrapper.className=className;
-    parent.insertBefore(wrapper,before&&before.parentNode===parent?before:items[0]??null);
-    for(const item of items)wrapper.append(item);
-    restored.push({wrapper,parent});
-    return wrapper;
+  const moved:MoveEntry[]=[];
+  const created:HTMLElement[]=[];
+
+  const remember=(node:HTMLElement):void=>{
+    if(moved.some(entry=>entry.node===node))return;
+    moved.push({node,parent:node.parentNode!,next:node.nextSibling});
+  };
+  const move=(node:Element|null|undefined,parent:HTMLElement):HTMLElement|undefined=>{
+    if(!(node instanceof HTMLElement))return undefined;
+    remember(node);parent.append(node);return node;
+  };
+  const make=(className:string,parent:HTMLElement,before?:Node|null):HTMLElement=>{
+    const element=document.createElement('div');element.className=className;
+    parent.insertBefore(element,before&&before.parentNode===parent?before:null);created.push(element);return element;
+  };
+  const wrapExisting=(className:string,parent:HTMLElement,nodes:Array<Element|null|undefined>):HTMLElement|null=>{
+    const items=nodes.filter((node):node is HTMLElement=>node instanceof HTMLElement&&node.parentElement===parent);
+    if(!items.length)return null;const wrapper=make(className,parent,items[0]);for(const item of items)move(item,wrapper);return wrapper;
   };
 
   const toolbar=root.querySelector<HTMLElement>('.toolbar');
+  const workspace=root.querySelector<HTMLElement>('.workspace');
+  const preview=root.querySelector<HTMLElement>('.previewArea');
+  const timelineTop=root.querySelector<HTMLElement>('.timelineTop');
+
   if(toolbar){
-    const grow=toolbar.querySelector<HTMLElement>('.grow');
-    wrap('toolbarCluster toolbarProject',[
-      toolbar.querySelector('[data-action="pick-folder"]')
-    ]);
-    wrap('toolbarCluster toolbarCapture',[
-      toolbar.querySelector('[data-action="picker"]'),
-      toolbar.querySelector('[data-action="record"]'),
-      toolbar.querySelector('[data-record-state]')
-    ]);
-    wrap('toolbarCluster toolbarTransport',[
-      toolbar.querySelector('[data-action="previous-event"]'),
-      toolbar.querySelector('[data-action="restart"]'),
-      toolbar.querySelector('[data-action="play"]'),
-      toolbar.querySelector('[data-action="pause"]'),
-      toolbar.querySelector('[data-action="next-event"]'),
-      toolbar.querySelector('[data-playback-rate]')
-    ]);
-    wrap('toolbarCluster toolbarCreate',[
-      toolbar.querySelector('.primaryIcon[data-open-create-motion]')
-    ],grow);
-    wrap('toolbarCluster toolbarView',[
-      toolbar.querySelector('[data-timeline-toggle]'),
-      toolbar.querySelector('[data-viewport]'),
-      toolbar.querySelector('[data-viewport-label]')
-    ]);
-    toolbar.classList.add('isGrouped');
+    toolbar.classList.add('studioCommandBar');
+    const commandLeft=make('studioCommandLeft',toolbar,toolbar.firstChild);
+    move(toolbar.querySelector('[data-action="pick-folder"]'),commandLeft);
+    const label=document.createElement('span');label.className='studioCommandLabel';label.textContent='PROJECT';commandLeft.prepend(label);created.push(label);
+
+    const commandRight=make('studioCommandRight',toolbar,toolbar.querySelector('.grow'));
+    const more=toolbar.querySelector<HTMLElement>('.toolbarMore');
+    const loader=toolbar.querySelector<HTMLElement>('.webLoader');
+    const instrumentation=toolbar.querySelector<HTMLElement>('.blinkInstrumentationToggle');
+    if(instrumentation)move(instrumentation,commandRight);
+    if(loader&&loader.parentElement===toolbar)move(loader,commandRight);
+    if(more&&more.parentElement===toolbar)move(more,commandRight);
   }
 
-  const timelineTop=root.querySelector<HTMLElement>('.timelineTop');
+  if(workspace&&preview){
+    workspace.classList.add('studioWorkspace');
+    const rail=make('studioToolRail',workspace,preview);
+    move(root.querySelector('[data-action="picker"]'),rail);
+    move(root.querySelector('[data-action="record"]'),rail);
+    move(root.querySelector('[data-record-state]'),rail);
+    move(root.querySelector('.primaryIcon[data-open-create-motion]'),rail);
+    move(root.querySelector('[data-timeline-toggle]'),rail);
+
+    const railDivider=document.createElement('span');railDivider.className='studioToolRailDivider';rail.insertBefore(railDivider,rail.querySelector('[data-timeline-toggle]'));created.push(railDivider);
+
+    const footer=make('studioViewerFooter',preview,null);
+    const transport=make('studioViewerTransport',footer,null);
+    move(root.querySelector('[data-action="previous-event"]'),transport);
+    move(root.querySelector('[data-action="restart"]'),transport);
+    move(root.querySelector('[data-action="play"]'),transport);
+    move(root.querySelector('[data-action="pause"]'),transport);
+    move(root.querySelector('[data-action="next-event"]'),transport);
+    move(root.querySelector('[data-playback-rate]'),transport);
+
+    const view=make('studioViewerView',footer,null);
+    move(root.querySelector('[data-viewport]'),view);
+    move(root.querySelector('[data-viewport-label]'),view);
+  }
+
   if(timelineTop){
-    wrap('timelineIdentity',[
+    timelineTop.classList.add('studioTimelineHeader');
+    const identity=wrapExisting('studioTimelineIdentity',timelineTop,[
       timelineTop.querySelector(':scope > b'),
-      timelineTop.querySelector(':scope > [data-playhead-label]')
+      timelineTop.querySelector(':scope > [data-playhead-label]'),
+      timelineTop.querySelector(':scope > .muted')
     ]);
+    identity?.classList.add('studioTimelineSection');
+
+    const tools=timelineTop.querySelector<HTMLElement>('.timelineProTools');
+    if(tools){const wrapper=make('studioTimelineTools',timelineTop,tools);move(tools,wrapper);wrapper.classList.add('studioTimelineSection');}
+
     const controls=timelineTop.querySelector<HTMLElement>('.previewEditorControls');
     if(controls){
-      wrap('timelinePlaybackControls',[
+      controls.classList.add('studioTimelineControls');
+      const playback=wrapExisting('studioTimelinePlayback',controls,[
         controls.querySelector('[data-preview-live]'),
         controls.querySelector('.previewFrameCluster')
       ]);
-      wrap('timelineCaptureControls',[
+      const capture=wrapExisting('studioTimelineCapture',controls,[
         controls.querySelector('[data-preview-recalculate]'),
         controls.querySelector('.previewAutoCapture'),
         controls.querySelector('[data-preview-recapture]'),
         controls.querySelector('[data-preview-capture-status]')
       ]);
-      controls.classList.add('isGrouped');
+      playback?.classList.add('studioTimelineControlGroup');capture?.classList.add('studioTimelineControlGroup');
     }
-    timelineTop.classList.add('isGrouped');
   }
 
   return()=>{
-    toolbar?.classList.remove('isGrouped');
-    timelineTop?.classList.remove('isGrouped');
-    timelineTop?.querySelector('.previewEditorControls')?.classList.remove('isGrouped');
-    for(const {wrapper,parent} of restored.reverse()){
-      if(!wrapper.isConnected)continue;
-      while(wrapper.firstChild)parent.insertBefore(wrapper.firstChild,wrapper);
-      wrapper.remove();
+    toolbar?.classList.remove('studioCommandBar');workspace?.classList.remove('studioWorkspace');timelineTop?.classList.remove('studioTimelineHeader');timelineTop?.querySelector('.previewEditorControls')?.classList.remove('studioTimelineControls');
+    for(const entry of [...moved].reverse()){
+      const {node,parent,next}=entry;if(!parent.isConnected&&parent!==root)continue;
+      parent.insertBefore(node,next&&next.parentNode===parent?next:null);
     }
+    for(const element of [...created].reverse())if(element.isConnected)element.remove();
   };
 }
