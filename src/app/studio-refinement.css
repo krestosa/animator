@@ -10,6 +10,13 @@
 .previewArea{grid-template-rows:28px minmax(0,1fr) 34px!important}
 .previewChrome{height:28px!important;min-height:28px!important;padding:0 9px!important}
 .studioViewerFooter{height:34px!important;padding:0 8px!important}
+.studioViewerStatus{grid-column:1!important;justify-self:start!important;display:flex!important;align-items:center!important;height:28px!important;border-right:1px solid #38342e!important}
+.studioViewerStatus [data-action="record"]{width:30px!important;min-width:30px!important;height:28px!important;min-height:28px!important;padding:0!important;border:0!important;border-left:2px solid transparent!important;border-right:1px solid #302d28!important;background:transparent!important;color:#817970!important}
+.studioViewerStatus [data-action="record"]:hover{background:#292620!important;color:#e2dbd1!important}
+.studioViewerStatus [data-action="record"][data-recording-state="recording"]{background:#321b15!important;border-left-color:#a84d16!important;color:#de7656!important}
+.studioViewerStatus [data-action="record"] svg{width:13px!important;height:13px!important}
+.studioViewerStatus .recordStateBadge{height:28px!important;display:flex!important;align-items:center!important;padding:0 8px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#625b53!important;font:700 8px/1 ui-monospace,Consolas,monospace!important;letter-spacing:.07em!important}
+.studioViewerStatus .recordStateBadge[data-state="recording"]{color:#bb6549!important;background:transparent!important}
 .studioViewerTransport{height:28px!important}
 .studioViewerTransport button,.studioViewerTransport select{height:28px!important;min-height:28px!important}
 
@@ -98,5 +105,5 @@
 .v2LaneCount{height:15px!important;min-width:16px!important;padding:0 3px!important;border:0!important;border-left:1px solid #4a443d!important;border-radius:0!important;background:transparent!important;color:#776f65!important}
 .groupCount{border:0!important;border-left:1px solid #4a443d!important;background:transparent!important}
 
-@media(max-width:1180px){.timelineTop.studioTimelineHeader{grid-template-columns:150px minmax(0,1fr) auto!important}}
+@media(max-width:1180px){.timelineTop.studioTimelineHeader{grid-template-columns:150px minmax(0,1fr) auto!important}.studioViewerStatus .recordStateBadge{display:none!important}}
 @media(max-width:900px){.workspace.studioWorkspace{grid-template-columns:var(--left-panel) 30px minmax(260px,1fr) var(--right-panel)!important}.studioToolRail{width:30px!important;min-width:30px!important}.studioToolRail button{width:29px!important;min-width:29px!important}.timelineTop.studioTimelineHeader{grid-template-columns:116px minmax(0,1fr) auto!important}}
