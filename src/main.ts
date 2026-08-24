@@ -28,6 +28,7 @@ import './app/studio-layout.css';
 import './app/studio-layout-fixes.css';
 import './app/studio-refinement.css';
 import './app/precision-grid.css';
+import './app/precision-polish.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
