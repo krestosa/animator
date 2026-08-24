@@ -1,2 +1,49 @@
 .studioCommandBar>.studioCommandUtilityFirst{margin-left:auto!important}
 .studioCommandBar>.studioCommandUtility{flex:0 0 auto!important}
+.studioCommandLeft{flex:1 1 auto!important;min-width:0!important;max-width:620px!important}
+.studioCommandLeft [data-path-input]{display:block!important;flex:1 1 280px!important;min-width:140px!important;max-width:430px!important;height:25px!important;border:1px solid #3c3832!important;background:#12110f!important;color:#cfc7bd!important;padding:0 8px!important;font:9px/1 ui-monospace,Consolas,monospace!important}
+.studioCommandLeft [data-path-input]:focus{border-color:var(--studio-accent)!important;outline:0!important}
+.studioCommandLeft [data-action="open-project"]{width:28px!important;min-width:28px!important;padding:0!important;border-left:1px solid #34312c!important}
+.studioCommandEdit{display:flex!important;align-items:center!important;height:35px!important;margin-left:8px!important;border-left:1px solid #39352f!important;padding-left:6px!important}
+.studioCommandEdit button{width:28px!important;min-width:28px!important;padding:0!important}
+.menuPathRow:empty,.menuActionRow:empty{display:none!important}
+
+.timelineV2Viewport{--tl-line:#302c27!important;--tl-line-soft:#22201c!important;--tl-label:#151411!important;--tl-canvas:#0f0f0d!important;--tl-selected:#2a211b!important;--tl-blue:var(--studio-accent)!important;--tl-blue-hi:#d16d2a!important;--tl-event:#c07a38!important;background:#0f0f0d!important}
+.v2Label{background:#171613!important;border-right:1px solid #37332d!important;box-shadow:none!important}
+.v2Motion{background-color:#10100e!important;background-image:linear-gradient(to right,rgba(184,171,153,.055) 1px,transparent 1px)!important}
+.v2Row:nth-child(even):not(.v2RulerRow) .v2Motion{background-color:#12110f!important}
+.v2RulerRow{box-shadow:none!important;border-bottom:1px solid #39352f!important}
+.v2Corner,.v2RulerMotion{background:#181714!important;border-color:#39352f!important;color:#82796f!important}
+.v2RulerMotion{background-image:linear-gradient(to right,#3c3832 1px,transparent 1px)!important}
+.v2RulerMotion span{color:#756e64!important;font-size:9px!important}
+.v2Motion:after,.v2RulerMotion:before{background:var(--studio-accent)!important;box-shadow:none!important}
+.v2GroupRow{border-color:#2f2b26!important}
+.v2GroupRow .v2Label{background:#1b1916!important}
+.v2GroupRow .v2Motion{background-color:#12110f!important;background-image:linear-gradient(to right,rgba(184,171,153,.06) 1px,transparent 1px)!important}
+.v2GroupRow.selected .v2Label,.v2InstanceRow.selected .v2Label{background:#271f19!important;box-shadow:inset 3px 0 0 var(--studio-accent)!important}
+.v2GroupRow.selected .v2Motion,.v2InstanceRow.selected .v2Motion{background-color:#18130f!important}
+.v2Disclosure,.v2Inspect{color:#70685f!important}
+.v2Inspect{border:0!important;border-radius:0!important}
+.v2Inspect:hover{background:#29241e!important;color:#e0c5b2!important}
+.v2GroupRow.selected .v2Inspect,.v2InstanceRow.selected .v2Inspect{color:#d46d28!important}
+.v2GroupTitle{color:#d8d0c5!important}
+.v2GroupButton small,.v2InstanceLabel button small{color:#766e64!important}
+.v2InstanceLabel{background:#141310!important}
+.v2InstanceRow+.v2InstanceRow{border-top:1px solid #24211d!important}
+.v2Branch{color:#554f47!important}
+.v2InstanceLabel button span{color:#aaa298!important}
+.v2Clip,.v2GroupClip,.v2InstanceClip{border-radius:0!important;box-shadow:none!important;background:#4d2a18!important;border:0!important;border-left:3px solid #a84d16!important}
+.v2GroupClip{background:#3f281b!important;border-left-color:#8e481d!important}
+.v2GroupClip:nth-of-type(2n){background:#574225!important;border-left-color:#9b6a2e!important;opacity:1!important}
+.v2GroupClip:nth-of-type(3n){background:#492819!important;border-left-color:#a84d16!important;opacity:1!important}
+.v2Clip:hover{filter:none!important;background:#623019!important;border-left-color:#c45b1a!important}
+.v2Clip.selected{background:#6d3419!important;border:0!important;border-left:3px solid #d06a25!important;outline:1px solid #c86425!important;outline-offset:-1px!important;box-shadow:none!important}
+.v2InstanceClip{background:#462719!important;border-left-color:#995020!important}
+.v2EventRow{border-top:1px solid #3b3022!important}
+.v2EventRow .v2Label{background:#191611!important}.v2EventRow .v2Motion{background:#11100d!important}
+.v2Event{background:#b66a2e!important;box-shadow:none!important;border-radius:0!important}
+.timelineV2Viewport::-webkit-scrollbar-track{background:#11100e!important}.timelineV2Viewport::-webkit-scrollbar-thumb{background:#3a352f!important;border:2px solid #11100e!important;border-radius:0!important}.timelineV2Viewport::-webkit-scrollbar-thumb:hover{background:#4a443c!important}
+.previewFrameCluster,.previewAutoCapture{border-radius:0!important;background:#11100e!important;border-color:#39352f!important}
+.previewFrameCluster button{border-color:#39352f!important}
+.previewEditorControls button[data-preview-recalculate]{background:transparent!important;border-color:#4a4037!important;color:#a59b90!important}
+.previewEditorControls button[data-preview-recalculate]:hover{background:#27231e!important;border-color:#665342!important}
