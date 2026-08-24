@@ -21,6 +21,7 @@ import './app/accessibility-refinement.css';
 import './app/product-layout.css';
 import './app/layout-groups.css';
 import './app/visual-language.css';
+import './app/inspector-refinement.css';
 import { mountApp } from './app/app';
 import { mountEditorExtras } from './app/extras';
 import { mountUiPolish } from './app/ui-polish';
