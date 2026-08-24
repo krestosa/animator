@@ -58,3 +58,31 @@ input[type="checkbox"],input[type="radio"],input[type="range"]{accent-color:#a84
 .previewFrameCluster button{border-color:#39352f!important}
 .previewEditorControls button[data-preview-recalculate]{background:transparent!important;border-color:#4a4037!important;color:#a59b90!important}
 .previewEditorControls button[data-preview-recalculate]:hover{background:#27231e!important;border-color:#665342!important}
+
+.easingEditor .guide{stroke:#3a352f!important}.easingEditor .curve{stroke:#bd5b20!important}
+.perf{border-left-color:#6c4930!important;background:#181613!important}.perf.warn{border-left-color:#b16b2e!important}
+.workspaceCameraControls{border-radius:0!important;border-color:#403c35!important;background:#171613!important;box-shadow:none!important;backdrop-filter:none!important}
+.workspaceCameraControls button{border-radius:0!important;color:#958d82!important}.workspaceCameraControls button:hover{background:#292620!important;color:#eee7de!important}.workspaceCameraControls button.active{background:#34251c!important;color:#f1d7c2!important;box-shadow:inset 0 -2px 0 var(--studio-accent)!important}
+.workspaceCameraDivider{background:#403c35!important}
+.webMouseToggle.active,.recordViewControls [data-view-history-toggle].active,.recordViewControls [data-view-history-detach].active{background:#332319!important;border-color:#70411f!important;color:#e6ba98!important}
+.stage.webMouseLocked:after{border-radius:0!important;border-color:#403c35!important;background:#161512!important;color:#8d857b!important;box-shadow:none!important}
+
+.assetsHeader h3 small,.assetsHeader>div>small,.assetCardText small,.assetCardText em,.assetPreview>header small,.assetPreview>code{color:#766f66!important}
+.assetsSearch,.assetsFilters button,.assetCard,.assetActions button,.assetThumb,.assetRefInfo span{border-radius:0!important}
+.assetsSearch{background:#11100e!important;border-color:#403c35!important}
+.assetsFilters button{background:#151411!important;border-color:#36322d!important;color:#8f877d!important}
+.assetsFilters button:hover{background:#24211d!important;color:#d8d1c7!important}.assetsFilters button.active{background:#392318!important;border-color:#8a461c!important;color:#f0c5a7!important}
+.assetCard{background:#141310!important;border-left:3px solid transparent!important}.assetCard:hover{background:#1d1a17!important;border-color:#3a352f!important}.assetCard.selected{background:#271d17!important;border-color:#3a352f!important;border-left-color:var(--studio-accent)!important}
+.assetThumb{background:#11100e!important;border-color:#34312c!important}.assetThumb i{color:#928a80!important}.assetThumb i[data-category="lottie"],.assetThumb i[data-category="source"],.assetThumb i[data-category="styles"],.assetThumb i[data-category="data"]{color:#b77a4b!important}
+.assetActions button{background:transparent!important;border-color:#3a352f!important;color:#8e867c!important}.assetActions button:hover{background:#25221e!important;color:#eee7de!important}
+.assetPreview{border-top-color:#34312c!important}.assetPreviewVisual{border-radius:0!important;border-color:#34312c!important;background:#11100e!important}.assetPreviewAudio{background:#11100e!important}.assetRefInfo span{background:transparent!important;border-color:#3a352f!important;color:#8d857b!important}
+
+.browserOptions,.blinkInstrumentationOption{border-radius:0!important;background:#12110f!important;border-color:#38342e!important;color:#b8b1a6!important}
+.browserOptions>label,.browserRuntimeManager>span,.browserRuntimeManager small,.nativeRenderPrimary strong,.blinkInstrumentationOption small{color:#716a61!important}
+.browserOptions select{background:#11100e!important;border-color:#39352f!important}.browserRuntimeManager{border-top-color:#34312c!important}.browserRuntimeManager label,.nativeRenderPrimary,.nativeRenderPrimary span,.blinkInstrumentationOption{color:#a79f95!important}.blinkInstrumentationOption:hover{background:#1c1a17!important;border-color:#474139!important}.blinkInstrumentationOption>input{accent-color:var(--studio-accent)!important}
+.browserPreviewSurface{background:#10100e!important;color:#bcb4aa!important}.browserPreviewSession strong{color:#e7dfd5!important}.browserPreviewSession span,.browserPreviewSession p,.browserPreviewSession small{color:#7b746b!important}.browserPreviewSurface[data-browser-reconstruction-ready="false"] .browserPreviewSession:before{border-color:#51493f!important;border-top-color:#bd5b20!important}
+.device[data-browser-device]{box-shadow:none!important;border:1px solid #403c35!important}.browserPreviewSurface[data-browser-engine="webkit"]{outline-color:#6c4b33!important}
+.browserPreviewSurface [data-browser-connection-status]{border-radius:0!important;box-shadow:none!important}
+
+.motionCatalogRow.selected{background:#291e17!important;box-shadow:inset 3px 0 0 var(--studio-accent)!important}.motionCatalogInspect{background:#11100e!important;border-left-color:#34312c!important;color:#756e64!important}.motionCatalogInspect:hover{background:#24211d!important;color:#e6ddd2!important}.motionCatalogRow.selected .motionCatalogInspect{background:#271d17!important;color:#d46d28!important}.motionRowsVirtual:after{border-radius:0!important;border-color:#34312c!important;background:#151411!important;color:#6c655d!important}
+.viewportCaptureToast{border-radius:0!important;border-color:#403c35!important;background:#171613!important;color:#ded7cd!important;box-shadow:none!important}.viewportCaptureToastIcon{border-radius:0!important;background:#8c633f!important}.viewportCaptureToast.loading .viewportCaptureToastIcon{border-color:#5b5147!important;border-top-color:#c65f22!important}.viewportCaptureToast.success .viewportCaptureToastIcon{background:#8f7b66!important}
